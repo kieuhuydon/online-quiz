@@ -35,7 +35,11 @@
 
 | MSSV | Họ tên | Trách nhiệm chính |
 |---|---|---|
-| | | |
+| _(Điền)_ | **Việt** | **Authentication + User + Database & UI tương ứng** (Làm đầu tiên - Nền tảng hệ thống) |
+| _(Điền)_ | **Võ** | **Question Bank & UI tương ứng** (Làm sau Việt) |
+| _(Điền)_ | **Bắc** | **Quiz + Assignment & UI tương ứng** (Làm sau Võ) |
+| _(Điền)_ | **Đôn** | **Student Exam & UI tương ứng** (Làm sau Bắc) |
+| _(Điền)_ | **Nam** | **Anti-Cheat + Monitoring & UI tương ứng** (Làm sau Đôn) |
 
 ---
 
@@ -293,23 +297,27 @@ Quy tắc: nếu `type` không có handler → `INVALID_REQUEST`. `AuthGuard` ki
 CREATE TABLE users (
   id            BIGSERIAL PRIMARY KEY,
   username      VARCHAR(50)  NOT NULL UNIQUE,
-  password_hash VARCHAR(100) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
   full_name     VARCHAR(100) NOT NULL,
+  email         VARCHAR(100) UNIQUE,
   role          VARCHAR(10)  NOT NULL CHECK (role IN ('STUDENT','TEACHER','ADMIN')),
   active        BOOLEAN      NOT NULL DEFAULT TRUE,
+  created_by    BIGINT       REFERENCES users(id),
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE classes (
-  id         BIGSERIAL PRIMARY KEY,
-  name       VARCHAR(100) NOT NULL UNIQUE,
-  teacher_id BIGINT NOT NULL REFERENCES users(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  id          BIGSERIAL PRIMARY KEY,
+  name        VARCHAR(100) NOT NULL UNIQUE,
+  description VARCHAR(255),
+  teacher_id  BIGINT       NOT NULL REFERENCES users(id),
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE class_members (
-  class_id   BIGINT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
-  student_id BIGINT NOT NULL REFERENCES users(id),
+  class_id    BIGINT      NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  student_id  BIGINT      NOT NULL REFERENCES users(id),
+  enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (class_id, student_id)
 );
 
@@ -332,11 +340,12 @@ CREATE TABLE questions (
 CREATE TABLE quizzes (
   id               BIGSERIAL PRIMARY KEY,
   title            VARCHAR(200) NOT NULL,
+  description      VARCHAR(500),
   category         VARCHAR(100),
   duration_minutes INT NOT NULL CHECK (duration_minutes > 0),
   pass_score       NUMERIC(5,2) NOT NULL DEFAULT 50,      -- % để đạt
   status           VARCHAR(10) NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','OPEN','CLOSED')),
-  pin              VARCHAR(8),                            -- sinh khi OPEN
+  pin              VARCHAR(10),                           -- mã mời / Quiz PIN (sinh khi OPEN)
   anticheat_policy VARCHAR(30) NOT NULL DEFAULT 'WARN_THEN_AUTO_SUBMIT',
   max_violations   INT NOT NULL DEFAULT 3 CHECK (max_violations > 0),
   created_by       BIGINT NOT NULL REFERENCES users(id),
@@ -374,7 +383,8 @@ CREATE TABLE attempts (
 CREATE TABLE attempt_answers (
   attempt_id      BIGINT NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
   question_id     BIGINT NOT NULL REFERENCES questions(id),
-  selected_option CHAR(1) NOT NULL CHECK (selected_option IN ('A','B','C','D')),
+  selected_option CHAR(1) CHECK (selected_option IN ('A','B','C','D')), -- NULL nếu chưa chọn
+  is_correct      BOOLEAN,                                                -- server chấm khi nộp bài
   answered_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (attempt_id, question_id)
 );
@@ -686,7 +696,22 @@ Baseline: hệ thống thi trắc nghiệm client/server cơ bản (1 thread/1 c
 
 ---
 
-## 19. Lộ trình & Definition of Done
+## 19. Phân công công việc & Lộ trình thực hiện
+
+### 19.1. Phân công trách nhiệm thành viên (Theo JSD_Final)
+
+> **Thứ tự thực hiện (Workflow Pipeline):**
+> **Việt (Auth, User, DB)** ➔ **Võ (Question Bank)** ➔ **Bắc (Quiz & Assignment)** ➔ **Đôn (Student Exam)** ➔ **Nam (Anti-Cheat & Monitoring)**
+
+| Thành viên | Trách nhiệm chính | Requirement ID | Nhiệm vụ cụ thể | Thứ tự thực hiện |
+|---|---|---|---|---|
+| **Việt** | **Authentication + User + Database & UI tương ứng** | FR-A01, FR-S02, FR-AD01, NFR-04, NFR-05 | • Khởi tạo Database Schema (`schema.sql`) & dữ liệu mẫu (`seed.sql`) cho cả nhóm.<br>• Xây dựng `quiz-common` (protocol: `Request`, `Response`, `MessageType`, `ErrorCode`, `MessageCodec`, enums, DTOs cơ bản).<br>• Phía Server: DataSource HikariCP, `TransactionManager`, BCrypt `PasswordHasher`, `TokenGenerator`, Exception hierarchy, `UserSession`, `SessionRegistry`, `AuthService`, `AccountService`, `AuthGuard`, `RequestDispatcher`, `LoginHandler`, `AccountHandler`.<br>• Phía Client: Socket TCP client nền tảng (`ServerConnection`, `QuizApi`), `ClientSession`, `SceneNavigator`, UI Đăng nhập & UI Admin cấp/quản lý tài khoản. | **1 (Làm đầu tiên - Nền tảng)** |
+| **Võ** | **Question Bank & UI tương ứng** | FR-A02, FR-A03, FR-A05, FR-T05 | • Quản lý ngân hàng câu hỏi (Tạo, xem, sửa).<br>• Phân loại topic/category, gán độ khó (Easy/Medium/Hard).<br>• Chọn câu hỏi đưa vào bài test.<br>• Phía Server: `QuestionRepository`, `QuestionService`, `QuestionHandler`.<br>• Phía Client: UI quản lý câu hỏi cho Teacher. | **2 (Sau Việt)** |
+| **Bắc** | **Quiz & Assignment & UI tương ứng** | FR-A04, FR-A05, FR-A06, FR-A07, FR-A08, FR-A09, FR-S02, FR-S04 | • Tạo, sửa, mở/đóng Quiz (`DRAFT` ➔ `OPEN` ➔ `CLOSED`), sinh mã PIN.<br>• Thiết lập thời lượng (`duration_minutes`), chọn câu hỏi vào Quiz.<br>• Quản lý lớp & giao Quiz cho lớp.<br>• Phía Server: `ClassRepository`, `QuizRepository`, `ClassService`, `QuizService`, `ClassHandler`, `QuizHandler`.<br>• Phía Client: UI tạo Quiz, quản lý lớp, giao bài kiểm tra. | **3 (Sau Võ)** |
+| **Đôn** | **Student Exam & UI tương ứng** | FR-S02, FR-S03, FR-S04, FR-S05, FR-S06, FR-S07, FR-S08, FR-S09, FR-S10, FR-S11, FR-S12, FR-T04, NFR-03 | • Học viên xem quiz được giao, nhập PIN tham gia thi.<br>• Server tạo Attempt, quản lý thời gian đếm ngược chính xác.<br>• Chọn câu trả lời, lưu đáp án từng câu, nộp bài thủ công / tự động hết giờ.<br>• Server chấm điểm tự động (`GradingService`), chống nộp trùng final submit.<br>• Xem kết quả, xem lịch sử làm bài.<br>• Phía Server: `AttemptService`, `GradingService`, `ResultService`, `AttemptTimeoutScheduler`.<br>• Phía Client: UI làm bài thi (timer, chuyển câu, nộp), UI kết quả & lịch sử. | **4 (Sau Bắc)** |
+| **Nam** | **Anti-Cheat & Monitoring & UI tương ứng** | FR-S13, FR-S14, FR-T09, BR-12, BR-13, NFR-09 | • Phía Client: Monitor hành vi (rời cửa sổ thi / mất focus, phím tắt Copy/Paste/Cut, chuột phải context menu).<br>• Báo cáo vi phạm về Server (`REPORT_ANTICHEAT_EVENT`).<br>• Phía Server: Lưu log vi phạm theo Attempt, đếm vi phạm, kiểm tra policy (`WARN_THEN_AUTO_SUBMIT` / `LOG_ONLY`).<br>• Cảnh báo học viên (`PUSH_ANTICHEAT_WARNING`) hoặc tự động nộp bài khi đạt ngưỡng vi phạm.<br>• UI giám sát sự kiện vi phạm cho giáo viên. | **5 (Sau Đôn)** |
+
+### 19.2. Lộ trình Milestones & Definition of Done
 
 | Milestone | Nội dung | Done khi |
 |---|---|---|
@@ -703,11 +728,19 @@ Mỗi milestone kết thúc bằng: build xanh, test liên quan chạy xong, REA
 
 ## 20. Quy ước code & Git
 
+### 20.1. Coding Conventions
 - Package `quiz.<module>.<layer>`; class `PascalCase`, method/biến `camelCase`, hằng `UPPER_SNAKE_CASE`.
 - Method ≤ ~40 dòng; tránh lặp code; ưu tiên `record`, `Optional`, stream khi rõ nghĩa; **không** nuốt exception (`catch` rỗng).
 - Log bằng SLF4J (`info` sự kiện chính, `warn` lỗi người dùng, `error` lỗi hệ thống). Không log mật khẩu/token.
 - Javadoc cho class/method công khai quan trọng (service, protocol).
-- Git: nhánh `main` ổn định; làm việc trên `feature/<module>-<ten>`; commit nhỏ, thông điệp dạng `feat(server): add AttemptService.submit`, `fix(client): ...`, `test(...)`, `docs(...)`; merge qua pull request/review; mọi thành viên có commit thật.
+
+### 20.2. Quy ước Git & Branching
+- **Nhánh `develop` / `main`:** ổn định, chỉ merge code đã pass build và test.
+- **Quy ước đặt tên branch:** `<type>/<feature-name>`
+  - Ví dụ: `feature/auth-login`, `feature/student-exam`, `feature/question-bank`, `fix/quiz-submission`.
+- **Quy ước commit:** `<type>: <mô tả ngắn>`
+  - Ví dụ: `feat: implement login`, `feat: add schema.sql`, `fix: fix login validation`, `test: add auth unit test`.
+- **Workflow:** Làm việc trên branch tính năng riêng ➔ commit nhỏ, rõ ràng ➔ tạo Pull Request / merge qua review; đảm bảo mọi thành viên đều có commit thực tế.
 
 ---
 
