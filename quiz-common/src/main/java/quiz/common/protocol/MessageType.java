@@ -1,11 +1,9 @@
 package quiz.common.protocol;
 
-import java.io.Serializable;
-
 /**
  * Danh mục tất cả các loại thông điệp giao tiếp giữa Client và Server.
  */
-public enum MessageType implements Serializable {
+public enum MessageType {
     // 1. Authentication & Session
     LOGIN,
     LOGOUT,

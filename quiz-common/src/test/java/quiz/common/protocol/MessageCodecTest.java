@@ -6,7 +6,6 @@ import quiz.common.dto.LoginResultDto;
 import quiz.common.dto.CreateAccountDto;
 import quiz.common.enums.Role;
 
-import java.io.InvalidClassException;
 
 import static org.junit.jupiter.api.Assertions.*;
 

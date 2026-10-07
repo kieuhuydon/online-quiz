@@ -1,11 +1,9 @@
 package quiz.common.protocol;
 
-import java.io.Serializable;
-
 /**
  * Mã lỗi chuẩn hóa cho toàn bộ ứng dụng.
  */
-public enum ErrorCode implements Serializable {
+public enum ErrorCode {
     INVALID_REQUEST,
     VALIDATION_ERROR,
     UNAUTHENTICATED,
