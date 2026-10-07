@@ -13,3 +13,5 @@ Thumbs.db
 # Cấu hình chứa mật khẩu thật (không commit)
 *-local.properties
 *.log
+
+docs/*
