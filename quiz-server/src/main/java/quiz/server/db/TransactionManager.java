@@ -101,22 +101,28 @@ public class TransactionManager {
         DataSource ds = resolveDataSource();
         Connection connection = null;
         boolean originalAutoCommit = true;
+        boolean transactionStarted = false;
+        boolean transactionEnded = false;
 
         try {
             connection = ds.getConnection();
             originalAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
+            transactionStarted = true;
 
             T result = action.doInTransaction(connection);
 
             connection.commit();
+            transactionEnded = true;
             return result;
         } catch (Throwable t) {
-            if (connection != null) {
+            if (connection != null && transactionStarted) {
                 try {
                     connection.rollback();
+                    transactionEnded = true;
                     log.debug("Transaction rolled back successfully");
                 } catch (SQLException ex) {
+                    t.addSuppressed(ex);
                     log.error("Failed to rollback transaction", ex);
                 }
             }
@@ -130,11 +136,16 @@ public class TransactionManager {
             if (t instanceof Error err) {
                 throw err;
             }
-            throw new QuizException(ErrorCode.DATABASE_ERROR, "Transaction execution failed: " + t.getMessage(), t);
+            throw new QuizException(ErrorCode.DATABASE_ERROR, "Database operation failed", t);
         } finally {
             if (connection != null) {
                 try {
-                    connection.setAutoCommit(originalAutoCommit);
+                    if (transactionEnded) {
+                        connection.setAutoCommit(originalAutoCommit);
+                    } else {
+                        // A failed rollback/setup must not be followed by an implicit commit.
+                        connection.abort(Runnable::run);
+                    }
                 } catch (SQLException ex) {
                     log.warn("Failed to reset connection autoCommit to {}", originalAutoCommit, ex);
                 }

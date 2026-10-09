@@ -4,99 +4,103 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InvalidObjectException;
 import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
+import java.util.Objects;
 
-/**
- * Bộ mã hóa / giải mã đối tượng thông điệp (MessageCodec) qua Java Serialization.
- * <p>
- * Tính năng quan trọng:
- * 1. Gọi {@code reset()} sau mỗi lần ghi để xóa cache tham chiếu của {@link ObjectOutputStream},
- *    tránh rò rỉ bộ nhớ (memory leak) trên kết nối socket duy trì lâu dài.
- * 2. Cấu hình {@link ObjectInputFilter} chỉ cho phép các package nội bộ và chuẩn của Java,
- *    ngăn chặn triệt để lỗ hổng Deserialization Attack.
- */
+/** Length-delimited serialized messages with a fresh resource budget per frame. */
 public final class MessageCodec {
-
-    /**
-     * Mẫu whitelist cho ObjectInputFilter:
-     * Cho phép các lớp trong quiz.common.**, java.lang.*, java.util.*, java.time.*, và mảng nguyên thủy.
-     * Từ chối tất cả các lớp khác (!*).
-     */
+    public static final int MAX_MESSAGE_BYTES = 1_048_576;
     public static final String FILTER_PATTERN =
-            "quiz.common.**;java.lang.*;java.util.*;java.time.*;[Lquiz.common.*;[Ljava.lang.*;[B;!*";
+        "maxdepth=32;maxrefs=10000;maxarray=10000;maxbytes=" + MAX_MESSAGE_BYTES + ";"
+        + "quiz.common.dto.*;quiz.common.enums.*;quiz.common.protocol.*;"
+        + "java.lang.Object;java.lang.String;java.lang.Enum;java.lang.Number;"
+        + "java.lang.Long;java.lang.Integer;java.lang.Double;java.lang.Float;"
+        + "java.lang.Short;java.lang.Byte;java.lang.Boolean;java.lang.Character;"
+        + "java.time.Ser;java.time.Instant;"
+        + "java.util.ArrayList;java.util.LinkedList;java.util.HashMap;java.util.LinkedHashMap;"
+        + "java.util.HashSet;java.util.LinkedHashSet;java.util.Map$Entry;"
+        + "java.util.CollSer;java.util.ImmutableCollections$List12;java.util.ImmutableCollections$ListN;"
+        + "java.util.ImmutableCollections$Map1;java.util.ImmutableCollections$MapN;"
+        + "java.util.ImmutableCollections$Set12;java.util.ImmutableCollections$SetN;!*";
 
-    private MessageCodec() {
-        // Utility class
-    }
+    private MessageCodec() { }
 
-    /**
-     * Ghi một đối tượng thông điệp ra OutputStream, thực hiện flush và reset() ngay sau đó.
-     *
-     * @param out Stream ghi dữ liệu
-     * @param msg Đối tượng cần gửi
-     * @throws IOException nếu có lỗi I/O
-     */
+    /** Caller must serialize access to the shared output stream. */
     public static void write(ObjectOutputStream out, Object msg) throws IOException {
-        out.writeObject(msg);
+        byte[] bytes = serialize(msg);
+        out.writeInt(bytes.length);
+        out.write(bytes);
+        out.reset();
         out.flush();
-        out.reset(); // Ngăn rò rỉ bộ nhớ do ObjectOutputStream giữ tham chiếu các object cũ
     }
 
-    /**
-     * Đọc một đối tượng thông điệp từ ObjectInputStream.
-     *
-     * @param in Stream đọc dữ liệu
-     * @return Đối tượng đọc được
-     * @throws IOException            nếu có lỗi I/O
-     * @throws ClassNotFoundException nếu lớp không tìm thấy
-     */
+    /** A malformed frame is fatal for the connection; do not retry on that stream. */
     public static Object read(ObjectInputStream in) throws IOException, ClassNotFoundException {
-        return in.readObject();
-    }
-
-    /**
-     * Tạo một ObjectInputStream đã được gắn ObjectInputFilter bảo mật theo whitelist.
-     *
-     * @param in InputStream gốc (từ Socket hoặc luồng dữ liệu)
-     * @return ObjectInputStream đã được bảo vệ
-     * @throws IOException nếu có lỗi I/O
-     */
-    public static ObjectInputStream createFilteredInputStream(InputStream in) throws IOException {
-        ObjectInputStream ois = new ObjectInputStream(in);
-        ObjectInputFilter filter = ObjectInputFilter.Config.createFilter(FILTER_PATTERN);
-        ois.setObjectInputFilter(filter);
-        return ois;
-    }
-
-    /**
-     * Chuyển đổi đối tượng Serializable thành mảng bytes (hữu ích cho test và logging).
-     *
-     * @param obj Đối tượng cần serialize
-     * @return Mảng byte
-     * @throws IOException nếu có lỗi serialize
-     */
-    public static byte[] serialize(Object obj) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try (ObjectOutputStream oos = new ObjectOutputStream(baos)) {
-            write(oos, obj);
+        int length = in.readInt();
+        if (length <= 0 || length > MAX_MESSAGE_BYTES) {
+            throw new InvalidObjectException("Invalid message frame length");
         }
-        return baos.toByteArray();
+        byte[] bytes = new byte[length];
+        in.readFully(bytes);
+        return deserialize(bytes);
     }
 
-    /**
-     * Chuyển đổi mảng bytes thành đối tượng (áp dụng bộ lọc bảo mật).
-     *
-     * @param bytes Mảng bytes
-     * @return Đối tượng deserialize
-     * @throws IOException            nếu có lỗi I/O
-     * @throws ClassNotFoundException nếu không tìm thấy lớp
-     */
+    /** Outer stream transports primitive frame data only, never serialized objects. */
+    public static ObjectInputStream createFilteredInputStream(InputStream in) throws IOException {
+        ObjectInputStream stream = new ObjectInputStream(in);
+        stream.setObjectInputFilter(info -> ObjectInputFilter.Status.REJECTED);
+        return stream;
+    }
+
+    /** Serialize one envelope, without the outer frame prefix. */
+    public static byte[] serialize(Object obj) throws IOException {
+        requireEnvelope(obj);
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        try (ObjectOutputStream stream = new ObjectOutputStream(new OutputStream() {
+            private void checkCapacity(int length) throws IOException {
+                if (length > MAX_MESSAGE_BYTES - buffer.size()) {
+                    throw new IOException("Message exceeds maximum frame size");
+                }
+            }
+
+            @Override
+            public void write(int value) throws IOException {
+                checkCapacity(1);
+                buffer.write(value);
+            }
+
+            @Override
+            public void write(byte[] bytes, int offset, int length) throws IOException {
+                Objects.checkFromIndexSize(offset, length, bytes.length);
+                checkCapacity(length);
+                buffer.write(bytes, offset, length);
+            }
+        })) {
+            stream.writeObject(obj);
+        }
+        return buffer.toByteArray();
+    }
+
     public static Object deserialize(byte[] bytes) throws IOException, ClassNotFoundException {
-        try (ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
-             ObjectInputStream ois = createFilteredInputStream(bais)) {
-            return read(ois);
+        Objects.requireNonNull(bytes, "Message bytes cannot be null");
+        if (bytes.length == 0 || bytes.length > MAX_MESSAGE_BYTES) {
+            throw new InvalidObjectException("Invalid message size");
+        }
+        try (ObjectInputStream stream = new ObjectInputStream(new ByteArrayInputStream(bytes))) {
+            stream.setObjectInputFilter(ObjectInputFilter.Config.createFilter(FILTER_PATTERN));
+            Object message = stream.readObject();
+            requireEnvelope(message);
+            return message;
+        }
+    }
+
+    private static void requireEnvelope(Object message) throws InvalidObjectException {
+        if (!(message instanceof Request) && !(message instanceof Response)) {
+            throw new InvalidObjectException("Expected Request or Response envelope");
         }
     }
 }

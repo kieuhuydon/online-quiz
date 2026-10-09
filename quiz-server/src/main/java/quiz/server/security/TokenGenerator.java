@@ -56,9 +56,11 @@ public final class TokenGenerator {
         if (digits < 4 || digits > 10) {
             throw new IllegalArgumentException("PIN digits must be between 4 and 10");
         }
-        int min = (int) Math.pow(10, digits - 1);
-        int max = (int) Math.pow(10, digits) - 1;
-        int pin = min + SECURE_RANDOM.nextInt(max - min + 1);
+        long min = 1;
+        for (int i = 1; i < digits; i++) {
+            min *= 10;
+        }
+        long pin = SECURE_RANDOM.nextLong(min, min * 10);
         return String.valueOf(pin);
     }
 }

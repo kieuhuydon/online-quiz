@@ -254,9 +254,11 @@ public record Response(long requestId,          // trùng requestId của Reques
 - Payload là DTO (record `implements Serializable`) hoặc `null`.
 
 ### 6.2. MessageCodec
-- `static void write(ObjectOutputStream out, Object msg)`: `writeObject` → `flush` → **`reset()`** (tránh rò bộ nhớ do cache tham chiếu).
-- `static Object read(ObjectInputStream in)`: đọc 1 message.
-- Khi tạo `ObjectInputStream` phải đặt `ObjectInputFilter` chỉ cho phép `quiz.common.**`, `java.lang.*`, `java.util.*`, `java.time.*` (`rejectUndecidedClass`). Có unit test cho codec và cho filter.
+- Mỗi message là một frame: `int length` + `length` byte chứa một Request/Response serialize độc lập, tối đa 1 MiB. Dùng `MessageCodec.write/read` trên ObjectOutputStream/ObjectInputStream; không gọi `writeObject/readObject` trực tiếp trên stream mạng.
+- `write` serialize vào buffer có giới hạn trước khi ghi frame, rồi reset/flush stream ngoài. `read` kiểm tra length trước khi cấp phát và deserialize bằng stream riêng cho từng frame.
+- Filter nội bộ chỉ cho phép DTO/enums/protocol của common và các lớp giá trị/collection cần thiết; giới hạn depth 32, references 10.000, array 10.000. Stream ngoài từ chối serialized object, chỉ nhận primitive block data.
+- Giới hạn tính riêng cho từng message, không cộng dồn suốt phiên. Sai frame: đóng kết nối tại tầng network. Timeout handshake/read và validation quyền/payload nghiệp vụ thuộc giai đoạn tiếp theo.
+- Wire format này thay thế format writeObject trực tiếp trước đây; hai đầu phải dùng cùng phiên bản quiz-common. Test bao gồm frame sai, whitelist, giới hạn tài nguyên và nhiều message liên tiếp.
 
 ### 6.3. ErrorCode
 `INVALID_REQUEST, VALIDATION_ERROR, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, INVALID_CREDENTIALS, ACCOUNT_DISABLED, QUIZ_NOT_OPEN, QUIZ_CLOSED, WRONG_PIN, NOT_ASSIGNED, ATTEMPT_ALREADY_SUBMITTED, ATTEMPT_EXPIRED, ATTEMPT_NOT_FOUND, QUESTION_IN_USE, SERVER_BUSY, DATABASE_ERROR, INTERNAL_ERROR`
@@ -292,6 +294,8 @@ Quy tắc: nếu `type` không có handler → `INVALID_REQUEST`. `AuthGuard` ki
 ---
 
 ## 8. Database (PostgreSQL) – `database/schema.sql`
+
+DDL thực thi trong `database/schema.sql` bổ sung CHECK theo các miền dữ liệu đã chốt (điểm, phần trăm, thời hạn, policy/event/action), cùng vị trí câu hỏi dương và không trùng trong quiz. Script là khởi tạo nguyên tử trên DB mới; không xóa hay tự nâng cấp dữ liệu cũ. Các bảng và quan hệ nghiệp vụ giữ theo thiết kế dưới đây.
 
 ```sql
 CREATE TABLE users (
@@ -588,7 +592,8 @@ server.request.grace.seconds=3
 
 db.url=jdbc:postgresql://localhost:5432/quizdb
 db.user=quiz
-db.password=change-me
+# Set DB_PASSWORD externally; blank or placeholder passwords are rejected.
+db.password=
 db.pool.max.size=10
 ```
 
@@ -598,7 +603,7 @@ server.host=localhost
 server.port=5555
 request.timeout.seconds=10
 ```
-Có thể ghi đè bằng biến môi trường/system property (đặc biệt `db.password`; **không commit mật khẩu thật**).
+Có thể ghi đè bằng biến môi trường/system property (đặc biệt `db.password`; **không commit mật khẩu thật**). Thứ tự ưu tiên: environment → system property → file. Phải cấp `DB_PASSWORD` hoặc `db.password` hợp lệ; không còn mật khẩu fallback. Có thể dùng `ServerConfig.load(Path)` với file `*-local.properties` không được commit. Đây là API cấu hình, chưa có wiring command-line ở ServerMain.
 
 ---
 
@@ -609,8 +614,8 @@ Có thể ghi đè bằng biến môi trường/system property (đặc biệt `
 **Cài đặt**
 1. Cài JDK 21, Maven, PostgreSQL.
 2. Tạo DB và user: `quizdb`, `quiz`.
-3. Chạy `database/schema.sql` rồi `database/seed.sql`.
-4. Sửa `server.properties` (db url/user/password).
+3. Trên **database mới**, chạy `psql -U quiz -d quizdb -v ON_ERROR_STOP=1 -f database/schema.sql`. Script có transaction, không DROP bảng và sẽ báo lỗi nếu schema đã tồn tại; không dùng làm migration cho DB hiện hữu.
+4. Chỉ cho demo/test: chạy `psql -U quiz -d quizdb -v ON_ERROR_STOP=1 -c "SET quiz.allow_demo_seed = 'on'" -f database/seed.sql`. Seed yêu cầu schema trống và sequence chưa dùng; tài khoản mẫu dùng mật khẩu công khai, không dùng cho triển khai thật. Cấu hình db url/user và cấp password qua biến môi trường/file local.
 5. Build: `mvn clean verify`.
 
 **Chạy**
@@ -624,7 +629,7 @@ mvn -pl quiz-benchmark exec:java -Dexec.mainClass=quiz.benchmark.LoadTestRunner 
 ```
 Tài khoản mẫu: xem `database/seed.sql` (ghi username/mật khẩu mẫu vào đây khi hoàn thành).
 
-**Test:** `mvn test` (unit) · `mvn verify` (kèm integration/network, cần DB test `quizdb_test`).
+**Test hiện tại (giai đoạn 1–3):** `mvn test` / `mvn verify` chạy unit và test hồi quy hạ tầng. Integration/network với `quizdb_test` là kế hoạch giai đoạn 6, chưa triển khai. Server/client/benchmark entrypoint thuộc các giai đoạn sau, nên các lệnh chạy trên chưa hoạt động cho đến khi hoàn thiện.
 
 ---
 

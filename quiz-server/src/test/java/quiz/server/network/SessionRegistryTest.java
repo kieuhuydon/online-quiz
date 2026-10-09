@@ -12,6 +12,15 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("SessionRegistry Unit Tests")
 class SessionRegistryTest {
 
+    @Test
+    void rejectsBlankTokensConsistently() {
+        assertThrows(IllegalArgumentException.class,
+            () -> registry.register("  ", new UserSession(1, Role.STUDENT, "student")));
+        assertFalse(registry.isValid("  "));
+        assertTrue(registry.get("  ").isEmpty());
+        assertEquals(0, registry.size());
+    }
+
     private SessionRegistry registry;
 
     @BeforeEach

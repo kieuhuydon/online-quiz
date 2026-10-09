@@ -10,6 +10,19 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("DataSourceProvider Unit Tests")
 class DataSourceProviderTest {
 
+    @Test
+    void invalidReplacementDoesNotDestroyExistingPool() {
+        HikariConfig initial = new HikariConfig();
+        initial.setJdbcUrl("jdbc:postgresql://localhost:5432/nonexistent");
+        initial.setInitializationFailTimeout(-1);
+        initial.setMinimumIdle(0);
+        DataSourceProvider.init(initial);
+        var original = DataSourceProvider.getDataSource();
+        assertThrows(IllegalArgumentException.class, () -> DataSourceProvider.init(new HikariConfig()));
+        assertSame(original, DataSourceProvider.getDataSource());
+        assertFalse(original.isClosed());
+    }
+
     @AfterEach
     void tearDown() {
         DataSourceProvider.close();

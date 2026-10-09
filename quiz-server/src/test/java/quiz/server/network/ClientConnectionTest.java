@@ -51,7 +51,7 @@ class ClientConnectionTest {
     }
 
     @Test
-    @DisplayName("Should close socket and flush stream on close()")
+    @DisplayName("Should close socket without touching a potentially blocked writer")
     void testClose() throws IOException {
         Socket mockSocket = mock(Socket.class);
         when(mockSocket.isClosed()).thenReturn(false);
@@ -61,7 +61,7 @@ class ClientConnectionTest {
 
         connection.close();
 
-        verify(mockOut).flush();
+        verifyNoInteractions(mockOut);
         verify(mockSocket).close();
     }
 }

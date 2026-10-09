@@ -9,6 +9,25 @@ import static org.junit.jupiter.api.Assertions.*;
 class PasswordHasherTest {
 
     @Test
+    void rejectsPasswordsBeyond72Utf8BytesWithoutTruncation() {
+        String boundary = "x".repeat(72);
+        String hash = PasswordHasher.hashPassword(boundary);
+        assertTrue(PasswordHasher.checkPassword(boundary, hash));
+        assertFalse(PasswordHasher.checkPassword(boundary + "A", hash));
+        assertThrows(IllegalArgumentException.class, () -> PasswordHasher.hashPassword(boundary + "B"));
+        String unicode = "ế".repeat(24);
+        assertTrue(PasswordHasher.checkPassword(unicode, PasswordHasher.hashPassword(unicode)));
+        assertThrows(IllegalArgumentException.class, () -> PasswordHasher.hashPassword(unicode + "ế"));
+    }
+
+    @Test
+    void malformedAndExcessiveCostHashesFailClosed() {
+        for (String hash : new String[]{"", "$", "$2a$", "$2a$10$short", "$2a$31$" + "a".repeat(53)}) {
+            assertFalse(PasswordHasher.checkPassword("password", hash));
+        }
+    }
+
+    @Test
     @DisplayName("Should hash password and verify successfully")
     void testHashAndCheckPassword() {
         String plain = "password123";

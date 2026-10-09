@@ -47,6 +47,18 @@ public class ServerConfig {
     ) {
         validate(port, maxConnections, workerPoolSize, workerQueueCapacity,
             requestGraceSeconds, dbUrl, dbUser, dbPoolMaxSize, dbPoolMinIdle);
+        if (dbPassword == null || dbPassword.isBlank() || "change-me".equals(dbPassword)) {
+            throw new IllegalArgumentException("Set db.password or DB_PASSWORD to a non-placeholder password");
+        }
+        if (dbPoolMinIdle > dbPoolMaxSize) {
+            throw new IllegalArgumentException("db.pool.min.idle cannot exceed db.pool.max.size");
+        }
+        if (dbPoolIdleTimeoutMs != 0 && dbPoolIdleTimeoutMs < 10000) {
+            throw new IllegalArgumentException("db.pool.idle.timeout.ms must be 0 or at least 10000");
+        }
+        if (dbPoolConnectionTimeoutMs < 250 || dbPoolConnectionTimeoutMs > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("db.pool.connection.timeout.ms must be between 250 and 2147483647");
+        }
 
         this.port = port;
         this.maxConnections = maxConnections;
@@ -55,7 +67,7 @@ public class ServerConfig {
         this.requestGraceSeconds = requestGraceSeconds;
         this.dbUrl = dbUrl;
         this.dbUser = dbUser;
-        this.dbPassword = dbPassword != null ? dbPassword : "";
+        this.dbPassword = dbPassword;
         this.dbPoolMaxSize = dbPoolMaxSize;
         this.dbPoolMinIdle = dbPoolMinIdle;
         this.dbPoolIdleTimeoutMs = dbPoolIdleTimeoutMs;
@@ -74,7 +86,7 @@ public class ServerConfig {
                 log.warn("Resource {} not found on classpath, using defaults", DEFAULT_PROPERTIES_FILE);
             }
         } catch (IOException e) {
-            log.warn("Failed to load {}, falling back to defaults: {}", DEFAULT_PROPERTIES_FILE, e.getMessage());
+            throw new IllegalStateException("Failed to load server configuration", e);
         }
         return fromProperties(props);
     }
@@ -102,7 +114,7 @@ public class ServerConfig {
 
         String dbUrl = getString(props, "db.url", "DB_URL", "jdbc:postgresql://localhost:5432/quizdb");
         String dbUser = getString(props, "db.user", "DB_USER", "quiz");
-        String dbPassword = getString(props, "db.password", "DB_PASSWORD", "change-me");
+        String dbPassword = getString(props, "db.password", "DB_PASSWORD", null);
         int dbPoolMaxSize = getInt(props, "db.pool.max.size", "DB_POOL_MAX_SIZE", 10);
         int dbPoolMinIdle = getInt(props, "db.pool.min.idle", "DB_POOL_MIN_IDLE", 2);
         long dbPoolIdleTimeoutMs = getLong(props, "db.pool.idle.timeout.ms", "DB_POOL_IDLE_TIMEOUT_MS", 300000L);
@@ -188,8 +200,7 @@ public class ServerConfig {
         try {
             return Integer.parseInt(val.trim());
         } catch (NumberFormatException e) {
-            log.warn("Invalid integer value '{}' for key {}, using default: {}", val, propKey, defaultValue);
-            return defaultValue;
+            throw new IllegalArgumentException("Invalid integer configuration: " + propKey);
         }
     }
 
@@ -201,8 +212,7 @@ public class ServerConfig {
         try {
             return Long.parseLong(val.trim());
         } catch (NumberFormatException e) {
-            log.warn("Invalid long value '{}' for key {}, using default: {}", val, propKey, defaultValue);
-            return defaultValue;
+            throw new IllegalArgumentException("Invalid long configuration: " + propKey);
         }
     }
 

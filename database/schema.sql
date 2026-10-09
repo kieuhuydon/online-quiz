@@ -2,17 +2,9 @@
 -- Online Quiz cho Trung tâm đào tạo (PostgreSQL DDL Schema)
 -- ====================================================================
 
-DROP TABLE IF EXISTS anticheat_events CASCADE;
-DROP TABLE IF EXISTS results CASCADE;
-DROP TABLE IF EXISTS attempt_answers CASCADE;
-DROP TABLE IF EXISTS attempts CASCADE;
-DROP TABLE IF EXISTS quiz_assignments CASCADE;
-DROP TABLE IF EXISTS quiz_questions CASCADE;
-DROP TABLE IF EXISTS quizzes CASCADE;
-DROP TABLE IF EXISTS questions CASCADE;
-DROP TABLE IF EXISTS class_members CASCADE;
-DROP TABLE IF EXISTS classes CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
+-- Initial schema only. Existing tables cause an error, never data deletion.
+-- Run with psql -v ON_ERROR_STOP=1 -f database/schema.sql against a NEW database.
+BEGIN;
 
 -- 1. Users (Học viên, Giáo viên, Quản trị viên)
 CREATE TABLE users (
@@ -68,10 +60,11 @@ CREATE TABLE quizzes (
     description      VARCHAR(500),
     category         VARCHAR(100),
     duration_minutes INT NOT NULL CHECK (duration_minutes > 0),
-    pass_score       NUMERIC(5,2) NOT NULL DEFAULT 50.00,  -- % tối thiểu để đạt
+    pass_score       NUMERIC(5,2) NOT NULL DEFAULT 50.00 CHECK (pass_score BETWEEN 0 AND 100),
     status           VARCHAR(10)  NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'OPEN', 'CLOSED')),
     pin              VARCHAR(10),                          -- Mã PIN tham gia thi (sinh khi OPEN)
-    anticheat_policy VARCHAR(30)  NOT NULL DEFAULT 'WARN_THEN_AUTO_SUBMIT',
+    anticheat_policy VARCHAR(30)  NOT NULL DEFAULT 'WARN_THEN_AUTO_SUBMIT'
+        CHECK (anticheat_policy IN ('LOG_ONLY', 'WARN_THEN_AUTO_SUBMIT')),
     max_violations   INT NOT NULL DEFAULT 3 CHECK (max_violations > 0),
     created_by       BIGINT NOT NULL REFERENCES users(id),
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -83,7 +76,8 @@ CREATE TABLE quizzes (
 CREATE TABLE quiz_questions (
     quiz_id     BIGINT NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
     question_id BIGINT NOT NULL REFERENCES questions(id),
-    position    INT NOT NULL,
+    position    INT NOT NULL CHECK (position > 0),
+    UNIQUE (quiz_id, position),
     PRIMARY KEY (quiz_id, question_id)
 );
 
@@ -104,7 +98,7 @@ CREATE TABLE attempts (
     student_id   BIGINT NOT NULL REFERENCES users(id),
     status       VARCHAR(12) NOT NULL DEFAULT 'IN_PROGRESS' CHECK (status IN ('IN_PROGRESS', 'SUBMITTED')),
     started_at   TIMESTAMPTZ NOT NULL,
-    deadline_at  TIMESTAMPTZ NOT NULL,                     -- Do SERVER tính toán và kiểm soát
+    deadline_at  TIMESTAMPTZ NOT NULL CHECK (deadline_at > started_at),
     submitted_at TIMESTAMPTZ,
     UNIQUE (quiz_id, student_id)                           -- BR-09: Mỗi học viên chỉ có 1 attempt / quiz
 );
@@ -122,9 +116,9 @@ CREATE TABLE attempt_answers (
 -- 10. Results (Kết quả bài thi - 1:1 với Attempt)
 CREATE TABLE results (
     attempt_id      BIGINT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
-    score           NUMERIC(5,2) NOT NULL,                 -- Thang điểm 10
-    correct_count   INT NOT NULL,
-    total_questions INT NOT NULL,
+    score           NUMERIC(5,2) NOT NULL CHECK (score BETWEEN 0 AND 10),
+    correct_count   INT NOT NULL CHECK (correct_count >= 0 AND correct_count <= total_questions),
+    total_questions INT NOT NULL CHECK (total_questions > 0),
     passed          BOOLEAN NOT NULL,
     submit_reason   VARCHAR(10) NOT NULL CHECK (submit_reason IN ('MANUAL', 'TIMEOUT', 'ANTICHEAT')),
     graded_at       TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -134,12 +128,13 @@ CREATE TABLE results (
 CREATE TABLE anticheat_events (
     id                    BIGSERIAL PRIMARY KEY,
     attempt_id            BIGINT NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
-    event_type            VARCHAR(30) NOT NULL,
+    event_type            VARCHAR(30) NOT NULL CHECK (event_type IN
+        ('FOCUS_LOST', 'COPY_ATTEMPT', 'PASTE_ATTEMPT', 'CUT_ATTEMPT', 'CONTEXT_MENU_ATTEMPT')),
     detail                VARCHAR(255),
     client_time           TIMESTAMPTZ,
     server_time           TIMESTAMPTZ NOT NULL DEFAULT now(),
-    violation_count_after INT NOT NULL,
-    action_taken          VARCHAR(20) NOT NULL             -- NONE | WARNED | AUTO_SUBMITTED
+    violation_count_after INT NOT NULL CHECK (violation_count_after >= 0),
+    action_taken          VARCHAR(20) NOT NULL CHECK (action_taken IN ('NONE', 'WARNED', 'AUTO_SUBMITTED'))
 );
 
 -- Indexes tối ưu truy vấn
@@ -148,3 +143,5 @@ CREATE INDEX idx_attempts_student   ON attempts(student_id);
 CREATE INDEX idx_ac_events_attempt  ON anticheat_events(attempt_id);
 CREATE INDEX idx_questions_filter   ON questions(topic, difficulty) WHERE active;
 CREATE INDEX idx_class_members_user ON class_members(student_id);
+
+COMMIT;

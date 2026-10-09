@@ -25,11 +25,6 @@ public final class DataSourceProvider {
      */
     public static synchronized void init(ServerConfig config) {
         Objects.requireNonNull(config, "ServerConfig cannot be null");
-        if (dataSource != null && !dataSource.isClosed()) {
-            log.warn("DataSourceProvider already initialized, closing previous pool");
-            dataSource.close();
-        }
-
         HikariConfig hikariConfig = new HikariConfig();
         hikariConfig.setJdbcUrl(config.getDbUrl());
         hikariConfig.setUsername(config.getDbUser());
@@ -40,13 +35,9 @@ public final class DataSourceProvider {
         hikariConfig.setConnectionTimeout(config.getDbPoolConnectionTimeoutMs());
         hikariConfig.setPoolName("QuizServerHikariPool");
 
-        // Performance optimizations recommended for PostgreSQL
-        hikariConfig.addDataSourceProperty("cachePrepStmts", "true");
-        hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
-        hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
-
-        log.info("Initializing HikariCP with URL: {}, PoolMaxSize: {}", config.getDbUrl(), config.getDbPoolMaxSize());
-        dataSource = new HikariDataSource(hikariConfig);
+        // pgJDBC already maintains a per-connection prepared statement cache.
+        log.info("Initializing HikariCP, PoolMaxSize: {}", config.getDbPoolMaxSize());
+        init(hikariConfig);
     }
 
     /**
@@ -54,21 +45,24 @@ public final class DataSourceProvider {
      */
     public static synchronized void init(HikariConfig hikariConfig) {
         Objects.requireNonNull(hikariConfig, "HikariConfig cannot be null");
-        if (dataSource != null && !dataSource.isClosed()) {
+        HikariDataSource replacement = new HikariDataSource(hikariConfig);
+        HikariDataSource previous = dataSource;
+        dataSource = replacement;
+        if (previous != null && !previous.isClosed()) {
             log.warn("DataSourceProvider already initialized, closing previous pool");
-            dataSource.close();
+            previous.close();
         }
-        dataSource = new HikariDataSource(hikariConfig);
     }
 
     /**
      * Lấy HikariDataSource hiện tại.
      */
     public static HikariDataSource getDataSource() {
-        if (dataSource == null || dataSource.isClosed()) {
+        HikariDataSource current = dataSource;
+        if (current == null || current.isClosed()) {
             throw new IllegalStateException("DataSourceProvider has not been initialized or is closed");
         }
-        return dataSource;
+        return current;
     }
 
     /**
@@ -82,7 +76,8 @@ public final class DataSourceProvider {
      * Kiểm tra trạng thái khởi tạo của pool.
      */
     public static boolean isInitialized() {
-        return dataSource != null && !dataSource.isClosed();
+        HikariDataSource current = dataSource;
+        return current != null && !current.isClosed();
     }
 
     /**

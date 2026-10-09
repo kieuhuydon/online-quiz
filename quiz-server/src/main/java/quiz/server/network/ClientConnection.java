@@ -58,12 +58,7 @@ public class ClientConnection implements AutoCloseable {
 
     @Override
     public void close() {
-        try {
-            if (out != null) {
-                out.flush();
-            }
-        } catch (IOException ignored) {
-        }
+        // Closing the socket must unblock send(), without locking or flushing its writer.
         try {
             if (socket != null && !socket.isClosed()) {
                 socket.close();

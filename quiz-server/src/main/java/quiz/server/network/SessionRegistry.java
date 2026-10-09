@@ -17,6 +17,9 @@ public class SessionRegistry {
      */
     public void register(String token, UserSession session) {
         Objects.requireNonNull(token, "Token cannot be null");
+        if (token.isBlank()) {
+            throw new IllegalArgumentException("Token cannot be blank");
+        }
         Objects.requireNonNull(session, "UserSession cannot be null");
         tokenSessions.put(token, session);
     }
@@ -35,7 +38,7 @@ public class SessionRegistry {
      * Kiểm tra token có hợp lệ và còn phiên hoạt động hay không.
      */
     public boolean isValid(String token) {
-        return token != null && tokenSessions.containsKey(token);
+        return get(token).isPresent();
     }
 
     /**

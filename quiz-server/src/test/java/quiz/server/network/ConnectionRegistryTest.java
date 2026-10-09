@@ -15,6 +15,35 @@ import static org.mockito.Mockito.*;
 @DisplayName("ConnectionRegistry Unit Tests")
 class ConnectionRegistryTest {
 
+    @Test
+    void failedSendCannotRemoveReplacementConnection() throws IOException {
+        assertReplacementSurvives(false);
+    }
+
+    @Test
+    void failedBroadcastCannotRemoveReplacementConnection() throws IOException {
+        assertReplacementSurvives(true);
+    }
+
+    private void assertReplacementSurvives(boolean broadcast) throws IOException {
+        ClientConnection old = mock(ClientConnection.class);
+        ClientConnection replacement = mock(ClientConnection.class);
+        registry.register(42, old);
+        doAnswer(invocation -> {
+            registry.register(42, replacement);
+            throw new IOException("Old connection failed after reconnect");
+        }).when(old).send(any());
+        Response response = Response.push(MessageType.PUSH_ANTICHEAT_WARNING, "Warning");
+        if (broadcast) {
+            registry.broadcast(response);
+        } else {
+            assertFalse(registry.sendToUser(42, response));
+        }
+        assertSame(replacement, registry.get(42).orElseThrow());
+        verify(old).close();
+        verify(replacement, never()).close();
+    }
+
     private ConnectionRegistry registry;
 
     @BeforeEach

@@ -11,9 +11,47 @@ import static org.junit.jupiter.api.Assertions.*;
 class ServerConfigTest {
 
     @Test
+    void rejectsInvalidPoolRelationshipsTimeoutsAndPlaceholderPasswords() {
+        assertThrows(IllegalArgumentException.class, () -> config("pass", 2, 10, 300000, 20000));
+        assertThrows(IllegalArgumentException.class, () -> config("pass", 10, 2, -1, 20000));
+        assertThrows(IllegalArgumentException.class, () -> config("pass", 10, 2, 9999, 20000));
+        assertThrows(IllegalArgumentException.class, () -> config("pass", 10, 2, 300000, -1));
+        assertThrows(IllegalArgumentException.class, () -> config("pass", 10, 2, 300000, 249));
+        assertThrows(IllegalArgumentException.class, () -> config(null, 10, 2, 300000, 20000));
+        assertThrows(IllegalArgumentException.class, () -> config("change-me", 10, 2, 300000, 20000));
+        assertDoesNotThrow(() -> config("pass", 2, 2, 0, 250));
+    }
+
+    @Test
+    void invalidNumericSettingsFailInsteadOfUsingDefaults() {
+        for (String key : new String[]{"server.port", "db.pool.connection.timeout.ms"}) {
+            Properties props = new Properties();
+            props.setProperty("db.password", "test-only-password");
+            props.setProperty(key, "not-a-number");
+            assertThrows(IllegalArgumentException.class, () -> ServerConfig.fromProperties(props));
+        }
+    }
+
+    private ServerConfig config(String password, int max, int min, long idle, long timeout) {
+        return new ServerConfig(5555, 100, 8, 200, 3, "jdbc:postgresql://localhost/db",
+            "user", password, max, min, idle, timeout);
+    }
+
+    @Test
     @DisplayName("Should load default configuration from server.properties resource")
     void testLoadDefaultConfig() {
-        ServerConfig config = ServerConfig.load();
+        String previous = System.getProperty("db.password");
+        ServerConfig config;
+        try {
+            System.setProperty("db.password", "test-only-password");
+            config = ServerConfig.load();
+        } finally {
+            if (previous == null) {
+                System.clearProperty("db.password");
+            } else {
+                System.setProperty("db.password", previous);
+            }
+        }
 
         assertNotNull(config);
         assertEquals(5555, config.getPort());
@@ -23,7 +61,7 @@ class ServerConfigTest {
         assertEquals(3, config.getRequestGraceSeconds());
         assertEquals("jdbc:postgresql://localhost:5432/quizdb", config.getDbUrl());
         assertEquals("quiz", config.getDbUser());
-        assertEquals("change-me", config.getDbPassword());
+        assertEquals("test-only-password", config.getDbPassword());
         assertEquals(10, config.getDbPoolMaxSize());
         assertEquals(2, config.getDbPoolMinIdle());
         assertEquals(300000L, config.getDbPoolIdleTimeoutMs());

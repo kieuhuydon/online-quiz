@@ -12,6 +12,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class TokenGeneratorTest {
 
     @Test
+    void tenDigitPinsUseValuesBeyondIntegerRange() {
+        boolean aboveIntegerRange = false;
+        for (int i = 0; i < 100; i++) {
+            long pin = Long.parseLong(TokenGenerator.generatePin(10));
+            assertTrue(pin >= 1_000_000_000L && pin < 10_000_000_000L);
+            aboveIntegerRange |= pin > Integer.MAX_VALUE;
+        }
+        assertTrue(aboveIntegerRange, "10-digit PIN generation must not be limited to int range");
+    }
+
+    @Test
     @DisplayName("Should generate unique URL-safe tokens with sufficient entropy")
     void testGenerateToken() {
         Set<String> tokens = new HashSet<>();

@@ -80,7 +80,8 @@ public class ConnectionRegistry {
             return true;
         } catch (IOException e) {
             log.warn("Failed to send message to userId={}, removing connection: {}", userId, e.getMessage());
-            remove(userId);
+            userConnections.remove(userId, conn);
+            conn.close();
             return false;
         }
     }
@@ -97,7 +98,8 @@ public class ConnectionRegistry {
                 }
             } catch (IOException e) {
                 log.warn("Failed to broadcast to userId={}, removing connection: {}", userId, e.getMessage());
-                remove(userId);
+                userConnections.remove(userId, conn);
+                conn.close();
             }
         });
     }

@@ -17,6 +17,32 @@ import static org.mockito.Mockito.*;
 @DisplayName("TransactionManager Unit Tests")
 class TransactionManagerTest {
 
+    @Test
+    void rollbackFailureAbortsInsteadOfImplicitlyCommitting() throws SQLException {
+        SQLException original = new SQLException("private SQL detail");
+        SQLException rollbackFailure = new SQLException("rollback failed");
+        doThrow(rollbackFailure).when(mockConnection).rollback();
+        QuizException error = assertThrows(QuizException.class,
+            () -> transactionManager.executeWithException(conn -> { throw original; }));
+        assertSame(original, error.getCause());
+        assertArrayEquals(new Throwable[]{rollbackFailure}, original.getSuppressed());
+        assertFalse(error.getMessage().contains("private SQL detail"));
+        verify(mockConnection, never()).setAutoCommit(true);
+        verify(mockConnection).abort(any());
+        verify(mockConnection).close();
+    }
+
+    @Test
+    void commitFailureRollsBackBeforeRestoringAutoCommit() throws SQLException {
+        doThrow(new SQLException("commit failed")).when(mockConnection).commit();
+        assertThrows(QuizException.class, () -> transactionManager.executeInTransaction(conn -> "result"));
+        var order = inOrder(mockConnection);
+        order.verify(mockConnection).commit();
+        order.verify(mockConnection).rollback();
+        order.verify(mockConnection).setAutoCommit(true);
+        order.verify(mockConnection).close();
+    }
+
     private DataSource mockDataSource;
     private Connection mockConnection;
     private TransactionManager transactionManager;

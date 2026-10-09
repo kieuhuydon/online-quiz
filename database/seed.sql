@@ -4,6 +4,30 @@
 -- BCrypt Hash: $2a$10$RMj7Oqje6a.XQorzyUTXuuXnV/EKY/.yYf4YaxIMOz67D/tFVZ.0y
 -- ====================================================================
 
+-- DEMO ONLY. Requires an explicit opt-in; never use these accounts in production.
+-- psql -v ON_ERROR_STOP=1 -c "SET quiz.allow_demo_seed = 'on'" -f database/seed.sql
+BEGIN;
+DO $$
+DECLARE
+    table_name TEXT;
+    sequence_used BOOLEAN;
+BEGIN
+    IF current_setting('quiz.allow_demo_seed', true) IS DISTINCT FROM 'on' THEN
+        RAISE EXCEPTION 'Demo seed requires quiz.allow_demo_seed=on';
+    END IF;
+    IF EXISTS (SELECT 1 FROM users) THEN
+        RAISE EXCEPTION 'Demo seed requires a freshly created empty schema';
+    END IF;
+    -- The fixture below uses fixed IDs. Reject reused sequences, even after DELETE.
+    FOREACH table_name IN ARRAY ARRAY['users', 'classes', 'questions', 'quizzes'] LOOP
+        EXECUTE format('SELECT is_called FROM %s', pg_get_serial_sequence(table_name, 'id')::regclass)
+            INTO sequence_used;
+        IF sequence_used THEN
+            RAISE EXCEPTION 'Demo seed requires unused sequences: %', table_name;
+        END IF;
+    END LOOP;
+END $$;
+
 -- 1. Insert Admin
 INSERT INTO users (username, password_hash, full_name, email, role, active, created_by)
 VALUES 
@@ -133,3 +157,5 @@ VALUES
 INSERT INTO quiz_assignments (quiz_id, class_id, assigned_by)
 VALUES 
 (1, 1, 2);
+
+COMMIT;
