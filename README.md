@@ -449,10 +449,13 @@ public interface CommandHandler {
     Response handle(Request request, UserSession session);
 }
 ```
-- `RequestDispatcher` giữ `Map<MessageType, CommandHandler>` (đăng ký khi khởi động), **bắt mọi `Throwable`**:
-  `QuizException` → `Response(success=false, errorCode, message)`; `SQLException`/pool lỗi → `DATABASE_ERROR`; còn lại → `INTERNAL_ERROR` (log đầy đủ, **không** lộ stack trace cho client). (FR-T07)
+- `RequestDispatcher` giữ map handler bất biến (đăng ký khi khởi động), bắt `Exception` để chuẩn hóa lỗi request; không nuốt `VirtualMachineError`/`ThreadDeath` rồi tiếp tục. Handler trùng type, policy null/rỗng cho lệnh khác LOGIN hoặc đăng ký PUSH là lỗi khởi động.
+  `QuizException` → `Response(success=false, errorCode, message)`; SQLException hoặc cause SQL → DATABASE_ERROR; lỗi khác → INTERNAL_ERROR. DATABASE_ERROR/INTERNAL_ERROR luôn dùng thông báo chung. Log chỉ requestId/type/userId, lớp exception và stack frame đã loại thông báo/cause chứa giá trị nhạy cảm; không log Request/DTO/password/hash/token. (FR-T07)
 - `AuthGuard.check(request, handler)`: token tồn tại? role thuộc `allowedRoles`? Sai → `UNAUTHENTICATED`/`FORBIDDEN`.
 - `DtoMapper`: chuyển domain → DTO (có hai bản câu hỏi: đầy đủ và `StudentQuestionDto`).
+- Contract task 4.3: LOGIN public, token phải null; LOGOUT cần session của mọi role; CREATE_ACCOUNT/LIST_ACCOUNTS/SET_ACCOUNT_ACTIVE chỉ ADMIN. Guard gọi AuthService.authenticate để lấy identity/role hiện tại. Request ID phải dương; lệnh chưa triển khai, PUSH từ client hoặc payload sai hình dạng là INVALID_REQUEST, giá trị DTO sai là VALIDATION_ERROR. Response thông thường giữ requestId, pushType null; null Request nội bộ dùng ID 0 cho error, network không gửi response nếu chưa có Request hợp lệ để định danh.
+- Dispatcher kiểm tra response round-trip qua codec (kích thước, allowlist, depth/reference/array), không tăng giới hạn/cắt danh sách khi LIST_ACCOUNTS quá lớn; trả INTERNAL_ERROR. Chỉ triển khai mapper Auth/Account ở task này; socket binding/LOGIN trên socket đã login thuộc task 4.4.
+- Task 4.3 đã triển khai: `CommandHandler`, `AuthGuard`, `RequestDispatcher`, `DtoMapper`, `LoginHandler`, `AccountHandler`. Giới hạn codec áp dụng cả thông báo lỗi nghiệp vụ; error quá lớn cũng thành INTERNAL_ERROR ngắn. Diagnostic lỗi tối đa 4 lớp exception/cause, mỗi lớp 12 stack frame; bỏ toàn bộ message/Throwable thô. `mvnw.cmd -B -ntp -Pdb-it verify` đã pass 283 unit/mock + 25 PostgreSQL integration test, gồm 69 unit dispatch/handler/mapper và 5 RequestDispatcherIT mới. Integration đi qua serialized Request/Response → dispatcher → service → PostgreSQL, chưa dùng socket thật.
 
 ### 9.3. Service – trách nhiệm & quy tắc chính
 
@@ -779,7 +782,7 @@ mvn -pl quiz-benchmark exec:java -Dexec.mainClass=quiz.benchmark.LoadTestRunner 
 ```
 Tài khoản mẫu: xem mục 15.4 và `database/seed.sql`.
 
-**Test hiện tại:** `mvn test` / `mvn verify` chạy 214 unit/mock test, không kích hoạt PostgreSQL integration. `-Pdb-it verify` chạy thêm 20 ca repository/transaction/Auth/Account trên PostgreSQL thật. E2E/network đầy đủ thuộc giai đoạn 6, chưa triển khai. Server/client/benchmark entrypoint thuộc các task sau, nên các lệnh chạy trên chưa hoạt động cho đến khi hoàn thiện.
+**Test hiện tại:** `mvn test` / `mvn verify` chạy 283 unit/mock test, không kích hoạt PostgreSQL integration. `-Pdb-it verify` chạy thêm 25 ca repository/transaction/Auth/Account/dispatcher trên PostgreSQL thật. E2E/network đầy đủ thuộc giai đoạn 6, chưa triển khai. Server/client/benchmark entrypoint thuộc các task sau, nên các lệnh chạy trên chưa hoạt động cho đến khi hoàn thiện.
 
 ---
 
