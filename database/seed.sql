@@ -1,3 +1,5 @@
+SET client_encoding TO 'UTF8';
+
 -- ====================================================================
 -- Online Quiz cho Trung tâm đào tạo (Sample Data / Seed Script)
 -- Mật khẩu mặc định cho tất cả tài khoản mẫu: password123

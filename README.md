@@ -460,7 +460,7 @@ public interface CommandHandler {
 
 **UserRepository (task 4.1.2):** interface trả `Optional<User>` khi tìm theo username/ID, `boolean` khi kiểm tra tồn tại username/email, `User` đã được DB cấp ID/timestamp khi `save`, `List<User>` theo ID tăng dần khi `findAll`, và `boolean` khi `updateActiveStatus`. `save` chỉ INSERT user mới (ID 0, chưa có timestamp); không upsert user đã lưu. Email null không trùng. Cập nhật đúng trạng thái hiện tại vẫn trả true nếu ID tồn tại, ID không có trả false. Có overload nhận `Connection` cho `findById`, `save`, `updateActiveStatus` để dùng trong transaction của service: không mở connection thứ hai, không đóng connection caller, không đổi autoCommit/commit/rollback. API thông thường quản lý connection riêng. Repository không thực thi phân quyền; service kiểm tra actor. Lỗi tham số trả `IllegalArgumentException`; lỗi unique username/email trả `ConflictException`, lỗi DB khác trả `QuizException(DATABASE_ERROR)` với thông báo chung và cause. JDBC implementation thuộc task 4.1.3.
 
-**JdbcUserRepository (task 4.1.3 đã triển khai):** inject `DataSource`, dùng `PreparedStatement` và `INSERT ... RETURNING`, map `TIMESTAMPTZ` qua `OffsetDateTime` về `Instant`, giữ nullable email/createdBy. SQLSTATE `23505` cùng tên constraint `users_username_key`/`users_email_key` của schema hiện tại được chuyển thành CONFLICT; lỗi unique khác (kể cả users_pkey), FK, kết nối/query/mapping trả DATABASE_ERROR. Không parse thông báo SQL hoặc đưa chi tiết DB vào thông báo lỗi. Statement/ResultSet được đóng, connection do caller cung cấp và transaction của nó được giữ nguyên. Kiểm chứng 10/10/2026: `mvnw.cmd -B -ntp clean verify` thành công, 135 test pass (32 test JDBC mock mới); PostgreSQL integration chưa chạy, thuộc task 4.1.4.
+**JdbcUserRepository (task 4.1.3 đã triển khai):** inject `DataSource`, dùng `PreparedStatement` và `INSERT ... RETURNING`, map `TIMESTAMPTZ` qua `OffsetDateTime` về `Instant`, giữ nullable email/createdBy. SQLSTATE `23505` cùng tên constraint `users_username_key`/`users_email_key` của schema hiện tại được chuyển thành CONFLICT; lỗi unique khác (kể cả users_pkey), FK, kết nối/query/mapping trả DATABASE_ERROR. Không parse thông báo SQL hoặc đưa chi tiết DB vào thông báo lỗi. Statement/ResultSet được đóng, connection do caller cung cấp và transaction của nó được giữ nguyên. Kiểm chứng task 4.1.4 ngày 10/10/2026: `mvnw.cmd -B -ntp -Pdb-it clean verify` thành công, 149 unit/mock test + 14 PostgreSQL integration test, 0 failures/errors/skipped. Đã kiểm tra UNIQUE, FK, Unicode, timestamp theo timezone, ownership connection, commit/rollback và hai INSERT trùng đồng thời. Xem mục 15.5 để cấu hình DB test.
 
 | Service | Trách nhiệm | Lưu ý |
 |---|---|---|
@@ -623,12 +623,146 @@ Có thể ghi đè bằng biến môi trường/system property (đặc biệt `
 
 **Phần mềm:** JDK 21, Maven 3.9+, PostgreSQL 15+, (IDE tùy chọn). Thư viện chính: JavaFX 21, PostgreSQL JDBC, HikariCP, BCrypt, SLF4J + Logback, JUnit 5, Mockito.
 
-**Cài đặt**
-1. Cài JDK 21, Maven, PostgreSQL.
-2. Tạo DB và user: `quizdb`, `quiz`.
-3. Trên **database mới**, chạy `psql -U quiz -d quizdb -v ON_ERROR_STOP=1 -f database/schema.sql`. Script có transaction, không DROP bảng và sẽ báo lỗi nếu schema đã tồn tại; không dùng làm migration cho DB hiện hữu.
-4. Chỉ cho demo/test: chạy `psql -U quiz -d quizdb -v ON_ERROR_STOP=1 -c "SET quiz.allow_demo_seed = 'on'" -f database/seed.sql`. Seed yêu cầu schema trống và sequence chưa dùng; tài khoản mẫu dùng mật khẩu công khai, không dùng cho triển khai thật. Cấu hình db url/user và cấp password qua biến môi trường/file local.
-5. Build: `mvn clean verify`.
+### 15.1. Cài PostgreSQL trên Windows
+
+Tải bản PostgreSQL 18 ổn định từ [trang download Windows chính thức](https://www.postgresql.org/download/windows/), mở installer và chọn:
+
+- **PostgreSQL Server**, **Command Line Tools**, **pgAdmin 4**.
+- Port **5432**; nếu dùng port khác, thay port trong tất cả lệnh và JDBC URL dưới đây.
+- Đặt mật khẩu riêng cho role quản trị **postgres**, ghi nhớ để tạo role/database.
+- Chọn Data Directory mới, ví dụ `C:\PostgreSQLData\quiz18`. Nếu máy còn thư mục dữ liệu từ lần cài trước, giữ lại và dùng thư mục mới cho hướng dẫn này.
+- Stack Builder có thể bỏ qua; project chỉ cần PostgreSQL và JDBC dependency đã có trong Maven.
+
+Xem [hướng dẫn installer của EDB](https://www.enterprisedb.com/docs/supported-open-source/postgresql/installing/windows/) nếu cần chi tiết.
+
+Mở PowerShell **tại thư mục gốc project**, nơi có `pom.xml`, `mvnw.cmd` và thư mục `database`. Các lệnh bên dưới chạy trong cùng cửa sổ PowerShell. Nếu cài phiên bản/vị trí khác, sửa `$pgBin`:
+
+```powershell
+$pgBin = 'C:\Program Files\PostgreSQL\18\bin'
+$env:PGCLIENTENCODING = 'UTF8'
+
+& "$pgBin\psql.exe" --version
+& "$pgBin\pg_isready.exe" -h 127.0.0.1 -p 5432
+```
+
+`pg_isready` cần báo **accepting connections**. Nếu không, kiểm tra dịch vụ PostgreSQL trong Windows Services và port đã chọn khi cài.
+
+### 15.2. Tạo role và database phát triển/kiểm thử
+
+| Mục đích | Database | Role kết nối |
+|---|---|---|
+| Phát triển, dữ liệu demo | `quizdb` | `quiz` |
+| Integration test riêng | `quizdb_test` | `quiz_test` |
+
+Kết nối quản trị; nhập mật khẩu **postgres** đã đặt trong installer:
+
+```powershell
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d postgres -W
+```
+
+Tại prompt `postgres=#`, nhập **từng lệnh** sau. `\password` sẽ yêu cầu nhập mật khẩu mới hai lần; mật khẩu không hiện trên terminal. Đây là các lệnh trong **psql**, không phải lệnh PowerShell:
+
+```sql
+CREATE ROLE quiz LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+\password quiz
+CREATE DATABASE quizdb OWNER quiz ENCODING 'UTF8' TEMPLATE template0;
+
+CREATE ROLE quiz_test LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+\password quiz_test
+CREATE DATABASE quizdb_test OWNER quiz_test ENCODING 'UTF8' TEMPLATE template0;
+\q
+```
+
+Chạy CREATE DATABASE riêng, không bao trong BEGIN/COMMIT. Nếu role/database đã tồn tại, kiểm tra cấu hình hiện hữu trước khi tiếp tục; không xóa database để chạy lại hướng dẫn. [Tài liệu CREATE DATABASE](https://www.postgresql.org/docs/18/sql-createdatabase.html), [psql và `\password`](https://www.postgresql.org/docs/18/app-psql.html).
+
+### 15.3. Khởi tạo schema và kiểm tra bảng
+
+Trở lại PowerShell, chạy **một lần trên mỗi database mới**. Mỗi lệnh dùng mật khẩu của role trong tham số `-U`:
+
+```powershell
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz -d quizdb -W -v ON_ERROR_STOP=1 -f database/schema.sql
+
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz_test -d quizdb_test -W -v ON_ERROR_STOP=1 -f database/schema.sql
+```
+
+Cả hai lệnh cần kết thúc bằng **COMMIT**, không có ERROR. Sau đó kiểm tra:
+
+```powershell
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz -d quizdb -W -c "\dt"
+
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz_test -d quizdb_test -W -c "\dt"
+```
+
+Kết quả dự kiến là **11 bảng**, gồm users, classes, class_members, questions, quizzes, quiz_questions, quiz_assignments, attempts, attempt_answers, results, anticheat_events.
+
+Schema có transaction, không DROP bảng và báo lỗi nếu bảng đã tồn tại; không dùng script này làm migration. Lỗi trước COMMIT khiến các bảng vừa tạo bị rollback khi kết nối đóng. Chỉ chạy seed sau khi schema thành công.
+
+### 15.4. Seed demo — chỉ cho database phát triển
+
+Trên `quizdb` vừa tạo schema và còn trống:
+
+```powershell
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz -d quizdb -W -v ON_ERROR_STOP=1 -c "SET quiz.allow_demo_seed = 'on'" -f database/seed.sql
+```
+
+Seed cần opt-in, bảng users trống và các sequence liên quan chưa dùng. Kết quả phải kết thúc bằng COMMIT. Tài khoản ứng dụng mẫu: `admin`, `teacher1`, `teacher2`, `student01`–`student50`, cùng mật khẩu **password123**. Đây là tài khoản Online Quiz, khác với các role PostgreSQL `postgres`/`quiz`/`quiz_test`; chỉ dùng cho demo, không dùng triển khai thật.
+
+Giữ `quizdb_test` **không có seed demo** để integration test tạo fixture riêng.
+
+### 15.5. Cấu hình JDBC và mật khẩu local
+
+Mặc định `server.properties` dùng `jdbc:postgresql://localhost:5432/quizdb`, role `quiz`, password để trống và bắt buộc cấp từ bên ngoài. Để chuẩn bị cấu hình phát triển, đặt trong PowerShell:
+
+```powershell
+$env:DB_URL = 'jdbc:postgresql://127.0.0.1:5432/quizdb'
+$env:DB_USER = 'quiz'
+$taskDbSecret = Read-Host 'Mật khẩu PostgreSQL của role quiz' -AsSecureString
+$env:DB_PASSWORD = [System.Net.NetworkCredential]::new('', $taskDbSecret).Password
+Remove-Variable taskDbSecret
+```
+
+ServerConfig đọc các biến này; password không được ghi vào README hoặc file properties đã track. Cũng có thể dùng `ServerConfig.load(Path)` với file `*-local.properties` đã được gitignore. Biến môi trường trên chỉ có trong phiên PowerShell hiện tại và tiến trình khởi chạy từ phiên đó. `PGCLIENTENCODING` dành cho psql, không phải cấu hình JDBC.
+
+**Cấu hình PostgreSQL integration test (`db-it`):** tạo file UTF-8 `db-test-local.properties` tại thư mục gốc project, điền mật khẩu của role `quiz_test` tại máy. File khớp `*-local.properties` trong gitignore và không được commit:
+
+```properties
+db.url=jdbc:postgresql://127.0.0.1:5432/quizdb_test
+db.user=quiz_test
+db.password=
+```
+
+Nếu mật khẩu chứa dấu backslash, viết `\\` cho một backslash trong file properties. Có thể thay cấu hình file bằng `QUIZ_TEST_DB_URL`, `QUIZ_TEST_DB_USER`, `QUIZ_TEST_DB_PASSWORD`; các biến test này ưu tiên hơn file. Test không dùng `DB_URL`/`DB_USER`/`DB_PASSWORD` của ứng dụng làm fallback. Có thể chọn file khác bằng tham số `"-Dquiz.test.config=<đường dẫn file>"`.
+
+Profile chỉ chấp nhận JDBC URL localhost/127.0.0.1 với port hợp lệ, database **quizdb_test** và role **quiz_test**; từ chối URL có query parameter. Test kiểm tra lại database/role kết nối thực tế và đủ 11 bảng trước khi tạo fixture. Thiếu cấu hình/mật khẩu, DB không kết nối được hoặc thiếu schema sẽ làm build fail, không skip. Test dọn đúng username UUID của fixture sau mỗi ca; không truncate bảng, không reset sequence, không chạy seed. Các lần INSERT kể cả rollback có thể làm tăng sequence ID; không dùng DB test này để seed demo yêu cầu sequence chưa dùng.
+
+### 15.6. Xử lý lỗi setup thường gặp
+
+| Lỗi | Cách xử lý |
+|---|---|
+| `fe_sendauth: no password supplied` | Nhập mật khẩu khi hiện Password; ký tự không hiện là bình thường. Không nhấn Enter khi chưa nhập |
+| Chuyển encoding WIN1252 sang UTF8 thất bại | Đặt `$env:PGCLIENTENCODING = 'UTF8'` rồi chạy lại schema. Schema/seed đã khai báo `SET client_encoding TO 'UTF8'` đầu file, trước comment tiếng Việt |
+| `relation "users" does not exist` khi seed | Schema chưa chạy thành công hoặc đang kết nối sai DB; chạy schema trước và kiểm tra `\dt` |
+| `Did not find any tables` | Kiểm tra đúng database/role, xem ERROR từ bước schema. Nếu schema bị lỗi giữa chừng, transaction đã rollback |
+| `relation ... already exists` | Schema đã có hoặc DB không mới; không chạy lại script khởi tạo, kiểm tra bảng trước |
+| `connection refused` / `no response` | Kiểm tra dịch vụ PostgreSQL đã chạy, host và port đúng |
+
+Các file SQL của project là UTF-8. [Tài liệu PostgreSQL về client encoding](https://www.postgresql.org/docs/18/multibyte.html).
+
+### 15.7. Build và chạy
+
+Build bằng Maven Wrapper của project:
+
+```powershell
+.\mvnw.cmd -B -ntp clean verify
+```
+
+Chạy thêm PostgreSQL integration test sau khi chuẩn bị mục 15.2–15.3 và file cấu hình test ở mục 15.5:
+
+```powershell
+.\mvnw.cmd -B -ntp -Pdb-it clean verify
+```
+
+Surefire chạy `*Test` mặc định; profile `db-it` dùng Failsafe chạy `*IT` ở integration-test/verify. Cả hai dùng classpath trực tiếp (`useManifestOnlyJar=false`) để tránh lỗi manifest classpath khác ổ đĩa trên Windows. Report unit nằm ở `quiz-server/target/surefire-reports`, report DB ở `quiz-server/target/failsafe-reports`.
 
 **Chạy**
 ```bash
@@ -639,9 +773,9 @@ mvn -pl quiz-client javafx:run
 # Benchmark (server phải đang chạy)
 mvn -pl quiz-benchmark exec:java -Dexec.mainClass=quiz.benchmark.LoadTestRunner -Dexec.args="--clients 10 --output results.csv"
 ```
-Tài khoản mẫu: xem `database/seed.sql` (ghi username/mật khẩu mẫu vào đây khi hoàn thành).
+Tài khoản mẫu: xem mục 15.4 và `database/seed.sql`.
 
-**Test hiện tại (giai đoạn 1–3):** `mvn test` / `mvn verify` chạy unit và test hồi quy hạ tầng. Integration/network với `quizdb_test` là kế hoạch giai đoạn 6, chưa triển khai. Server/client/benchmark entrypoint thuộc các giai đoạn sau, nên các lệnh chạy trên chưa hoạt động cho đến khi hoàn thiện.
+**Test hiện tại:** `mvn test` / `mvn verify` chạy 149 unit/mock test, không kích hoạt PostgreSQL integration. `-Pdb-it verify` chạy thêm 14 ca repository/transaction trên PostgreSQL thật. E2E/network đầy đủ thuộc giai đoạn 6, chưa triển khai. Server/client/benchmark entrypoint thuộc các task sau, nên các lệnh chạy trên chưa hoạt động cho đến khi hoàn thiện.
 
 ---
 
