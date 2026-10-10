@@ -76,6 +76,11 @@ Trung tâm đào tạo (bối cảnh: trung tâm tiếng Anh) cần tạo ngân 
 | Quiz PIN | **Có trong MVP** (luồng học viên cần PIN; PIN sinh khi giáo viên mở bài) |
 | Quản lý lớp | Mức tối thiểu: tạo lớp, thêm/xóa học viên, giao bài cho lớp |
 | Tài khoản | Admin cấp sẵn, **không** tự đăng ký |
+| Cấp/khóa tài khoản | API quản trị chỉ tạo TEACHER/STUDENT; không tạo ADMIN hoặc khóa tài khoản ADMIN |
+| Chuẩn hóa thông tin user | Bỏ khoảng trắng đầu/cuối username, fullName, email; giữ hoa/thường; email trống thành null; unique theo schema hiện tại |
+| Chính sách mật khẩu | Không trim; tạo mới tối thiểu 8 ký tự, không toàn khoảng trắng, tối đa 72 byte UTF-8; login không áp dụng ngưỡng tối thiểu của tạo mới |
+| Phiên đăng nhập | Một phiên hiện hành/user; login trên socket mới thay phiên cũ; LOGIN trên socket đã đăng nhập trả CONFLICT |
+| Logout/khóa user | Logout hủy đúng token của socket và giữ socket để login lại; khóa user sau commit thu hồi phiên, mở khóa yêu cầu login lại |
 | Trạng thái Quiz | `DRAFT → OPEN → CLOSED` (không quay lại) |
 | Số lần làm | Mỗi học viên **1 Attempt / 1 Quiz** (`UNIQUE(quiz_id, student_id)`) |
 | Điểm đạt | Mặc định **50%**, cấu hình theo từng quiz (`pass_score`) |
@@ -118,6 +123,7 @@ handler  →  service  →  repository(interface)  ←  jdbc impl  →  db
 - `network` biết `dispatch`; **không** biết `service`.
 - `handlers` chỉ gọi `service`; **không** viết SQL, **không** đụng `Socket`.
 - `service` chỉ dùng `repository` (interface), `domain`, `security`, và service khác; **không** biết `Request/Response`/socket.
+- Ngoại lệ đã chốt cho Auth/Account: service được dùng `SessionRegistry`/`UserSession` như bộ lưu trữ và dữ liệu phiên trong bộ nhớ; không dùng `ClientConnection`/`ConnectionRegistry`. Tầng network dùng `SessionLifecycle` để bind/unbind socket, không gọi service.
 - `repository.jdbc` là nơi duy nhất có SQL/JDBC.
 - Client: `ui` → `QuizApi` → `ServerConnection`. Controller **không** biết `Socket`/`Request`.
 - `client` và `server` **không** import lẫn nhau; chỉ chia sẻ qua `quiz-common`.
@@ -449,6 +455,8 @@ public interface CommandHandler {
 - `DtoMapper`: chuyển domain → DTO (có hai bản câu hỏi: đầy đủ và `StudentQuestionDto`).
 
 ### 9.3. Service – trách nhiệm & quy tắc chính
+
+**Domain User (task 4.1.1):** entity bất biến, không Serializable, chỉ chứa passwordHash, không chứa mật khẩu thô. Factory `User.createNew(...)` dùng `id=0`, `createdAt=null`, `active=true`; `User.restore(...)` yêu cầu ID dương và timestamp khác null, giữ trạng thái active đã lưu. `createdBy` null cho bootstrap hoặc ID dương. Username tối đa 50 ký tự Unicode, fullName/email tối đa 100, hash không rỗng và tối đa 255; email trống thành null. Lỗi invariant là `IllegalArgumentException`; domain không phụ thuộc exception/service/JDBC. `toString()` không chứa hash. Validation định dạng email và băm/kiểm tra BCrypt thuộc service/security.
 
 | Service | Trách nhiệm | Lưu ý |
 |---|---|---|
