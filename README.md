@@ -434,8 +434,8 @@ CREATE INDEX idx_questions_filter  ON questions(topic, difficulty) WHERE active;
 
 ### 9.1. Thread model & network
 - `QuizServer`: 1 thread `accept()` trong vòng lặp; mỗi socket được bọc trong `ClientHandler` và chạy trên **`connectionExecutor`** (giới hạn bởi `server.max.connections`).
-- `ClientHandler.run()`: vòng lặp đọc `Request` → đẩy xử lý sang **`workerPool`** (`ThreadPoolExecutor` cố định, hàng đợi có giới hạn). Hàng đợi đầy → trả `SERVER_BUSY` (không treo).
-- `ClientConnection`: bọc `ObjectOutputStream`; **`send()` phải `synchronized`** vì response (worker thread) và PUSH (scheduler/worker khác) có thể ghi cùng lúc.
+- `ClientHandler.run()`: đọc `Request` → submit **`workerPool`** → chờ kết quả → gửi `Response` trên reader → đọc tiếp. Worker cố định, hàng đợi có giới hạn; queue đầy trả `SERVER_BUSY` theo requestId. Reader giữ thứ tự trên cùng socket và việc ghi ra client chậm không chiếm worker.
+- `ClientConnection`: bọc `ObjectOutputStream`; **`send()` phải `synchronized`** vì response (reader thread) và PUSH (scheduler/worker khác) có thể ghi cùng lúc.
 - `ConnectionRegistry`: `ConcurrentHashMap<Long userId, ClientConnection>` để push cảnh báo/force-submit.
 - `SessionRegistry`: `ConcurrentHashMap<String token, UserSession(userId, role, username)>`; token sinh bằng `SecureRandom` (≥ 128 bit). Hủy khi logout/ngắt kết nối.
 - Đóng kết nối: luôn dùng try-with-resources; client ngắt đột ngột không được làm sập server hay rò thread.
@@ -454,7 +454,7 @@ public interface CommandHandler {
 - `AuthGuard.check(request, handler)`: token tồn tại? role thuộc `allowedRoles`? Sai → `UNAUTHENTICATED`/`FORBIDDEN`.
 - `DtoMapper`: chuyển domain → DTO (có hai bản câu hỏi: đầy đủ và `StudentQuestionDto`).
 - Contract task 4.3: LOGIN public, token phải null; LOGOUT cần session của mọi role; CREATE_ACCOUNT/LIST_ACCOUNTS/SET_ACCOUNT_ACTIVE chỉ ADMIN. Guard gọi AuthService.authenticate để lấy identity/role hiện tại. Request ID phải dương; lệnh chưa triển khai, PUSH từ client hoặc payload sai hình dạng là INVALID_REQUEST, giá trị DTO sai là VALIDATION_ERROR. Response thông thường giữ requestId, pushType null; null Request nội bộ dùng ID 0 cho error, network không gửi response nếu chưa có Request hợp lệ để định danh.
-- Dispatcher kiểm tra response round-trip qua codec (kích thước, allowlist, depth/reference/array), không tăng giới hạn/cắt danh sách khi LIST_ACCOUNTS quá lớn; trả INTERNAL_ERROR. Chỉ triển khai mapper Auth/Account ở task này; socket binding/LOGIN trên socket đã login thuộc task 4.4.
+- Dispatcher kiểm tra response round-trip qua codec (kích thước, allowlist, depth/reference/array), không tăng giới hạn/cắt danh sách khi LIST_ACCOUNTS quá lớn; trả INTERNAL_ERROR. Hiện có mapper Auth/Account; socket binding và LOGIN trên socket đã login được xử lý ở tầng network của task 4.4.
 - Task 4.3 đã triển khai: `CommandHandler`, `AuthGuard`, `RequestDispatcher`, `DtoMapper`, `LoginHandler`, `AccountHandler`. Giới hạn codec áp dụng cả thông báo lỗi nghiệp vụ; error quá lớn cũng thành INTERNAL_ERROR ngắn. Diagnostic lỗi tối đa 4 lớp exception/cause, mỗi lớp 12 stack frame; bỏ toàn bộ message/Throwable thô. `mvnw.cmd -B -ntp -Pdb-it verify` đã pass 283 unit/mock + 25 PostgreSQL integration test, gồm 69 unit dispatch/handler/mapper và 5 RequestDispatcherIT mới. Integration đi qua serialized Request/Response → dispatcher → service → PostgreSQL, chưa dùng socket thật.
 
 ### 9.3. Service – trách nhiệm & quy tắc chính
@@ -799,7 +799,73 @@ mvn -pl quiz-benchmark exec:java -Dexec.mainClass=quiz.benchmark.LoadTestRunner 
 ```
 Tài khoản mẫu: xem mục 15.4 và `database/seed.sql`.
 
-**Test hiện tại:** `.\mvnw.cmd -B -ntp -Pdb-it verify` đã pass **295 unit/mock/socket + 28 PostgreSQL integration = 323 tests**, 0 failures/errors/skipped. `mvn test` / `mvn verify` chỉ chạy 295 test mặc định; profile `db-it` bổ sung repository/transaction/Auth/Account/dispatcher và `ServerBootstrapIT` đi qua bootstrap → TCP → services → PostgreSQL thật trên `quizdb_test`. Test socket với dịch vụ giả được tách khỏi integration DB; chưa có E2E UI JavaFX đầy đủ. Server entrypoint đã triển khai ở task 4.4; client/benchmark còn thuộc task sau.
+**Test hiện tại:** nghiệm thu 11/10/2026 bằng `.\mvnw.cmd -B -ntp -Pdb-it clean verify` đã pass **295 unit/mock/socket + 30 PostgreSQL integration = 325 tests**, 0 failures/errors/skipped. Môi trường: Windows 11, Oracle JDK 21.0.9, Maven Wrapper 3.9.9; DB local `quizdb_test` với role `quiz_test`. `mvn test` / `mvn verify` chỉ chạy 295 test mặc định; profile `db-it` bổ sung repository/transaction/Auth/Account/dispatcher và `ServerBootstrapIT` đi qua bootstrap → TCP → services → PostgreSQL thật. Test socket với dịch vụ giả được tách khỏi integration DB; chưa có E2E UI JavaFX đầy đủ. Server entrypoint đã triển khai ở task 4.4; client/benchmark còn thuộc task sau.
+
+---
+
+### 15.8. Bàn giao Auth/Account cho client (giai đoạn 5)
+
+**Contract trên TCP:** dùng các class trong `quiz-common`, không gửi JSON hoặc Java domain `User`. Hai đầu tạo `ObjectOutputStream`, flush header rồi tạo input bằng `MessageCodec.createFilteredInputStream`; gửi/đọc từng envelope qua `MessageCodec.write/read`. Request ID dương, tăng theo connection; response thông thường giữ ID đó và `pushType=null`. Payload bên dưới là kết quả khi `success=true`; khi thất bại, đọc `errorCode`, không suy luận lỗi từ chuỗi `message`.
+
+| MessageType | Quyền và token | Request payload | Response payload khi thành công |
+|---|---|---|---|
+| LOGIN | Socket chưa bind; `token=null` | `LoginRequestDto(username, password)` | `LoginResultDto(token, userId, username, fullName, role)` |
+| LOGOUT | ADMIN/TEACHER/STUDENT; token hiện hành của chính socket | `null` | `null`; bỏ token local, giữ socket để LOGIN lại |
+| CREATE_ACCOUNT | ADMIN; token của socket | `CreateAccountDto(username, password, fullName, email, role)` | `AccountDto` của account mới, `active=true` |
+| LIST_ACCOUNTS | ADMIN; token của socket | `null` | `ArrayList<AccountDto>`, gồm cả account inactive, thứ tự ID tăng |
+| SET_ACCOUNT_ACTIVE | ADMIN; token của socket | `SetAccountActiveDto(userId, active)` | `null`; client tải lại danh sách để cập nhật trạng thái |
+
+`AccountDto` gồm `id, username, fullName, email, role, active, createdBy, createdAt`; email/createdBy có thể null, createdAt là `Instant`. Không có password/passwordHash. `createdBy` được server lấy từ phiên Admin, client không gửi actor ID. Username phân biệt hoa/thường; username/fullName/email được strip, giới hạn tương ứng 50/100/100 Unicode code point. Email rỗng thành null, email có giá trị phải đúng định dạng cơ bản `local@domain.suffix`. Password không trim; tạo mới ít nhất 8 code point và tối đa 72 byte UTF-8, LOGIN chỉ kiểm tra không blank và tối đa 72 byte. Chỉ tạo TEACHER/STUDENT; không tạo ADMIN hoặc thay trạng thái ADMIN qua API này.
+
+| errorCode/tình huống | Cách xử lý ở client |
+|---|---|
+| INVALID_CREDENTIALS | Báo sai thông tin đăng nhập; không tiết lộ username có tồn tại hay không |
+| ACCOUNT_DISABLED | LOGIN với mật khẩu đúng nhưng tài khoản bị khóa; không lưu phiên |
+| UNAUTHENTICATED | Token thiếu, bị thu hồi, khác socket hoặc account không còn active: xóa phiên local, đóng socket và reconnect trước LOGIN |
+| FORBIDDEN | Sai role, tạo ADMIN hoặc đổi trạng thái ADMIN: báo không có quyền, không tự sửa role local |
+| CONFLICT | Username/email trùng, hoặc LOGIN trên socket còn binding; với trùng tài khoản sửa form, với LOGIN hãy LOGOUT hợp lệ hoặc reconnect |
+| VALIDATION_ERROR / NOT_FOUND | Giá trị form/ID không hợp lệ hoặc target không còn tồn tại; sửa form/tải lại danh sách |
+| INVALID_REQUEST | DTO sai loại, payload thừa hoặc envelope/lệnh không hỗ trợ ở dispatcher; kiểm tra code gửi request |
+| SERVER_BUSY | Giữ phiên nếu còn kết nối; hiển thị bận và cho thử lại. Không tự động retry thao tác ghi khi không biết kết quả trước đó |
+| DATABASE_ERROR / INTERNAL_ERROR | Hiển thị thông báo chung; không parse SQL/stack trace. LIST_ACCOUNTS vượt giới hạn codec cũng trả INTERNAL_ERROR, chưa phân trang |
+| EOF, timeout, frame lỗi, mất socket | Fail các future đang chờ, xóa phiên local; request ghi mất response có kết quả chưa xác định, không tự gửi lại |
+
+Guard kiểm tra quyền/phiên trước payload nghiệp vụ; một request sai DTO nhưng chưa được xác thực có thể nhận UNAUTHENTICATED. Frame sai, Response từ client hoặc Request không có ID dương làm server đóng socket, không trả ID giả. Việc khóa account thu hồi token sau commit, chưa gửi PUSH hoặc chủ động đóng ngay socket đó. Request tiếp theo nhận UNAUTHENTICATED; mở khóa không phục hồi token cũ. Socket còn binding sau thu hồi không dùng cho LOGIN lại; reconnect tạo phiên mới. Login ở socket mới thay phiên hiện hành và đóng socket cũ; cleanup của socket cũ giữ nguyên phiên mới.
+
+**Ví dụ client test thực thi:** `quiz-server/src/test/java/quiz/server/integration/ServerBootstrapIT.java`, ca `realBootstrapHandlesFiveMessagesAndShutsDown`, tự tạo fixture Admin, mở TCP và thực hiện:
+
+```java
+new Request(1, MessageType.LOGIN, null, new LoginRequestDto(admin.username(), PASSWORD));
+// Đọc LoginResultDto từ response thành công, lấy token cho các request tiếp theo.
+new Request(2, MessageType.CREATE_ACCOUNT, token,
+    new CreateAccountDto(username, PASSWORD, "Nguyễn Việt", null, Role.STUDENT));
+new Request(3, MessageType.LIST_ACCOUNTS, token, null);
+new Request(4, MessageType.SET_ACCOUNT_ACTIVE, token, new SetAccountActiveDto(created.id(), false));
+new Request(5, MessageType.LOGOUT, token, null);
+```
+
+Đây là các envelope trích từ test; test gửi từng request bằng codec, kiểm tra correlation/success và lấy ID/token từ response trước. `PASSWORD` là fixture test, không phải mật khẩu DB hay tài khoản ứng dụng. Ca `rolePermissionsAndDisableReenableRequireFreshSocketSession` chạy riêng cho TEACHER/STUDENT: ba API quản trị trả FORBIDDEN, khóa làm token cũ hết hiệu lực, LOGIN khi bị khóa trả ACCOUNT_DISABLED, mở khóa vẫn phải có token mới trên socket mới. Fixture dùng tên UUID, chỉ xóa các account do test tạo, không dùng seed hoặc reset DB.
+
+Chạy riêng client smoke/contract trên DB test đã chuẩn bị ở mục 15.5:
+
+```powershell
+.\mvnw.cmd -B -ntp -pl quiz-server -am -Pdb-it verify '-Dit.test=ServerBootstrapIT'
+```
+
+Lệnh này vẫn chạy unit/socket test mặc định; phần Failsafe chỉ chọn `ServerBootstrapIT`. Client test là đồng bộ, chưa phải `ServerConnection`/`QuizApi` hay UI. Giai đoạn 5 cần một reader nền để ghép response theo requestId, writer được đồng bộ, các API trả `CompletableFuture`, cập nhật UI qua JavaFX thread; phân biệt PUSH bằng `pushType`/ID 0. Chỉ lưu token sau LOGIN thành công; không log Request/DTO chứa mật khẩu/token. TLS, session TTL, rate limit, deadline chống client nhỏ giọt và E2E JavaFX còn là backlog; shutdown chưa bảo đảm JDBC dừng theo ngân sách khi driver bỏ qua interrupt.
+
+**Bằng chứng nghiệm thu giai đoạn 4:**
+
+| Nội dung | Test kiểm chứng |
+|---|---|
+| SQL/mapping, transaction rollback, UNIQUE khi hai thao tác tạo trùng đồng thời | `JdbcUserRepositoryIT`, `AuthAccountServiceIT` |
+| Quyền Admin/Teacher/Student, DTO và đủ 5 lệnh | `AuthGuardTest`, `RequestDispatcherTest`, `RequestDispatcherIT`, `ServerBootstrapIT` |
+| Băm mật khẩu, DTO không chứa hash, lỗi/log dispatcher không chứa dữ liệu nhạy cảm | `PasswordHasherTest`, `DtoMapperTest`, `RequestDispatcherTest`, `RequestDispatcherIT` |
+| Login/logout/reconnect/disable/reenable, cleanup không mất phiên mới | `SessionCoordinatorTest`, `AuthAccountServiceIT`, `SessionLifecycleTest`, `QuizServerTest`, `ServerBootstrapIT` |
+| Frame/allowlist/budget, timeout, admission, bounded queue, writer chậm và shutdown | `MessageCodecSecurityTest`, `QuizServerTest`, `ClientHandlerTest` |
+| CLI/config, bootstrap thực tế, port bị chiếm, bảng users không truy cập được | `ServerMainTest`, `ServerBootstrapIT` |
+
+Report Surefire: `quiz-common/target/surefire-reports` (12 ca), `quiz-server/target/surefire-reports` (283 ca); Failsafe: `quiz-server/target/failsafe-reports` (30 ca, gồm 5 `ServerBootstrapIT`). Không commit report sinh ra hoặc file cấu hình chứa mật khẩu.
 
 ---
 
