@@ -5,6 +5,8 @@ import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
+import javafx.scene.control.TextField;
+import javafx.event.ActionEvent;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -56,12 +58,12 @@ class ClientUiIT {
         } finally { server.close(); }
     }
 
-    @Test void loginLoadsWithoutConnectingAndHasPreviewState() throws Exception {
+    @Test void loginLoadsWithoutConnectingAndIsReadyForSubmission() throws Exception {
         fx(() -> {
             navigator.showLogin(""); stage.show(); stage.getScene().getRoot().applyCss(); stage.getScene().getRoot().layout();
             assertEquals(Screen.LOGIN, navigator.currentScreen().orElseThrow());
             assertEquals(ServerConnection.State.DISCONNECTED, connection.state());
-            assertTrue(button("loginButton").isDisabled());
+            assertFalse(button("loginButton").isDisabled());
             assertFalse(label("loginNotice").isVisible());
             saveSnapshot("login");
             return null;
@@ -130,6 +132,7 @@ class ClientUiIT {
         CompletableFuture<Void> observation = fx(() -> {
             navigator.showLogin("");
             Parent oldRoot = stage.getScene().getRoot();
+            oldRoot.applyCss(); oldRoot.layout();
             PasswordField field = (PasswordField) oldRoot.lookup("#passwordInput"); field.setText("fixture-password");
             ScreenController controller = new ScreenController() { };
             controller.mount(() -> stage.getScene().getRoot() == oldRoot);
@@ -190,12 +193,145 @@ class ClientUiIT {
     }
 
     private SocketFixture.Peer login(Role role) throws Exception {
-        api.connect().get(3, TimeUnit.SECONDS);
+        fx(() -> { navigator.showLogin(""); stage.show(); fillAndSubmit("  fixture  ", "fixture-password"); return null; });
         var peer = server.take();
-        var result = api.login("fixture", "fixture-password");
-        peer.success(peer.read(), new LoginResultDto("fixture-token-" + role, 1, "fixture", "Nguyễn Việt — phiên kiểm thử", role));
-        result.get(3, TimeUnit.SECONDS);
+        Request request = peer.read();
+        assertEquals(MessageType.LOGIN, request.type()); assertNull(request.token());
+        assertEquals(new quiz.common.dto.LoginRequestDto("fixture", "fixture-password"), request.payload());
+        peer.success(request, new LoginResultDto("fixture-token-" + role, 1, "fixture", "Nguyễn Việt — phiên kiểm thử", role));
+        awaitScreen(Screen.home(role));
         return peer;
+    }
+
+    @ParameterizedTest @EnumSource(value = ErrorCode.class, names = {"INVALID_CREDENTIALS", "ACCOUNT_DISABLED", "CONFLICT", "SERVER_BUSY", "DATABASE_ERROR"})
+    void loginErrorsClearPasswordKeepUsernameAndAllowManualRetry(ErrorCode code) throws Exception {
+        fx(() -> { navigator.showLogin(""); stage.show(); fillAndSubmit("  fixture  ", " pass "); return null; });
+        var peer = server.take(); var request = peer.read();
+        assertEquals(new quiz.common.dto.LoginRequestDto("fixture", " pass "), request.payload());
+        fx(() -> {
+            assertTrue(button("loginButton").isDisabled());
+            assertTrue(stage.getScene().lookup("#loginProgress").isVisible());
+            stage.setTitle("UI vẫn phản hồi khi server đang chờ");
+            ((TextField) stage.getScene().lookup("#usernameInput")).fireEvent(new ActionEvent());
+            button("loginButton").fire(); return null;
+        });
+        long firstRequestId = request.requestId();
+        peer.send(Response.error(request.requestId(), code, "SQL password secret must not be displayed"));
+        awaitReady();
+        fx(() -> {
+            assertEquals(Screen.LOGIN, navigator.currentScreen().orElseThrow());
+            assertEquals("fixture", ((TextField) stage.getScene().lookup("#usernameInput")).getText());
+            assertEquals("", ((PasswordField) stage.getScene().lookup("#passwordInput")).getText());
+            assertFalse(label("loginNotice").getText().contains("SQL"));
+            assertTrue(label("loginNotice").isVisible()); return null;
+        });
+        assertTrue(api.session().current().isEmpty());
+        if (code == ErrorCode.CONFLICT) assertEquals(ServerConnection.State.DISCONNECTED, connection.state());
+        else assertEquals(ServerConnection.State.CONNECTED, connection.state());
+        fx(() -> { fillAndSubmit("fixture", "x"); return null; }); // Existing short password is allowed.
+        if (code == ErrorCode.CONFLICT) peer = server.take();
+        request = peer.read();
+        if (code != ErrorCode.CONFLICT) assertEquals(firstRequestId + 1, request.requestId(), "Duplicate Enter/click must not send another LOGIN");
+        assertEquals(new quiz.common.dto.LoginRequestDto("fixture", "x"), request.payload());
+        peer.success(request, new LoginResultDto("retry-token", 1, "fixture", "Fixture", Role.STUDENT));
+        awaitScreen(Screen.STUDENT_DASHBOARD);
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"username-blank", "username-long", "password-blank", "password-bytes"})
+    void invalidFormNeverConnects(String invalid) throws Exception {
+        String username = switch (invalid) { case "username-blank" -> " "; case "username-long" -> "😀".repeat(51); default -> "fixture"; };
+        String password = switch (invalid) { case "password-blank" -> " "; case "password-bytes" -> "😀".repeat(19); default -> "password"; };
+        fx(() -> {
+            navigator.showLogin(""); fillAndSubmit(username, password);
+            assertFalse(button("loginButton").isDisabled());
+            assertTrue(label("loginNotice").isVisible());
+            assertFalse(stage.getScene().lookup("#loginProgress").isVisible()); return null;
+        });
+        assertEquals(ServerConnection.State.DISCONNECTED, connection.state());
+    }
+
+    @Test void loginTimeoutThenRetryUsesFreshSocketAndDropsOldResponse() throws Exception {
+        fx(() -> {
+            navigator.close(); connection = new ServerConnection(server.config(250, 16)); api = new QuizApi(connection);
+            navigator = new SceneNavigator(stage, api, new FxAsync());
+            navigator.showLogin(""); stage.show(); fillAndSubmit("fixture", "password"); return null;
+        });
+        var old = server.take(); var request = old.read();
+        awaitReady();
+        assertEquals(ServerConnection.State.DISCONNECTED, connection.state());
+        fx(() -> { assertTrue(label("loginNotice").getText().contains("thời gian")); fillAndSubmit("fixture", "password"); return null; });
+        var fresh = server.take();
+        fresh.success(fresh.read(), new LoginResultDto("new-token", 1, "fixture", "Fixture", Role.TEACHER));
+        awaitScreen(Screen.TEACHER_DASHBOARD);
+        try { old.success(request, new LoginResultDto("old-token", 2, "old", "Old", Role.ADMIN)); }
+        catch (java.io.IOException closed) { assertFalse(api.session().current().orElseThrow().token().equals("old-token")); }
+        assertEquals(Role.TEACHER, api.session().current().orElseThrow().role());
+    }
+
+    @Test void leavingLoginDuringAuthenticationPreventsLateNavigation() throws Exception {
+        fx(() -> { navigator.showLogin(""); fillAndSubmit("fixture", "password"); return null; });
+        var peer = server.take(); var request = peer.read();
+        fx(() -> { navigator.showLogin("Màn hình mới"); return null; });
+        assertTrue(api.session().current().isEmpty());
+        assertEquals(ServerConnection.State.DISCONNECTED, connection.state());
+        try { peer.success(request, new LoginResultDto("late-token", 1, "fixture", "Fixture", Role.ADMIN)); }
+        catch (java.io.IOException closed) { assertTrue(api.session().current().isEmpty()); }
+        fx(() -> { assertEquals(Screen.LOGIN, navigator.currentScreen().orElseThrow()); assertEquals("Màn hình mới", label("loginNotice").getText()); return null; });
+    }
+
+    @Test void serverUnavailableKeepsFormReadyAndCompactErrorCanScroll() throws Exception {
+        int closedPort;
+        try (var reservation = new java.net.ServerSocket(0)) { closedPort = reservation.getLocalPort(); }
+        int port = closedPort;
+        fx(() -> {
+            navigator.close();
+            connection = new ServerConnection(new quiz.client.config.ClientConfig("127.0.0.1", port, 500, 500, 1000, 16, 1000));
+            api = new QuizApi(connection); navigator = new SceneNavigator(stage, api, new FxAsync());
+            navigator.showLogin(""); stage.show(); stage.setWidth(900); stage.setHeight(620);
+            fillAndSubmit("fixture", "password"); return null;
+        });
+        awaitReady(); awaitCompactSize();
+        fx(() -> {
+            assertTrue(label("loginNotice").getText().contains("kết nối"));
+            assertEquals("", ((PasswordField) stage.getScene().lookup("#passwordInput")).getText());
+            var scroll = (javafx.scene.control.ScrollPane) stage.getScene().getRoot();
+            scroll.setVvalue(1); scroll.applyCss(); scroll.layout();
+            var bounds = button("exitButton").localToScene(button("exitButton").getBoundsInLocal());
+            assertTrue(bounds.getMaxY() <= stage.getScene().getHeight(), "Exit must remain reachable after scrolling at minimum height");
+            saveSnapshot("login-error-compact"); return null;
+        });
+        assertTrue(api.session().current().isEmpty());
+    }
+
+    @Test void exitDuringConnectionHandshakeClosesWithoutBlockingUi() throws Exception {
+        try (var listener = new java.net.ServerSocket(0, 10, java.net.InetAddress.getLoopbackAddress())) {
+            listener.setSoTimeout(3000);
+            fx(() -> {
+                navigator.close();
+                connection = new ServerConnection(new quiz.client.config.ClientConfig(listener.getInetAddress().getHostAddress(),
+                    listener.getLocalPort(), 1000, 3000, 3000, 16, 1000));
+                api = new QuizApi(connection); navigator = new SceneNavigator(stage, api, new FxAsync());
+                navigator.showLogin(""); stage.show(); fillAndSubmit("fixture", "password"); return null;
+            });
+            try (var stalledPeer = listener.accept()) {
+                fx(() -> { button("exitButton").fire(); assertFalse(stage.isShowing()); return null; });
+                api.closeAsync().get(3, TimeUnit.SECONDS);
+                assertEquals(ServerConnection.State.CLOSED, connection.state());
+            }
+        }
+    }
+
+    private void fillAndSubmit(String user, String pass) {
+        stage.getScene().getRoot().applyCss(); stage.getScene().getRoot().layout();
+        ((TextField) stage.getScene().lookup("#usernameInput")).setText(user);
+        ((PasswordField) stage.getScene().lookup("#passwordInput")).setText(pass);
+        button("loginButton").fire();
+    }
+
+    private void awaitReady() throws Exception {
+        long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(4);
+        while (!fx(() -> !button("loginButton").isDisabled()) && System.nanoTime() < until) Thread.sleep(10);
+        assertTrue(fx(() -> !button("loginButton").isDisabled()));
     }
 
     private void awaitScreen(Screen expected) throws Exception {
@@ -213,8 +349,8 @@ class ClientUiIT {
         assertTrue(fx(() -> stage.getScene().getWidth() <= 900 && stage.getScene().getHeight() <= 620));
     }
 
-    private Label label(String id) { return (Label) stage.getScene().lookup("#" + id); }
-    private Button button(String id) { return (Button) stage.getScene().lookup("#" + id); }
+    private Label label(String id) { stage.getScene().getRoot().applyCss(); return (Label) stage.getScene().lookup("#" + id); }
+    private Button button(String id) { stage.getScene().getRoot().applyCss(); return (Button) stage.getScene().lookup("#" + id); }
 
     private void saveSnapshot(String name) throws Exception {
         stage.getScene().getRoot().applyCss(); stage.getScene().getRoot().layout();

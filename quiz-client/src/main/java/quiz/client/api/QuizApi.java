@@ -45,6 +45,17 @@ public final class QuizApi implements AutoCloseable {
 
     public ClientSession session() { return session; }
 
+    /** Recover from LOGIN conflict without silently logging out an authenticated user. */
+    public void resetLoginConnection() {
+        synchronized (lock) {
+            ensureAvailable();
+            if (session.current().isPresent()) throw new ApiException(ErrorCode.CONFLICT);
+            revision++;
+            transitioningGeneration = 0;
+            connection.disconnect(connection.connectedGeneration(), new TransportException(CONNECTION_LOST));
+        }
+    }
+
     /** Dispatch onto JavaFX, then check isCurrent(event) before showing a dialog or changing scenes. */
     public AutoCloseable addSessionLostListener(Consumer<SessionLost> listener) {
         sessionLostListeners.add(Objects.requireNonNull(listener));

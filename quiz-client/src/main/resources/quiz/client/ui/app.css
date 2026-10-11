@@ -35,4 +35,16 @@
 .section-heading { -fx-font-size: 15px; -fx-font-weight: bold; }
 .note { -fx-text-fill: #667b90; -fx-background-color: #f2f6fa; -fx-background-radius: 5; -fx-padding: 12; }
 .notice { -fx-background-color: #eaf2fb; -fx-text-fill: #26577e; -fx-padding: 12 16; -fx-background-radius: 6; }
+.error-notice { -fx-background-color: #ffdad6; -fx-text-fill: #93000a; }
+.authentication-page { -fx-background-color: #f8f9ff; -fx-padding: 24; }
+.authentication-scroll, .authentication-scroll > .viewport { -fx-background-color: #f8f9ff; }
+.authentication-card { -fx-background-color: #ffffff; -fx-border-color: #c4c5d7; -fx-border-radius: 4; -fx-background-radius: 4; }
+.authentication-header { -fx-padding: 24; -fx-background-color: #eff4ff; -fx-border-color: transparent transparent #c4c5d7 transparent; }
+.authentication-mark { -fx-background-color: #1d4ed8; -fx-text-fill: white; -fx-font-size: 24px; -fx-font-weight: bold; -fx-padding: 8 14; -fx-background-radius: 3; }
+.authentication-title { -fx-font-size: 19px; -fx-font-weight: bold; -fx-text-fill: #0b1c30; }
+.authentication-form { -fx-padding: 24; }
+.authentication-submit { -fx-background-color: #1d4ed8; }
+.authentication-submit:hover { -fx-background-color: #0037b0; }
+.secondary-button { -fx-background-color: #eff4ff; -fx-text-fill: #434655; -fx-border-color: #c4c5d7; -fx-border-radius: 4; }
+.authentication-status { -fx-padding: 12 24; -fx-background-color: #eff4ff; -fx-border-color: #c4c5d7 transparent transparent transparent; }
 .separator .line { -fx-border-color: #dce4ef transparent transparent transparent; }

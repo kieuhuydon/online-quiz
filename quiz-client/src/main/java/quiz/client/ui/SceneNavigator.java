@@ -95,7 +95,8 @@ public final class SceneNavigator implements AutoCloseable {
         controllers = List.copyOf(next);
         long version = viewVersion;
         for (ScreenController controller : controllers) controller.mount(() ->
-            !closed && viewVersion == version && Objects.equals(session, api.session().current().orElse(null)));
+            !closed && viewVersion == version,
+            () -> Objects.equals(session, api.session().current().orElse(null)));
         if (stage.getScene() == null) {
             var bounds = javafx.stage.Screen.getPrimary().getVisualBounds();
             stage.setScene(new Scene(root, Math.min(1120, bounds.getWidth() - 48), Math.min(740, bounds.getHeight() - 64)));
@@ -147,6 +148,11 @@ public final class SceneNavigator implements AutoCloseable {
     private void finishLogout(String notice) {
         loggingOut = false;
         showLogin(notice);
+    }
+
+    public void exit() {
+        close();
+        stage.close();
     }
 
     private void failView(Exception failure) {

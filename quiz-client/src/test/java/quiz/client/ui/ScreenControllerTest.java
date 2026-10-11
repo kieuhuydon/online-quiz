@@ -6,6 +6,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScreenControllerTest {
+    @Test void authenticationTransitionRemainsMountedButProtectedCallbacksStop() {
+        var sameSession = new AtomicBoolean(true);
+        ScreenController screen = new ScreenController() { };
+        screen.mount(() -> true, sameSession::get);
+        assertTrue(screen.isActive());
+        sameSession.set(false);
+        assertTrue(screen.isMounted()); assertFalse(screen.isActive());
+        screen.dispose(); assertFalse(screen.isMounted());
+    }
     @Test void disposalInvalidatesCallbacksAndRemovesEverySubscriptionOnce() {
         var first = new AtomicInteger();
         var second = new AtomicInteger();
