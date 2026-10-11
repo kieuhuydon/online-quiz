@@ -518,13 +518,13 @@ UPDATE attempts SET status='SUBMITTED', submitted_at=? WHERE id=? AND status='IN
 ## 10. Thiết kế client (JavaFX)
 
 ### 10.1. Mạng
-- `ServerConnection`: giữ socket; **1 reader thread**; `ConcurrentHashMap<Long, CompletableFuture<Response>> pending`. Gửi request → tạo future theo `requestId` → reader nhận response thì `complete`. Response có `pushType != null` → chuyển cho `PushListener`. Mất kết nối → fail toàn bộ future bằng `ConnectionLostException`. Có timeout cho mỗi request (cấu hình).
+- `ServerConnection`: mỗi generation có **1 reader**, writer tuần tự với queue hữu hạn và pending map được bảo vệ bằng khóa trạng thái. Request đăng ký future trước khi enqueue; reader ghép response theo `requestId`, complete future ngoài reader/khóa. PUSH được chuyển qua hàng đợi riêng có giới hạn, giữ thứ tự. Lỗi mạng/protocol/timeout trả `TransportException` có `Kind`; timeout đóng cả generation và fail toàn bộ pending, không tự retry.
 - `QuizApi`: mỗi method tương ứng 1 `MessageType`, trả `CompletableFuture<T>` (đã giải DTO/ném lỗi nghiệp vụ theo `ErrorCode`). Không phải gọi `Request`/`Response` trực tiếp ở controller.
-- `ClientSession`: user, token, role, attempt hiện tại.
+- `ClientSession`: snapshot bất biến gồm generation, token, userId, username, fullName, role; chỉ hiện phiên khi generation còn kết nối. Chưa lưu attempt trong task 5.1; bổ sung khi triển khai phân hệ thi.
 
 ### 10.2. UI
 - `SceneNavigator` chuyển màn theo role sau login: STUDENT → `student/dashboard`; TEACHER → `teacher/*`; ADMIN → như TEACHER + `admin/account`.
-- Controller chỉ: đọc input, gọi `QuizApi`, cập nhật UI qua `FxAsync.run(...)`. Hiển thị trạng thái loading, validate input, hộp thoại lỗi rõ ràng (NFR-06).
+- Controller chỉ: đọc input, gọi `QuizApi`, cập nhật UI qua instance `FxAsync.run(...)` hoặc `observe(...)`. `observe` kiểm tra màn hình còn hiệu lực trên FX thread và reset busy bằng callback `done`, kể cả khi lỗi/hủy. Hiển thị trạng thái loading, validate input, hộp thoại lỗi rõ ràng (NFR-06).
 - **Màn hình làm bài (`student/exam`)**: danh sách điều hướng câu (đã/chưa trả lời), chọn đáp án → gọi `SAVE_ANSWER` ngay; `TimerLabel` dùng `remainingSeconds` từ server + `System.nanoTime()` (đơn điệu, không phụ thuộc đồng hồ máy), **đồng bộ lại** mỗi lần `SAVE_ANSWER` trả về; hết giờ → gọi `SUBMIT_ATTEMPT` (server vẫn tự nộp nếu client không gọi). Nhận `PUSH_FORCE_SUBMITTED` → khóa UI và chuyển sang màn kết quả.
 
 ---
@@ -799,7 +799,7 @@ mvn -pl quiz-benchmark exec:java -Dexec.mainClass=quiz.benchmark.LoadTestRunner 
 ```
 Tài khoản mẫu: xem mục 15.4 và `database/seed.sql`.
 
-**Test hiện tại:** nghiệm thu 11/10/2026 bằng `.\mvnw.cmd -B -ntp -Pdb-it clean verify` đã pass **295 unit/mock/socket + 30 PostgreSQL integration = 325 tests**, 0 failures/errors/skipped. Môi trường: Windows 11, Oracle JDK 21.0.9, Maven Wrapper 3.9.9; DB local `quizdb_test` với role `quiz_test`. `mvn test` / `mvn verify` chỉ chạy 295 test mặc định; profile `db-it` bổ sung repository/transaction/Auth/Account/dispatcher và `ServerBootstrapIT` đi qua bootstrap → TCP → services → PostgreSQL thật. Test socket với dịch vụ giả được tách khỏi integration DB; chưa có E2E UI JavaFX đầy đủ. Server entrypoint đã triển khai ở task 4.4; client/benchmark còn thuộc task sau.
+**Test hiện tại:** nghiệm thu task 5.1 ngày 11/10/2026 bằng `.\mvnw.cmd -B -ntp -Pdb-it clean verify` đã pass **344 unit/mock/socket + 30 PostgreSQL integration = 374 tests**, 0 failures/errors/skipped. Môi trường: Windows 11, Oracle JDK 21.0.9, Maven Wrapper 3.9.9; DB local `quizdb_test` với role `quiz_test`. Test mặc định gồm 12 common, 283 server và 49 client; profile `db-it` bổ sung 30 IT repository/transaction/Auth/Account/dispatcher/ServerBootstrap. Test client mới dùng socket localhost và codec thật với server fixture, chưa nối API client chính thức vào PostgreSQL hoặc UI JavaFX. Server entrypoint đã có; ClientMain/điều hướng và giao diện thuộc task 5.2–5.4, benchmark chưa triển khai.
 
 ---
 
@@ -852,7 +852,7 @@ Chạy riêng client smoke/contract trên DB test đã chuẩn bị ở mục 15
 .\mvnw.cmd -B -ntp -pl quiz-server -am -Pdb-it verify '-Dit.test=ServerBootstrapIT'
 ```
 
-Lệnh này vẫn chạy unit/socket test mặc định; phần Failsafe chỉ chọn `ServerBootstrapIT`. Client test là đồng bộ, chưa phải `ServerConnection`/`QuizApi` hay UI. Giai đoạn 5 cần một reader nền để ghép response theo requestId, writer được đồng bộ, các API trả `CompletableFuture`, cập nhật UI qua JavaFX thread; phân biệt PUSH bằng `pushType`/ID 0. Chỉ lưu token sau LOGIN thành công; không log Request/DTO chứa mật khẩu/token. TLS, session TTL, rate limit, deadline chống client nhỏ giọt và E2E JavaFX còn là backlog; shutdown chưa bảo đảm JDBC dừng theo ngân sách khi driver bỏ qua interrupt.
+Lệnh này vẫn chạy unit/socket test mặc định; phần Failsafe chỉ chọn `ServerBootstrapIT`. Client fixture trong test server này là đồng bộ. Task 5.1 đã có `ServerConnection`/`QuizApi` chính thức và test localhost riêng ở module client (mục 15.9), chưa có E2E kết nối API client chính thức với PostgreSQL hay UI. Chỉ lưu token sau LOGIN thành công; không log Request/DTO chứa mật khẩu/token. TLS, session TTL, rate limit, deadline chống client nhỏ giọt và E2E JavaFX còn là backlog; shutdown server chưa bảo đảm JDBC dừng theo ngân sách khi driver bỏ qua interrupt.
 
 **Bằng chứng nghiệm thu giai đoạn 4:**
 
@@ -866,6 +866,44 @@ Lệnh này vẫn chạy unit/socket test mặc định; phần Failsafe chỉ c
 | CLI/config, bootstrap thực tế, port bị chiếm, bảng users không truy cập được | `ServerMainTest`, `ServerBootstrapIT` |
 
 Report Surefire: `quiz-common/target/surefire-reports` (12 ca), `quiz-server/target/surefire-reports` (283 ca); Failsafe: `quiz-server/target/failsafe-reports` (30 ca, gồm 5 `ServerBootstrapIT`). Không commit report sinh ra hoặc file cấu hình chứa mật khẩu.
+
+### 15.9. Socket client & API bất đồng bộ — task 5.1
+
+**Đã triển khai:** `config/ClientConfig`, `network/ServerConnection`, `TransportException`, `PushListener`, `session/ClientSession`, `api/QuizApi`, `ApiException`, `ClientValidation`, `util/FxAsync`. Các package đều nằm dưới `quiz.client`; production client chỉ dùng `quiz-common`, không phụ thuộc server/DB. `ClientMain` vẫn là file rỗng; chưa chạy `javafx:run` như một ứng dụng hoàn chỉnh.
+
+`ClientConfig.load()` đọc resource `client.properties`. `load(Path)` ghi đè một phần bằng file ngoài; `fromArgs()` nhận không tham số hoặc đúng `--config <path>`, sẽ được nối vào entrypoint ở task 5.2. Chưa áp dụng environment/system-property overrides ở client. Mọi giá trị dưới đây phải là số nguyên dương, port không vượt 65535, host không blank.
+
+| Khóa cấu hình | Mặc định | Ý nghĩa |
+|---|---:|---|
+| `server.host` | `localhost` | Host server, strip khoảng trắng |
+| `server.port` | `5555` | Cổng TCP |
+| `connect.timeout.ms` | `5000` | Timeout TCP connect |
+| `handshake.timeout.ms` | `5000` | Timeout đọc header; watchdog tổng connect + handshake |
+| `request.timeout.ms` | `30000` | Deadline request kể cả thời gian chờ writer |
+| `max.pending.requests` | `64` | Giới hạn pending, dung lượng queue writer và queue PUSH |
+| `shutdown.timeout.ms` | `3000` | Ngân sách chờ tài nguyên của mỗi generation dừng |
+
+**Cách dùng để nối UI ở task sau:** tạo một `QuizApi(new ServerConnection(config))` dùng chung cho vòng đời ứng dụng. Gọi `api.connect()` rồi `api.login(username, password)`; không gọi `get/join` trên FX thread. `connect()` trả future chứa generation; nhiều caller cùng connect dùng chung handshake. `login()` yêu cầu kết nối đã sẵn sàng và không tự reconnect. `ClientValidation` strip text/giữ hoa thường, giữ nguyên password và kiểm tra code point/UTF-8 đúng contract mục 15.8.
+
+| Method | Future kết quả |
+|---|---|
+| `login(String username, String password)` | `LoginResultDto` |
+| `logout()` | `Void` |
+| `createAccount(CreateAccountDto dto)` | `AccountDto` |
+| `listAccounts()` | `List<AccountDto>` bất biến, kiểm tra từng phần tử |
+| `setAccountActive(long userId, boolean active)` | `Void` |
+
+- `api.session().current()` chỉ trả snapshot khi socket của nó vẫn kết nối; không lưu password hoặc token ra file. Snapshot `toString()` không chứa token. Không log LoginResultDto/Request/CreateAccountDto vì DTO vẫn có thể chứa bí mật.
+- `ApiException.errorCode()` giữ mã nghiệp vụ; `TransportException.kind()` phân biệt CONNECTION_LOST, TIMEOUT, PROTOCOL, OVERLOADED, CLOSED. Không dùng message server làm nội dung lỗi trực tiếp. OVERLOADED ở đường gửi request nghĩa là request chưa được gửi; SERVER_BUSY là phản hồi nghiệp vụ server.
+- Một reader giải frame; một writer có queue hữu hạn ghi tuần tự. Future được complete ngoài reader/khóa. PUSH hợp lệ có ID 0 và một trong hai pushType đã định nghĩa; queue riêng giữ thứ tự, listener lỗi được cô lập. Queue PUSH đầy sẽ đóng connection để tránh tích lũy vô hạn hoặc âm thầm mất sự kiện.
+- Timeout/EOF/frame sai/I/O làm đóng đúng generation và fail mọi pending. Timer được hủy khi response/cancel/close. Callback và cleanup cũ không tác động socket mới. Response trùng/đã hủy được bỏ qua; ID chưa cấp hoặc envelope sai đóng kết nối.
+- Cancel future từ `QuizApi` đóng generation liên quan để tránh phiên hoặc thao tác ghi ở trạng thái không rõ; cancel trực tiếp future transport chỉ bỏ pending và không hủy thao tác server đã nhận. **Không tự retry**. Nếu thao tác ghi đã gửi nhưng mất response, kết quả chưa xác định: đăng nhập lại, tải danh sách đối chiếu trước khi quyết định gửi lại.
+- LOGOUT thành công giữ socket và xóa phiên. LOGOUT lỗi hoặc bị hủy đóng socket, bỏ phiên local; không coi đó là server đã xác nhận thành công. UNAUTHENTICATED đóng socket, phiên hết hiệu lực; FORBIDDEN không đổi role/đăng xuất. Login/logout đang chờ sẽ chặn thao tác Auth/Account mới không phù hợp.
+- `api.addSessionLostListener(...)` phát một sự kiện cho phiên bị mất. Callback nhận `SessionLost`; chuyển lên FX thread rồi kiểm tra `api.isCurrent(event)` trước khi đổi màn hình để tránh thông báo cũ chen vào lần đăng nhập mới. Subscription trả về `AutoCloseable`, cần gỡ khi dispose. Tương tự, PUSH listener phải kiểm tra generation và vòng đời màn hình khi callback thực sự chạy trên FX thread.
+- `new FxAsync().observe(future, viewActive, onSuccess, onError, done)` dispatch bằng Platform.runLater, kiểm tra `viewActive` tại lúc thực thi, unwrap lỗi và luôn gọi `done` cho màn hình còn hiệu lực. Đây là điểm để controller reset busy; test dùng executor giả, chưa khởi động JavaFX toolkit.
+- `api.close()` dọn phiên/subscription và đóng kết nối mà không đợi worker trên FX thread. `closeAsync()` cho phép quan sát hoàn tất của reader/writer/timer/PUSH, gồm các generation đang dọn; quá ngân sách trả TIMEOUT, không khẳng định dừng thành công khi subscriber bỏ qua interrupt. Đóng là vĩnh viễn; reconnect dùng `disconnect(generation, reason)` ở transport rồi `connect()`.
+
+**Kiểm chứng:** `.\mvnw.cmd -B -ntp -pl quiz-client -am test` kiểm tra common/client; lần hồi quy cuối `.\mvnw.cmd -B -ntp -Pdb-it clean verify` chạy toàn dự án. 49 ca client gồm config 11, validation 3, API/session 12, transport 20, FxAsync 3. Report ở `quiz-client/target/surefire-reports`. Test bao phủ 5 contract, response đảo thứ tự/PUSH/trùng/sai ID, malformed frame, timeout/EOF, pending đầy/cancel, reconnect, peer không đọc, listener chậm/lỗi/queue đầy, shutdown có deadline và callback màn hình hết hiệu lực. Windows sandbox chặn kết nối localhost trong lượt đầu; các kết quả pass nêu trên được chạy ngoài sandbox với quyền được cấp. E2E client chính thức + PostgreSQL và smoke JavaFX thật chưa thực hiện trong task 5.1.
 
 ---
 
