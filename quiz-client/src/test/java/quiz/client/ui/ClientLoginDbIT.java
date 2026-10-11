@@ -5,6 +5,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TableView;
+import javafx.scene.control.ComboBox;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -16,6 +18,9 @@ import quiz.client.network.ServerConnection;
 import quiz.client.support.ClientTestDatabase;
 import quiz.client.util.FxAsync;
 import quiz.common.enums.Role;
+import quiz.common.dto.AccountDto;
+import quiz.client.api.ApiException;
+import quiz.common.protocol.ErrorCode;
 import quiz.server.ServerMain;
 import quiz.server.config.ServerConfig;
 import quiz.server.db.DataSourceProvider;
@@ -77,7 +82,7 @@ class ClientLoginDbIT {
             DataSourceProvider.close();
             if (verified) try (Connection connection = dataSource.getConnection();
                 PreparedStatement delete = connection.prepareStatement("DELETE FROM users WHERE username = ?")) {
-                for (String username : fixtures) { delete.setString(1, username); delete.executeUpdate(); }
+                for (String username : fixtures.reversed()) { delete.setString(1, username); delete.executeUpdate(); }
             }
         }
     }
@@ -111,6 +116,65 @@ class ClientLoginDbIT {
         new JdbcUserRepository(dataSource).updateActiveStatus(account.id(), true);
         submit(account.username(), PASSWORD);
         await(() -> navigator.currentScreen().orElse(null) == Screen.STUDENT_DASHBOARD);
+    }
+
+    @ParameterizedTest @EnumSource(value = Role.class, names = {"TEACHER", "STUDENT"})
+    void adminFormCreatesLocksAndUnlocksWithRealSessionRevocation(Role role) throws Exception {
+        User admin = fixture(Role.ADMIN);
+        submit(admin.username(), PASSWORD);
+        await(() -> navigator.currentScreen().orElse(null) == Screen.ADMIN_ACCOUNTS && !button("createAccount").isDisabled());
+        String username = "account_" + UUID.randomUUID().toString().replace("-", ""); fixtures.add(username);
+        fx(() -> { fillAccount(username, role); button("createAccount").fire(); return null; });
+        await(() -> !button("createAccount").isDisabled() && account(username) != null);
+        AccountDto created = fx(() -> account(username));
+        assertEquals(admin.id(), created.createdBy()); assertEquals(role, created.role()); assertTrue(created.active()); assertNull(created.email());
+        try (Connection connection = dataSource.getConnection(); PreparedStatement query = connection.prepareStatement("SELECT password_hash FROM users WHERE id = ?")) {
+            query.setLong(1, created.id());
+            try (ResultSet result = query.executeQuery()) {
+                assertTrue(result.next()); assertNotEquals(PASSWORD, result.getString(1));
+                assertTrue(PasswordHasher.checkPassword(PASSWORD, result.getString(1)));
+            }
+        }
+        // Real unique constraint is surfaced safely; no second account and no password retained.
+        fx(() -> { fillAccount(username, role); button("createAccount").fire(); return null; });
+        await(() -> !button("createAccount").isDisabled() && ((Label) stage.getScene().lookup("#accountNotice")).getText().contains("đã tồn tại"));
+        fx(() -> { assertEquals("", ((PasswordField) stage.getScene().lookup("#accountPassword")).getText()); return null; });
+        QuizApi target = new QuizApi(new ServerConnection(new ClientConfig("127.0.0.1", server.getPort(), 1000, 1000, 3000, 16, 1000)));
+        try {
+            target.connect().get(3, TimeUnit.SECONDS); target.login(username, PASSWORD).get(3, TimeUnit.SECONDS);
+            fx(() -> {
+                table().getSelectionModel().select(account(username)); button("toggleAccount").fire(); button("confirmLock").fire(); return null;
+            });
+            await(() -> !button("createAccount").isDisabled() && !account(username).active());
+            Throwable expired = assertThrows(ExecutionException.class, () -> target.listAccounts().get(3, TimeUnit.SECONDS)).getCause();
+            assertEquals(ErrorCode.UNAUTHENTICATED, assertInstanceOf(ApiException.class, expired).errorCode());
+            target.connect().get(3, TimeUnit.SECONDS);
+            Throwable disabled = assertThrows(ExecutionException.class, () -> target.login(username, PASSWORD).get(3, TimeUnit.SECONDS)).getCause();
+            assertEquals(ErrorCode.ACCOUNT_DISABLED, assertInstanceOf(ApiException.class, disabled).errorCode());
+            fx(() -> { button("toggleAccount").fire(); return null; });
+            await(() -> !button("createAccount").isDisabled() && account(username).active());
+            assertTrue(target.session().current().isEmpty(), "Unlock must not restore a revoked token");
+            target.login(username, PASSWORD).get(3, TimeUnit.SECONDS);
+            assertEquals(role, target.session().current().orElseThrow().role());
+            fx(() -> {
+                table().getSelectionModel().select(account(admin.username())); assertTrue(button("toggleAccount").isDisabled());
+                button("logoutButton").fire(); return null;
+            });
+            await(() -> navigator.currentScreen().orElse(null) == Screen.LOGIN);
+        } finally { target.closeAsync().get(3, TimeUnit.SECONDS); }
+    }
+
+    @SuppressWarnings("unchecked") private TableView<AccountDto> table() {
+        stage.getScene().getRoot().applyCss(); return (TableView<AccountDto>) stage.getScene().lookup("#accountTable");
+    }
+    private AccountDto account(String username) { return table().getItems().stream().filter(row -> row.username().equals(username)).findFirst().orElse(null); }
+    private Button button(String id) { stage.getScene().getRoot().applyCss(); return (Button) stage.getScene().lookup("#" + id); }
+    @SuppressWarnings("unchecked") private void fillAccount(String username, Role role) {
+        ((TextField) stage.getScene().lookup("#accountUsername")).setText("  " + username + "  ");
+        ((TextField) stage.getScene().lookup("#accountFullName")).setText("  Tài khoản UI " + role + "  ");
+        ((TextField) stage.getScene().lookup("#accountEmail")).setText(" ");
+        ((PasswordField) stage.getScene().lookup("#accountPassword")).setText(PASSWORD);
+        ((ComboBox<Role>) stage.getScene().lookup("#accountRole")).setValue(role);
     }
 
     private User fixture(Role role) {

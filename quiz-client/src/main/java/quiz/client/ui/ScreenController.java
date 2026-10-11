@@ -14,11 +14,12 @@ public abstract class ScreenController {
     private BooleanSupplier sessionCurrent = () -> true;
     private boolean disposed;
 
-    final void mount(BooleanSupplier current) { this.current = current; }
+    final void mount(BooleanSupplier current) { this.current = current; onMount(); }
 
     final void mount(BooleanSupplier current, BooleanSupplier sessionCurrent) {
         this.current = current;
         this.sessionCurrent = sessionCurrent;
+        onMount();
     }
 
     /** Login owns a session transition: its success callback remains live after the token is installed. */
@@ -44,5 +45,6 @@ public abstract class ScreenController {
         onDispose();
     }
 
+    protected void onMount() { }
     protected void onDispose() { }
 }

@@ -24,7 +24,7 @@
                 <Region HBox.hgrow="ALWAYS"/>
                 <Label text="Trung tâm đào tạo" styleClass="muted"/>
             </HBox>
-            <ScrollPane fitToWidth="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS" styleClass="page-scroll">
+            <ScrollPane id="pageScroll" fitToWidth="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS" styleClass="page-scroll">
                 <VBox spacing="18" styleClass="page-content">
                     <Label fx:id="notice" id="workspaceNotice" styleClass="notice" wrapText="true" maxWidth="Infinity" visible="false" managed="false"/>
                     <StackPane fx:id="content" id="workspaceContent"/>

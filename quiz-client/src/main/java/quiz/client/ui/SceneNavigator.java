@@ -8,6 +8,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import quiz.client.api.QuizApi;
+import quiz.client.network.TransportException;
 import quiz.client.session.ClientSession;
 import quiz.client.ui.admin.account.AccountController;
 import quiz.client.ui.login.LoginController;
@@ -17,6 +18,8 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.*;
 import java.util.function.Function;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Owns one Stage, shared dependencies and exactly one session-loss subscription. FX thread only. */
 public final class SceneNavigator implements AutoCloseable {
@@ -32,6 +35,7 @@ public final class SceneNavigator implements AutoCloseable {
     private long viewVersion;
     private boolean closed;
     private boolean loggingOut;
+    private final Set<CompletableFuture<?>> accountWrites = ConcurrentHashMap.newKeySet();
 
     public SceneNavigator(Stage stage, QuizApi api, FxAsync fx) {
         this(stage, api, fx, SceneNavigator.class::getResource);
@@ -46,7 +50,11 @@ public final class SceneNavigator implements AutoCloseable {
         sessionSubscription = api.addSessionLostListener(event -> fx.run(() -> {
             if (!closed && api.isCurrent(event)) {
                 loggingOut = false;
-                showLogin("Phiên làm việc đã kết thúc. Vui lòng đăng nhập lại.");
+                boolean uncertain = !accountWrites.isEmpty();
+                accountWrites.clear();
+                showLogin(uncertain
+                    ? "Chưa xác nhận được kết quả thao tác tài khoản. Đăng nhập lại và tải danh sách để kiểm tra trước khi thực hiện lại."
+                    : "Phiên làm việc đã kết thúc. Vui lòng đăng nhập lại.");
             }
         }));
         stage.setMinWidth(880);
@@ -61,6 +69,19 @@ public final class SceneNavigator implements AutoCloseable {
     public void show(Screen requested) { navigate(Objects.requireNonNull(requested), ""); }
     public void showLogin(String notice) { navigate(Screen.LOGIN, notice == null ? "" : notice); }
     public Optional<Screen> currentScreen() { return Optional.ofNullable(screen); }
+
+    /** Keep an unacknowledged write visible even when session loss disposes its screen first. */
+    public <T> CompletableFuture<T> trackAccountWrite(CompletableFuture<T> future) {
+        requireFx();
+        accountWrites.add(future);
+        future.whenComplete((value, failure) -> {
+            Throwable cause = failure == null ? null : FxAsync.unwrap(failure);
+            if (!(cause instanceof TransportException transport) || transport.kind() == TransportException.Kind.OVERLOADED) {
+                accountWrites.remove(future);
+            }
+        });
+        return future;
+    }
 
     private void navigate(Screen requested, String notice) {
         requireFx();
@@ -94,15 +115,15 @@ public final class SceneNavigator implements AutoCloseable {
         screen = target;
         controllers = List.copyOf(next);
         long version = viewVersion;
-        for (ScreenController controller : controllers) controller.mount(() ->
-            !closed && viewVersion == version,
-            () -> Objects.equals(session, api.session().current().orElse(null)));
         if (stage.getScene() == null) {
             var bounds = javafx.stage.Screen.getPrimary().getVisualBounds();
             stage.setScene(new Scene(root, Math.min(1120, bounds.getWidth() - 48), Math.min(740, bounds.getHeight() - 64)));
         } else stage.getScene().setRoot(root);
         stage.getScene().getStylesheets().setAll(css);
         stage.setTitle("Online Quiz — " + target.title());
+        for (ScreenController controller : controllers) controller.mount(() ->
+            !closed && viewVersion == version,
+            () -> Objects.equals(session, api.session().current().orElse(null)));
     }
 
     private Loaded load(String path, List<ScreenController> created) throws IOException {
@@ -119,7 +140,7 @@ public final class SceneNavigator implements AutoCloseable {
 
     private ScreenController createController(Class<?> type) {
         if (type == LoginController.class) return new LoginController(api, this, fx);
-        if (type == AccountController.class) return new AccountController();
+        if (type == AccountController.class) return new AccountController(api, this, fx);
         if (type == DashboardController.class) return new DashboardController();
         if (type == WorkspaceController.class) return new WorkspaceController(this);
         throw new IllegalArgumentException("Unsupported screen controller");
@@ -147,6 +168,8 @@ public final class SceneNavigator implements AutoCloseable {
 
     private void finishLogout(String notice) {
         loggingOut = false;
+        if (!accountWrites.isEmpty()) notice += " Chưa xác nhận kết quả thao tác tài khoản. Đăng nhập lại và tải danh sách để kiểm tra.";
+        accountWrites.clear();
         showLogin(notice);
     }
 
@@ -173,6 +196,7 @@ public final class SceneNavigator implements AutoCloseable {
         requireFx();
         if (closed) return;
         closed = true;
+        accountWrites.clear();
         disposeView();
         try { sessionSubscription.close(); }
         catch (Exception failed) { log.warn("Cannot remove navigation subscription: {}", failed.getClass().getSimpleName()); }

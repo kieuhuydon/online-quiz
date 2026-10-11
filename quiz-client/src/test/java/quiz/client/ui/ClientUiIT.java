@@ -17,6 +17,13 @@ import quiz.client.network.ServerConnection;
 import quiz.client.support.SocketFixture;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.LoginResultDto;
+import quiz.common.dto.AccountDto;
+import quiz.common.dto.CreateAccountDto;
+import quiz.common.dto.SetAccountActiveDto;
+import javafx.scene.control.TableView;
+import java.time.Instant;
+import java.util.List;
+import java.util.function.BooleanSupplier;
 import quiz.common.enums.Role;
 import quiz.common.protocol.*;
 
@@ -74,7 +81,7 @@ class ClientUiIT {
     void rolesLoadCorrectHomeAndLogoutOnSameStage(Role role) throws Exception {
         var peer = login(role);
         fx(() -> {
-            navigator.showHome(); stage.show();
+            stage.show();
             assertEquals(Screen.home(role), navigator.currentScreen().orElseThrow());
             assertEquals(Screen.roleLabel(role), label("roleLabel").getText());
             assertEquals("Nguyễn Việt — phiên kiểm thử", label("sessionFullName").getText());
@@ -115,6 +122,8 @@ class ClientUiIT {
     @Test void repeatedNavigationAndTwoExpiredRequestsOnlyReplaceSceneOnce() throws Exception {
         var peer = login(Role.ADMIN);
         fx(() -> { for (int i = 0; i < 8; i++) navigator.showHome(); stage.show(); return null; });
+        for (int i = 0; i < 8; i++) peer.success(peer.read(), new java.util.ArrayList<AccountDto>());
+        awaitAccountsReady();
         var replacements = new AtomicInteger();
         fx(() -> { stage.getScene().rootProperty().addListener((observable, old, fresh) -> replacements.incrementAndGet()); return null; });
         var first = api.listAccounts(); var second = api.listAccounts();
@@ -200,6 +209,11 @@ class ClientUiIT {
         assertEquals(new quiz.common.dto.LoginRequestDto("fixture", "fixture-password"), request.payload());
         peer.success(request, new LoginResultDto("fixture-token-" + role, 1, "fixture", "Nguyễn Việt — phiên kiểm thử", role));
         awaitScreen(Screen.home(role));
+        if (role == Role.ADMIN) {
+            var list = peer.read(); assertEquals(MessageType.LIST_ACCOUNTS, list.type());
+            peer.success(list, new java.util.ArrayList<AccountDto>());
+            awaitAccountsReady();
+        }
         return peer;
     }
 
@@ -319,6 +333,218 @@ class ClientUiIT {
                 assertEquals(ServerConnection.State.CLOSED, connection.state());
             }
         }
+    }
+
+    @Test void accountLoadsRowsProtectsAdminsAndPreservesSelectionById() throws Exception {
+        var peer = login(Role.ADMIN);
+        reloadAccounts(peer, List.of(account(1, Role.ADMIN, true), account(2, Role.STUDENT, true)));
+        fx(() -> {
+            assertEquals(7, accounts().getColumns().size());
+            assertEquals("—", accounts().getColumns().get(3).getCellData(0));
+            accounts().getSelectionModel().select(0);
+            assertTrue(button("toggleAccount").isDisabled());
+            assertTrue(label("selectedAccount").getText().contains("bảo vệ"));
+            accounts().getSelectionModel().select(1); button("refreshAccounts").fire(); return null;
+        });
+        peer.success(peer.read(), new java.util.ArrayList<>(List.of(account(2, Role.STUDENT, false), account(1, Role.ADMIN, true))));
+        awaitAccountsReady();
+        fx(() -> {
+            assertEquals(2, accounts().getSelectionModel().getSelectedItem().id());
+            assertEquals("Mở khóa tài khoản", button("toggleAccount").getText());
+            saveSnapshot("accounts-loaded"); return null;
+        });
+    }
+
+    @Test void latestAccountLoadWinsAndFailureRetainsMarkedSnapshot() throws Exception {
+        var peer = login(Role.ADMIN);
+        fx(() -> { button("refreshAccounts").fire(); button("refreshAccounts").fire(); return null; });
+        var old = peer.read(); var fresh = peer.read();
+        peer.success(fresh, new java.util.ArrayList<>(List.of(account(2, Role.TEACHER, true))));
+        awaitAccountsReady();
+        peer.success(old, new java.util.ArrayList<>(List.of(account(1, Role.ADMIN, true))));
+        var barrier = api.listAccounts(); peer.success(peer.read(), new java.util.ArrayList<AccountDto>()); barrier.get(3, TimeUnit.SECONDS);
+        fx(() -> { assertEquals(2, accounts().getItems().getFirst().id()); button("refreshAccounts").fire(); return null; });
+        var request = peer.read(); peer.send(Response.error(request.requestId(), ErrorCode.DATABASE_ERROR, "secret SQL"));
+        awaitAccountsReady();
+        fx(() -> {
+            assertEquals(2, accounts().getItems().getFirst().id());
+            assertTrue(label("listStatus").getText().contains("lần tải trước"));
+            assertFalse(label("listStatus").getText().contains("SQL")); return null;
+        });
+    }
+
+    @Test void acknowledgedCreateAndFailedReloadRemainSeparateResults() throws Exception {
+        var peer = login(Role.ADMIN);
+        fx(() -> { fillAccount("  new-user  ", " password "); button("createAccount").fire(); button("createAccount").fire(); return null; });
+        var request = peer.read(); assertEquals(MessageType.CREATE_ACCOUNT, request.type());
+        assertEquals(new CreateAccountDto("new-user", " password ", "Tên kiểm thử", null, Role.STUDENT), request.payload());
+        fx(() -> { assertTrue(button("createAccount").isDisabled()); assertTrue(button("toggleAccount").isDisabled()); return null; });
+        peer.success(request, new AccountDto(2, "new-user", "Tên kiểm thử", null, Role.STUDENT, true, 1L, Instant.now()));
+        var list = peer.read(); assertEquals(request.requestId() + 1, list.requestId());
+        peer.send(Response.error(list.requestId(), ErrorCode.DATABASE_ERROR, "SQL secret"));
+        awaitAccountsReady();
+        fx(() -> {
+            assertTrue(label("accountNotice").getText().contains("Đã tạo"));
+            assertTrue(label("listStatus").getText().contains("Không tải"));
+            assertEquals("", text("accountPassword").getText());
+            assertEquals("", text("accountUsername").getText()); return null;
+        });
+    }
+
+    @ParameterizedTest @EnumSource(value = ErrorCode.class, names = {"CONFLICT", "VALIDATION_ERROR", "FORBIDDEN", "DATABASE_ERROR", "SERVER_BUSY"})
+    void accountWriteErrorsKeepSafeFieldsAndAllowCorrection(ErrorCode code) throws Exception {
+        var peer = login(Role.ADMIN);
+        fx(() -> { fillAccount("new-user", "password"); button("createAccount").fire(); return null; });
+        var request = peer.read(); peer.send(Response.error(request.requestId(), code, "secret SQL password"));
+        awaitAccountsReady();
+        fx(() -> {
+            assertEquals("new-user", text("accountUsername").getText());
+            assertEquals("", text("accountPassword").getText());
+            assertFalse(label("accountNotice").getText().contains("secret"));
+            assertTrue(label("accountNotice").isVisible()); return null;
+        });
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"blank", "username-long", "name-long", "email", "password-short", "password-bytes", "admin-role"})
+    @SuppressWarnings("unchecked") void invalidAccountFormSendsNoRequest(String invalid) throws Exception {
+        var peer = login(Role.ADMIN);
+        fx(() -> {
+            fillAccount("new-user", "password");
+            switch (invalid) {
+                case "blank" -> text("accountUsername").setText(" ");
+                case "username-long" -> text("accountUsername").setText("😀".repeat(51));
+                case "name-long" -> text("accountFullName").setText("😀".repeat(101));
+                case "email" -> text("accountEmail").setText("invalid");
+                case "password-short" -> text("accountPassword").setText("short");
+                case "password-bytes" -> text("accountPassword").setText("😀".repeat(19));
+                case "admin-role" -> ((javafx.scene.control.ComboBox<Role>) stage.getScene().lookup("#accountRole")).setValue(Role.ADMIN);
+            }
+            button("createAccount").fire(); assertTrue(label("formError").isVisible());
+            assertEquals("", text("accountPassword").getText());
+            button("refreshAccounts").fire(); return null;
+        });
+        var request = peer.read(); assertEquals(MessageType.LIST_ACCOUNTS, request.type());
+        peer.success(request, new java.util.ArrayList<AccountDto>()); awaitAccountsReady();
+    }
+
+    @Test void lockNeedsConfirmationThenUnlockUsesExplicitState() throws Exception {
+        var peer = login(Role.ADMIN);
+        reloadAccounts(peer, List.of(account(2, Role.TEACHER, true)));
+        fx(() -> {
+            accounts().getSelectionModel().select(0); button("toggleAccount").fire();
+            assertTrue(label("confirmationText").getText().contains("user2"));
+            assertTrue(label("confirmationText").getText().contains("thu hồi"));
+            button("cancelLock").fire(); assertFalse(stage.getScene().lookup("#confirmation").isVisible());
+            button("toggleAccount").fire(); button("confirmLock").fire(); button("confirmLock").fire(); return null;
+        });
+        var lock = peer.read(); assertEquals(MessageType.SET_ACCOUNT_ACTIVE, lock.type());
+        assertEquals(new SetAccountActiveDto(2, false), lock.payload());
+        fx(() -> { assertTrue(accounts().getItems().getFirst().active()); return null; });
+        peer.success(lock, null);
+        var list = peer.read(); assertEquals(lock.requestId() + 1, list.requestId());
+        peer.success(list, new java.util.ArrayList<>(List.of(account(2, Role.TEACHER, false)))); awaitAccountsReady();
+        fx(() -> { button("toggleAccount").fire(); return null; });
+        var unlock = peer.read(); assertEquals(new SetAccountActiveDto(2, true), unlock.payload()); peer.success(unlock, null);
+        peer.success(peer.read(), new java.util.ArrayList<>(List.of(account(2, Role.TEACHER, true)))); awaitAccountsReady();
+        fx(() -> { assertTrue(accounts().getItems().getFirst().active()); assertTrue(label("accountNotice").getText().contains("mở khóa")); return null; });
+    }
+
+    @Test void missingAccountRefreshesWithoutPretendingLockSucceeded() throws Exception {
+        var peer = login(Role.ADMIN); reloadAccounts(peer, List.of(account(2, Role.STUDENT, false)));
+        fx(() -> { accounts().getSelectionModel().select(0); button("toggleAccount").fire(); return null; });
+        var request = peer.read(); peer.send(Response.error(request.requestId(), ErrorCode.NOT_FOUND, "missing"));
+        peer.success(peer.read(), new java.util.ArrayList<AccountDto>()); awaitAccountsReady();
+        fx(() -> { assertTrue(accounts().getItems().isEmpty()); assertTrue(label("accountNotice").getText().contains("không còn")); return null; });
+    }
+
+    @Test void acknowledgedLockAndFailedReloadKeepSuccessAndStaleStatusSeparate() throws Exception {
+        var peer = login(Role.ADMIN); reloadAccounts(peer, List.of(account(2, Role.STUDENT, true)));
+        fx(() -> { accounts().getSelectionModel().select(0); button("toggleAccount").fire(); button("confirmLock").fire(); return null; });
+        peer.success(peer.read(), null);
+        var list = peer.read(); peer.send(Response.error(list.requestId(), ErrorCode.SERVER_BUSY, "busy")); awaitAccountsReady();
+        fx(() -> {
+            assertTrue(label("accountNotice").getText().contains("Đã khóa"));
+            assertTrue(label("listStatus").getText().contains("lần tải trước"));
+            assertTrue(accounts().getItems().getFirst().active(), "Old snapshot must remain marked until reload succeeds"); return null;
+        });
+    }
+
+    @Test void compactAccountFormScrollsIntoViewAndEnterSubmitsOnce() throws Exception {
+        var peer = login(Role.ADMIN);
+        fx(() -> { stage.setWidth(900); stage.setHeight(620); return null; }); awaitCompactSize();
+        // Native resize and the responsive GridPane finish on subsequent JavaFX pulses.
+        long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(4);
+        while (!fx(this::scrollCreateIntoView) && System.nanoTime() < until) Thread.sleep(10);
+        fx(() -> {
+            assertTrue(scrollCreateIntoView(), "Create remains reachable at minimum window size");
+            assertTrue(text("accountUsername").isFocusTraversable());
+            fillAccount("keyboard-user", "password");
+            text("accountPassword").fireEvent(new ActionEvent());
+            button("createAccount").fire(); return null;
+        });
+        var create = peer.read(); assertEquals(MessageType.CREATE_ACCOUNT, create.type());
+        peer.send(Response.error(create.requestId(), ErrorCode.CONFLICT, "duplicate")); awaitAccountsReady();
+        until = System.nanoTime() + TimeUnit.SECONDS.toNanos(4);
+        while (!fx(this::scrollCreateIntoView) && System.nanoTime() < until) Thread.sleep(10);
+        fx(() -> {
+            assertTrue(scrollCreateIntoView(), "Create remains reachable when inline error expands the form");
+            saveSnapshot("accounts-form-compact"); button("refreshAccounts").fire(); return null;
+        });
+        var list = peer.read(); assertEquals(create.requestId() + 1, list.requestId());
+        peer.success(list, new java.util.ArrayList<AccountDto>()); awaitAccountsReady();
+    }
+
+    @Test void lostWriteResponseRedirectsWithUnknownOutcomeAndClearsOldPassword() throws Exception {
+        fx(() -> {
+            navigator.close(); connection = new ServerConnection(server.config(700, 16)); api = new QuizApi(connection);
+            navigator = new SceneNavigator(stage, api, new FxAsync()); return null;
+        });
+        var peer = login(Role.ADMIN);
+        TextField password = fx(() -> { fillAccount("new-user", "password"); button("createAccount").fire(); return text("accountPassword"); });
+        assertEquals(MessageType.CREATE_ACCOUNT, peer.read().type()); // Deliberately no response.
+        awaitScreen(Screen.LOGIN);
+        fx(() -> { assertTrue(label("loginNotice").getText().contains("Chưa xác nhận")); assertEquals("", password.getText()); return null; });
+    }
+
+    @Test void disposedAccountScreenIgnoresLateCreateAndListResponses() throws Exception {
+        var peer = login(Role.ADMIN);
+        Label oldNotice = fx(() -> { fillAccount("new-user", "password"); button("createAccount").fire(); return label("accountNotice"); });
+        var create = peer.read();
+        fx(() -> { navigator.showHome(); return null; });
+        var list = peer.read(); peer.success(create, account(2, Role.STUDENT, true));
+        peer.success(list, new java.util.ArrayList<AccountDto>()); awaitAccountsReady();
+        fx(() -> { assertEquals("Đang tạo tài khoản…", oldNotice.getText()); assertFalse(label("accountNotice").isVisible()); return null; });
+    }
+
+    private static AccountDto account(long id, Role role, boolean active) {
+        return new AccountDto(id, "user" + id, "Nguyễn Việt — tên dài để kiểm tra bảng tài khoản", null, role, active, null, Instant.EPOCH);
+    }
+    @SuppressWarnings("unchecked") private TableView<AccountDto> accounts() {
+        stage.getScene().getRoot().applyCss(); return (TableView<AccountDto>) stage.getScene().lookup("#accountTable");
+    }
+    private TextField text(String id) { return (TextField) stage.getScene().lookup("#" + id); }
+    @SuppressWarnings("unchecked") private void fillAccount(String username, String password) {
+        stage.getScene().getRoot().applyCss();
+        text("accountUsername").setText(username); text("accountFullName").setText("  Tên kiểm thử  ");
+        text("accountEmail").setText("  "); text("accountPassword").setText(password);
+        ((javafx.scene.control.ComboBox<Role>) stage.getScene().lookup("#accountRole")).setValue(Role.STUDENT);
+    }
+    private void reloadAccounts(SocketFixture.Peer peer, List<AccountDto> rows) throws Exception {
+        fx(() -> { button("refreshAccounts").fire(); return null; });
+        peer.success(peer.read(), new java.util.ArrayList<>(rows)); awaitAccountsReady();
+    }
+    private void awaitAccountsReady() throws Exception {
+        long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(4);
+        while (!fx(() -> !button("createAccount").isDisabled()) && System.nanoTime() < until) Thread.sleep(10);
+        assertTrue(fx(() -> !button("createAccount").isDisabled()));
+    }
+
+    private boolean scrollCreateIntoView() {
+        stage.getScene().getRoot().applyCss(); stage.getScene().getRoot().layout();
+        var scroll = (javafx.scene.control.ScrollPane) stage.getScene().lookup("#pageScroll");
+        scroll.setVvalue(1); stage.getScene().getRoot().layout();
+        var bounds = button("createAccount").localToScene(button("createAccount").getBoundsInLocal());
+        return bounds.getMaxY() <= stage.getScene().getHeight() && bounds.getMinY() >= 68;
     }
 
     private void fillAndSubmit(String user, String pass) {

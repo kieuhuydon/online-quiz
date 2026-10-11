@@ -801,7 +801,7 @@ Mỗi socket tạo/flush ObjectOutputStream trước khi đọc header; dùng `M
 .\mvnw.cmd -B -ntp -pl quiz-client javafx:run '-Djavafx.args=--config D:/path/to/client-local.properties'
 ```
 
-Client khởi động tại màn Login, mở kết nối khi người dùng submit. Nhập username/password và bấm Đăng nhập hoặc Enter; đăng nhập thành công chuyển màn theo role, nút Đăng xuất kết thúc phiên và về Login. Màn quản trị/Teacher/Student còn là khung nội dung; quản lý tài khoản sẽ hoàn thiện ở task 5.4. Xem mục 15.11 cho hành vi và test của Login.
+Client khởi động tại màn Login, mở kết nối khi người dùng submit. Nhập username/password và bấm Đăng nhập hoặc Enter; đăng nhập thành công chuyển màn theo role, nút Đăng xuất kết thúc phiên và về Login. Admin xem/tạo/khóa/mở khóa tài khoản (mục 15.12); Teacher/Student còn là khung bàn giao. Xem mục 15.11 cho hành vi và test của Login.
 
 **Benchmark (entrypoint chưa triển khai)**
 
@@ -811,7 +811,7 @@ mvn -pl quiz-benchmark exec:java -Dexec.mainClass=quiz.benchmark.LoadTestRunner 
 ```
 Tài khoản mẫu: xem mục 15.4 và `database/seed.sql`.
 
-**Test hiện tại:** nghiệm thu task 5.3 ngày 11/10/2026 bằng `.\mvnw.cmd -B -ntp '-Pdb-it,login-it' verify` đã pass **351 unit/mock/socket + 30 PostgreSQL server IT + 29 JavaFX/Login IT = 410 tests**, 0 failures/errors/skipped. Môi trường: Windows 11, Oracle JDK 21.0.9, Maven Wrapper 3.9.9; DB local `quizdb_test` với role `quiz_test`. Test mặc định gồm 12 common, 283 server và 56 client. `ui-it` chạy 25 test UI/peer; `login-it` chạy thêm 4 E2E form Login với server/PostgreSQL thật. Trước đó clean verify ở 5.3 đã pass 409 tests; lần cuối bổ sung cuộn/error ở cửa sổ nhỏ và test server không kết nối được. Login nghiệp vụ đã hoàn tất; Account UI thuộc task 5.4, benchmark chưa triển khai.
+**Test hiện tại:** nghiệm thu task 5.4 ngày 12/10/2026 bằng `.\mvnw.cmd -B -ntp '-Pdb-it,login-it' verify` đã pass **351 unit/mock/socket + 30 PostgreSQL server IT + 52 JavaFX/Login/Account IT = 433 tests**, 0 failures/errors/skipped. Môi trường: Windows 11, Oracle JDK 21.0.9, Maven Wrapper 3.9.9; DB local `quizdb_test` với role `quiz_test`. Test mặc định gồm 12 common, 283 server và 56 client. `ui-it` chạy 46 test UI/peer; `login-it` chạy thêm 6 E2E form Login/Account với server/PostgreSQL thật. Login và Admin Account đã hoàn tất (mục 15.11–15.12), dashboard Teacher/Student vẫn là khung bàn giao; benchmark chưa triển khai. Lần nghiệm thu 5.3 trước đó pass 410 tests.
 
 ---
 
@@ -921,7 +921,7 @@ Report Surefire: `quiz-common/target/surefire-reports` (12 ca), `quiz-server/tar
 
 ### 15.10. Bootstrap JavaFX & điều hướng — task 5.2
 
-`ClientMain extends Application` load cấu hình, tạo một ServerConnection/QuizApi/FxAsync/SceneNavigator dùng chung, mở Login và quản lý shutdown. `SceneNavigator` dùng một Stage và Scene; FXMLLoader controller factory inject dependency, thay root khi chuyển màn, dispose controller cũ trước khi kích hoạt màn mới. LoginController đã có nghiệp vụ ở task 5.3; AccountController còn là phần khung cho task 5.4.
+`ClientMain extends Application` load cấu hình, tạo một ServerConnection/QuizApi/FxAsync/SceneNavigator dùng chung, mở Login và quản lý shutdown. `SceneNavigator` dùng một Stage và Scene; FXMLLoader controller factory inject dependency, thay root khi chuyển màn, dispose controller cũ trước khi kích hoạt màn mới. LoginController và AccountController đã có nghiệp vụ; `onMount()` chạy sau khi gắn root/session để tải dữ liệu màn Admin.
 
 | Phiên hiện hành | Màn hình |
 |---|---|
@@ -950,7 +950,7 @@ Các màn đã xác thực dùng chung `ui/shell.fxml` và `ui/app.css`: tên ng
 
 Profile `ui-it` chạy Failsafe `ClientUiIT`; lỗi toolkit hoặc thiếu môi trường desktop phải fail, không tự skip. Test dùng ServerConnection/QuizApi thật với peer TCP localhost để đăng nhập từng role, không sửa phiên giả trong production. Bao phủ FXML/CSS, thông tin phiên, route trái quyền/phiên rỗng, logout và logout lỗi/relogin, callback màn cũ, nhiều request hết phiên, lỗi tài nguyên và đóng khi request đang chờ. Test chụp Login và 3 màn role ở kích thước thường/thu nhỏ vào `quiz-client/target/ui-screenshots`; report ở `quiz-client/target/failsafe-reports`.
 
-Profile `ui-it` kiểm chứng form Login/navigation/lifecycle trên JavaFX thật với peer TCP, không dùng DB. Profile `login-it` bổ sung server/PostgreSQL thật như mục 15.11. CRUD Account và các E2E khác còn thuộc task tiếp theo. Unit mặc định vẫn chạy được mà không cần khởi động toolkit.
+Profile `ui-it` kiểm chứng Login/Admin/navigation/lifecycle trên JavaFX thật với peer TCP, không dùng DB. Profile `login-it` bổ sung server/PostgreSQL thật như mục 15.11–15.12. Unit mặc định vẫn chạy được mà không cần khởi động toolkit.
 
 **Nghiệm thu task 5.2 ngày 11/10/2026 (trước 5.3):** 1 unit lifecycle mới và 12 JavaFX IT pass; hồi quy cả hai profile có 387 tests pass. Đã kiểm tra ảnh của ba role ở kích thước thường và cửa sổ 900 × 620. Đã mở client bằng `javafx:run`, quan sát Login thật; chạy lại với `--config target/ui-smoke-invalid.properties` chứa `server.port=0` xác nhận tham số được truyền và cửa sổ báo lỗi xuất hiện. Bấm Đóng ứng dụng làm cửa sổ biến mất và tiến trình Maven kết thúc với exit code 0. File smoke/ảnh/report đều ở target, không commit.
 
@@ -980,11 +980,29 @@ Sau xác thực lỗi/thành công hoặc dispose, PasswordField được xóa; 
 
 `login-it` chạy cả `ClientUiIT` và `ClientLoginDbIT` trong JVM riêng vì JavaFX toolkit chỉ khởi động một lần/JVM. `quiz-server` là dependency **test-scope** của client, không nằm trong production client. `ClientTestDatabase` chỉ chấp nhận JDBC localhost/127.0.0.1 với database `quizdb_test`, role `quiz_test`, password test rõ ràng; nhận file `${project root}/db-test-local.properties` hoặc `-Dquiz.test.config=<path>` và overrides `QUIZ_TEST_DB_*`. Sau kết nối còn kiểm tra current_database/current_user trước khi ghi. Test tạo account username UUID, chỉ DELETE fixture riêng khi cleanup; không seed/schema/reset hoặc dùng DB ứng dụng.
 
-`ClientLoginDbIT` thực thi form/controller → QuizApi → TCP → ServerMain/services → PostgreSQL: LOGIN/LOGOUT/relogin cho cả 3 role, sai mật khẩu, khóa và mở khóa fixture rồi thử lại. Đây là **E2E UI tự động thực sự cho Login**, không gọi smoke peer localhost là kiểm thử DB. Test khác dùng peer để kiểm chứng lỗi credential/disabled/conflict/busy/database, timeout/reconnect, Unicode/UTF-8, duplicate submit, callback cũ và thoát khi handshake. CRUD Account/Question/Quiz/Exam chưa thuộc bộ E2E này.
+`ClientLoginDbIT` thực thi form/controller → QuizApi → TCP → ServerMain/services → PostgreSQL: LOGIN/LOGOUT/relogin cho cả 3 role, sai mật khẩu, khóa và mở khóa fixture rồi thử lại. Đây là **E2E UI tự động thực sự cho Login**, không gọi smoke peer localhost là kiểm thử DB. Test khác dùng peer để kiểm chứng lỗi credential/disabled/conflict/busy/database, timeout/reconnect, Unicode/UTF-8, duplicate submit, callback cũ và thoát khi handshake. Task 5.4 bổ sung E2E Account vào cùng class (mục 15.12); Question/Quiz/Exam chưa có E2E.
 
 **Nghiệm thu 11/10/2026:** 56 unit client, 25 UI/peer IT và 4 E2E Login/DB IT đều pass; tổng hồi quy 410 tests như mục 15.7. Ảnh Login và lỗi compact nằm ở `quiz-client/target/ui-screenshots`. Đã rà chữ, wrap, trạng thái lỗi, vị trí trường nhập và khả năng cuộn tới nút thoát. Username/password nhập trong các ảnh/test là fixture, không phải tài khoản người dùng hay cấu hình DB.
 
 ---
+
+### 15.12. Admin quản lý tài khoản — task 5.4
+
+Admin đăng nhập sẽ tự tải `LIST_ACCOUNTS`. Bảng có ID, username, họ tên, email, role, trạng thái và ngày tạo theo múi giờ máy client; email null hiển thị “—”, ô dài có tooltip. Tải lại giữ lựa chọn theo ID và chỉ áp dụng response của lần tải mới nhất. Loading, danh sách trống và lỗi là các trạng thái riêng. Reload lỗi giữ snapshot cũ với nhãn rõ ràng và tắt khóa/mở khóa cho tới khi tải thành công. Contract hiện trả toàn bộ theo ID tăng; chưa phân trang, tìm kiếm hay lọc. Vượt giới hạn codec/frame báo lỗi, cần phân trang trong backlog.
+
+Form tạo chỉ có `TEACHER`/`STUDENT`. Client dùng `ClientValidation.account`, strip username/họ tên/email, email trống thành null, giữ mật khẩu nguyên văn; giới hạn Unicode/UTF-8 khớp server. `createdBy` và `active=true` do server quyết định. Enter tại mật khẩu hoặc nút Tạo gửi một yêu cầu; khóa submit trùng khi đang chờ. Thành công xóa form, báo username và tải lại. Lỗi giữ các trường không nhạy cảm để sửa; mật khẩu được xóa sau mọi kết quả/validation và khi dispose. Thông báo ánh xạ từ ErrorCode, không hiển thị nội dung SQL/server hay credential.
+
+Chọn Teacher/Student để khóa/mở khóa; mọi Admin đều được bảo vệ. Khóa cần xác nhận trong panel với đúng username và tác động thu hồi phiên; Hủy không gửi lệnh. `SET_ACCOUNT_ACTIVE` gửi trạng thái đích tường minh, không cập nhật bảng thành công trước response. Mở khóa cần đăng nhập mới: token đã thu hồi không sống lại. Chưa có PUSH báo khóa tức thời; client bị khóa phát hiện ở request tiếp theo.
+
+Kết quả ghi và reload được hiển thị riêng: “Đã tạo/khóa/mở khóa” vẫn giữ nếu lần tải sau lỗi. `NOT_FOUND` thông báo và reload. Mất phản hồi/timeout không tự retry, không khẳng định ghi thất bại: navigator giữ cảnh báo “Chưa xác nhận” trên Login khi màn Admin đã bị dispose; đăng nhập rồi tải danh sách đối chiếu trước khi thực hiện lại. Logout khi còn ghi chưa xác nhận cũng giữ cảnh báo này. Các callback dùng `FxAsync.observe(..., this::isActive, ...)`; màn cũ hoặc session cũ không được sửa UI.
+
+Đã đọc mẫu **User Account Management (Screen 30, 31, 32)** trong [Stitch](https://stitch.withgoogle.com/projects/2076748357872420539): bảng cùng panel thông tin, nền sáng, màu xanh và viền nhỏ. FXML chuyển panel thành form tạo theo contract hiện có; cửa sổ hẹp xếp dọc và cuộn được tới nút tạo. Các chức năng reset password, đổi role, sửa tài khoản và telemetry của mẫu chưa được triển khai.
+
+**Bàn giao client:** `ui/admin/account/AccountController` nhận QuizApi/SceneNavigator/FxAsync từ controller factory, không tự mở socket; `ScreenController.onMount` tải dữ liệu, `onDispose` xóa password và vô hiệu callback. Màn mới thêm route vào `Screen`, resource cố định và dependency trong `SceneNavigator.createController`. Dùng chung API/session; mở rộng API typed theo contract thay vì socket đồng bộ trong controller. Với PUSH, inject ServerConnection dùng chung từ bootstrap vào controller cần nó, `own(connection.addPushListener((generation, response) -> fx.run(...)))`; trong callback FX kiểm tra `isActive()` và generation của session hiện tại. `own` hủy subscription lúc dispose; subscriber phải kiểm tra cả generation vì sự kiện đã xếp hàng có thể đến muộn. Admin hiện không cần PUSH listener riêng.
+
+Kiểm thử dùng cùng lệnh ở mục 15.11. `ClientUiIT` bổ sung initial LIST, stale response, selection/Admin protection, Unicode/form, duplicate/Enter, confirmation/cancel, NOT_FOUND, write-success/reload-error, unknown outcome và dispose. `ClientLoginDbIT` bổ sung hai luồng UI tạo Teacher/Student, trùng username thật, kiểm tra hash/createdBy, khóa/thu hồi phiên, đăng nhập bị từ chối, mở khóa/đăng nhập lại và logout. Chỉ dùng DB test được guard; fixture UUID được dọn theo thứ tự con trước người tạo.
+
+**Nghiệm thu cuối 12/10/2026:** `.\mvnw.cmd -B -ntp '-Pdb-it,login-it' clean verify` → **BUILD SUCCESS, 433 tests, 0 failures/errors/skipped** (351 default + 30 server DB IT + 46 UI/peer + 6 UI/DB). Test resize chờ bố cục JavaFX ổn định với deadline trước khi đo, kiểm tra cả form sau khi lỗi làm tăng chiều cao. Ảnh `accounts-loaded.png` và `accounts-form-compact.png` nằm trong `quiz-client/target/ui-screenshots`; đã rà trực tiếp ảnh Scene thật, không ghi nhận thao tác desktop thủ công.
 
 ## 16. Kế hoạch kiểm thử
 
