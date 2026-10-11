@@ -608,6 +608,9 @@ server.max.connections=100
 server.worker.pool.size=8
 server.worker.queue.capacity=200
 server.request.grace.seconds=3
+server.handshake.timeout.ms=5000
+server.read.timeout.ms=300000
+server.shutdown.timeout.ms=10000
 
 db.url=jdbc:postgresql://localhost:5432/quizdb
 db.user=quiz
@@ -622,7 +625,9 @@ server.host=localhost
 server.port=5555
 request.timeout.seconds=10
 ```
-Có thể ghi đè bằng biến môi trường/system property (đặc biệt `db.password`; **không commit mật khẩu thật**). Thứ tự ưu tiên: environment → system property → file. Phải cấp `DB_PASSWORD` hoặc `db.password` hợp lệ; không còn mật khẩu fallback. Có thể dùng `ServerConfig.load(Path)` với file `*-local.properties` không được commit. Đây là API cấu hình, chưa có wiring command-line ở ServerMain.
+Có thể ghi đè bằng biến môi trường/system property (đặc biệt `db.password`; **không commit mật khẩu thật**). Thứ tự ưu tiên: environment → system property → file. Phải cấp `DB_PASSWORD` hoặc `db.password` hợp lệ; không còn mật khẩu fallback. `ServerMain` hỗ trợ `--config <path>` để đọc file `*-local.properties` không được commit. Ba timeout mới phải > 0, hỗ trợ `SERVER_HANDSHAKE_TIMEOUT_MS`, `SERVER_READ_TIMEOUT_MS`, `SERVER_SHUTDOWN_TIMEOUT_MS`.
+
+Handshake/read dùng `Socket.setSoTimeout`: giới hạn thời gian chờ mỗi lần đọc, không phải write timeout, TTL phiên hay deadline toàn bộ frame; client nhỏ giọt có thể kéo dài tổng thời gian đọc. Shutdown ngừng accept/submit, dành nửa ngân sách chờ worker rồi đóng mọi socket (kể cả chưa login hoặc đang ghi), cancel task còn chờ và dọn registry. Đóng socket giải phóng writer bị client đọc chậm. Sau đó bootstrap đóng pool DB. Nếu hết ngân sách, worker bị interrupt nhưng JDBC có thể chưa dừng; chưa bảo đảm trần thời gian shutdown toàn hệ thống khi driver/query bỏ qua interrupt. TLS, TTL, rate limit và deadline chống nhỏ giọt còn thuộc backlog.
 
 ---
 
@@ -771,10 +776,22 @@ Chạy thêm PostgreSQL integration test sau khi chuẩn bị mục 15.2–15.3 
 
 Surefire chạy `*Test` mặc định; profile `db-it` dùng Failsafe chạy `*IT` ở integration-test/verify. Cả hai dùng classpath trực tiếp (`useManifestOnlyJar=false`) để tránh lỗi manifest classpath khác ổ đĩa trên Windows. Report unit nằm ở `quiz-server/target/surefire-reports`, report DB ở `quiz-server/target/failsafe-reports`.
 
-**Chạy**
+**Chạy server (PowerShell tại thư mục project)**
+
+Tạo `server-local.properties` bằng cách sao chép `quiz-server/src/main/resources/server.properties`, điền `db.password` của role `quiz` trên máy. File `*-local.properties` được Git ignore. Giữ `db.url` trỏ tới `quizdb` khi chạy ứng dụng; không dùng cấu hình test cho dữ liệu ứng dụng. Environment có ưu tiên cao hơn file, nên kiểm tra các biến `DB_*`/`SERVER_*` nếu cấu hình thực tế khác file.
+
+```powershell
+# Install common/server để exec:java phân giải dependency giữa các module.
+.\mvnw.cmd -B -ntp -pl quiz-server -am install '-DskipTests'
+.\mvnw.cmd -B -ntp -pl quiz-server exec:java '-Dexec.args=--config server-local.properties'
+```
+
+Server kiểm tra truy cập bảng `users` trước khi mở port; không tự chạy schema hoặc seed. Sai cấu hình, thiếu bảng/quyền DB hoặc port đã dùng sẽ làm startup thất bại và đóng pool. Dùng Ctrl+C để shutdown. Port thực tế phải 1–65535; port 0 chỉ dùng khi inject `QuizServer` trong test.
+
+Mỗi socket tạo/flush ObjectOutputStream trước khi đọc header; dùng `MessageCodec.write/read` cho frame. Socket chỉ xử lý một request tại một thời điểm, giữ thứ tự request; socket khác vẫn được worker pool phục vụ. Vượt giới hạn connection thì socket mới đóng mà không gửi response giả. Worker pool cố định, queue hữu hạn; queue đầy trả SERVER_BUSY với đúng requestId. LOGIN thành công bind token vào socket và đóng socket phiên cũ; LOGIN lần nữa trên socket còn binding trả CONFLICT. Token từ socket khác bị từ chối. LOGOUT bỏ binding nhưng giữ socket để LOGIN lại; disconnect chỉ thu hồi token thuộc socket đó.
+
+**Client/benchmark (entrypoint chưa triển khai)**
 ```bash
-# Server
-mvn -pl quiz-server exec:java -Dexec.mainClass=quiz.server.ServerMain
 # Client (mở nhiều cửa sổ để thử nhiều học viên)
 mvn -pl quiz-client javafx:run
 # Benchmark (server phải đang chạy)
@@ -782,7 +799,7 @@ mvn -pl quiz-benchmark exec:java -Dexec.mainClass=quiz.benchmark.LoadTestRunner 
 ```
 Tài khoản mẫu: xem mục 15.4 và `database/seed.sql`.
 
-**Test hiện tại:** `mvn test` / `mvn verify` chạy 283 unit/mock test, không kích hoạt PostgreSQL integration. `-Pdb-it verify` chạy thêm 25 ca repository/transaction/Auth/Account/dispatcher trên PostgreSQL thật. E2E/network đầy đủ thuộc giai đoạn 6, chưa triển khai. Server/client/benchmark entrypoint thuộc các task sau, nên các lệnh chạy trên chưa hoạt động cho đến khi hoàn thiện.
+**Test hiện tại:** `.\mvnw.cmd -B -ntp -Pdb-it verify` đã pass **295 unit/mock/socket + 28 PostgreSQL integration = 323 tests**, 0 failures/errors/skipped. `mvn test` / `mvn verify` chỉ chạy 295 test mặc định; profile `db-it` bổ sung repository/transaction/Auth/Account/dispatcher và `ServerBootstrapIT` đi qua bootstrap → TCP → services → PostgreSQL thật trên `quizdb_test`. Test socket với dịch vụ giả được tách khỏi integration DB; chưa có E2E UI JavaFX đầy đủ. Server entrypoint đã triển khai ở task 4.4; client/benchmark còn thuộc task sau.
 
 ---
 

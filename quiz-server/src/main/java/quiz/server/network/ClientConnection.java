@@ -21,6 +21,11 @@ public class ClientConnection implements AutoCloseable {
     private final Socket socket;
     private final ObjectOutputStream out;
     private volatile Long userId;
+    private volatile String token;
+
+    public String getToken() { return token; }
+
+    void setToken(String token) { this.token = token; }
 
     public ClientConnection(Socket socket, ObjectOutputStream out) {
         this.socket = Objects.requireNonNull(socket, "Socket cannot be null");

@@ -22,6 +22,9 @@ public class ServerConfig {
     private final int workerPoolSize;
     private final int workerQueueCapacity;
     private final int requestGraceSeconds;
+    private final int handshakeTimeoutMs;
+    private final int readTimeoutMs;
+    private final int shutdownTimeoutMs;
 
     private final String dbUrl;
     private final String dbUser;
@@ -45,6 +48,22 @@ public class ServerConfig {
         long dbPoolIdleTimeoutMs,
         long dbPoolConnectionTimeoutMs
     ) {
+        this(port, maxConnections, workerPoolSize, workerQueueCapacity, requestGraceSeconds,
+            dbUrl, dbUser, dbPassword, dbPoolMaxSize, dbPoolMinIdle, dbPoolIdleTimeoutMs,
+            dbPoolConnectionTimeoutMs, 5000, 300000, 10000);
+    }
+
+    public ServerConfig(int port, int maxConnections, int workerPoolSize, int workerQueueCapacity,
+                        int requestGraceSeconds, String dbUrl, String dbUser, String dbPassword,
+                        int dbPoolMaxSize, int dbPoolMinIdle, long dbPoolIdleTimeoutMs,
+                        long dbPoolConnectionTimeoutMs, int handshakeTimeoutMs, int readTimeoutMs,
+                        int shutdownTimeoutMs) {
+        if (handshakeTimeoutMs <= 0 || readTimeoutMs <= 0 || shutdownTimeoutMs <= 0) {
+            throw new IllegalArgumentException("Server handshake/read/shutdown timeouts must be positive");
+        }
+        this.handshakeTimeoutMs = handshakeTimeoutMs;
+        this.readTimeoutMs = readTimeoutMs;
+        this.shutdownTimeoutMs = shutdownTimeoutMs;
         validate(port, maxConnections, workerPoolSize, workerQueueCapacity,
             requestGraceSeconds, dbUrl, dbUser, dbPoolMaxSize, dbPoolMinIdle);
         if (dbPassword == null || dbPassword.isBlank() || "change-me".equals(dbPassword)) {
@@ -132,7 +151,10 @@ public class ServerConfig {
             dbPoolMaxSize,
             dbPoolMinIdle,
             dbPoolIdleTimeoutMs,
-            dbPoolConnectionTimeoutMs
+            dbPoolConnectionTimeoutMs,
+            getInt(props, "server.handshake.timeout.ms", "SERVER_HANDSHAKE_TIMEOUT_MS", 5000),
+            getInt(props, "server.read.timeout.ms", "SERVER_READ_TIMEOUT_MS", 300000),
+            getInt(props, "server.shutdown.timeout.ms", "SERVER_SHUTDOWN_TIMEOUT_MS", 10000)
         );
     }
 
@@ -219,6 +241,10 @@ public class ServerConfig {
     public int getPort() {
         return port;
     }
+
+    public int getHandshakeTimeoutMs() { return handshakeTimeoutMs; }
+    public int getReadTimeoutMs() { return readTimeoutMs; }
+    public int getShutdownTimeoutMs() { return shutdownTimeoutMs; }
 
     public int getMaxConnections() {
         return maxConnections;
