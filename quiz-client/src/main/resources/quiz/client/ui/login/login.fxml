@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<HBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.login.LoginController" styleClass="login-root">
+    <VBox styleClass="login-brand" spacing="24" prefWidth="410" minWidth="330" alignment="CENTER_LEFT">
+        <Label text="Q / ONLINE QUIZ" styleClass="brand"/>
+        <Region VBox.vgrow="ALWAYS"/>
+        <Label text="Học tập chủ động.&#10;Đánh giá hiệu quả." styleClass="hero-title" wrapText="true"/>
+        <Label text="Không gian kiểm tra trực tuyến dành cho trung tâm đào tạo, giáo viên và học viên." styleClass="hero-copy" wrapText="true"/>
+        <Region VBox.vgrow="ALWAYS"/>
+        <Label text="KẾT NỐI TRI THỨC" styleClass="eyebrow-light"/>
+    </VBox>
+    <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="login-area">
+        <VBox spacing="18" maxWidth="390" styleClass="login-form">
+            <Label text="CHÀO MỪNG BẠN" styleClass="eyebrow"/>
+            <Label text="Đăng nhập" styleClass="page-heading"/>
+            <Label text="Sử dụng tài khoản do trung tâm cung cấp." styleClass="muted" wrapText="true"/>
+            <Label fx:id="notice" id="loginNotice" wrapText="true" styleClass="notice" visible="false" managed="false" maxWidth="Infinity"/>
+            <VBox spacing="8">
+                <Label text="Tên đăng nhập" styleClass="field-label" labelFor="$username"/>
+                <TextField fx:id="username" id="usernameInput" promptText="Tên đăng nhập của bạn" disable="true"/>
+            </VBox>
+            <VBox spacing="8">
+                <Label text="Mật khẩu" styleClass="field-label" labelFor="$password"/>
+                <PasswordField fx:id="password" id="passwordInput" promptText="Nhập mật khẩu" disable="true"/>
+            </VBox>
+            <Button id="loginButton" text="Đăng nhập" styleClass="primary-button" maxWidth="Infinity" disable="true"/>
+            <Label text="BẢN XEM TRƯỚC" styleClass="preview-badge"/>
+            <Label text="Chức năng đăng nhập đang được hoàn thiện. Tài khoản của bạn sẽ được xác thực với máy chủ khi tính năng sẵn sàng." styleClass="muted" wrapText="true"/>
+        </VBox>
+    </VBox>
+</HBox>

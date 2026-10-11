@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.admin.account.AccountController" spacing="24">
+    <VBox spacing="10">
+        <Label text="QUẢN TRỊ TRUNG TÂM" styleClass="eyebrow"/>
+        <Label text="Quản lý tài khoản" styleClass="page-heading" wrapText="true"/>
+        <Label text="Không gian quản lý tài khoản giáo viên và học viên." styleClass="muted" wrapText="true"/>
+    </VBox>
+    <VBox spacing="18" styleClass="content-card">
+        <Label text="Tài khoản của trung tâm" styleClass="card-heading"/>
+        <Separator/>
+        <Label text="Tính năng đang được hoàn thiện" styleClass="section-heading" wrapText="true"/>
+        <Label text="Danh sách tài khoản, tạo tài khoản và khóa / mở khóa sẽ có trong bản cập nhật tiếp theo." styleClass="muted" wrapText="true"/>
+        <Label text="Chưa tải dữ liệu tài khoản từ máy chủ." styleClass="note" wrapText="true"/>
+    </VBox>
+    <Label text="Quyền quản trị được xác thực bởi máy chủ cho từng thao tác." styleClass="muted" wrapText="true"/>
+</VBox>

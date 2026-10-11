@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.DashboardController" spacing="24">
+    <VBox spacing="10">
+        <Label text="DÀNH CHO GIÁO VIÊN" styleClass="eyebrow"/>
+        <Label text="Không gian giảng dạy" styleClass="page-heading" wrapText="true"/>
+        <Label text="Chuẩn bị nội dung và theo dõi hoạt động kiểm tra của lớp học." styleClass="muted" wrapText="true"/>
+    </VBox>
+    <VBox spacing="18" styleClass="content-card">
+        <Label text="Sẵn sàng cho lớp học của bạn" styleClass="card-heading" wrapText="true"/>
+        <Separator/>
+        <Label text="Ngân hàng câu hỏi · Đề kiểm tra · Giao bài" styleClass="section-heading" wrapText="true"/>
+        <Label text="Các công cụ giảng dạy đang được hoàn thiện và sẽ được bổ sung vào không gian này." styleClass="muted" wrapText="true"/>
+        <Label text="Chưa tải dữ liệu lớp học hoặc bài kiểm tra." styleClass="note" wrapText="true"/>
+    </VBox>
+</VBox>

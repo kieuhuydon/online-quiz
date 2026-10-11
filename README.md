@@ -790,16 +790,28 @@ Server kiểm tra truy cập bảng `users` trước khi mở port; không tự 
 
 Mỗi socket tạo/flush ObjectOutputStream trước khi đọc header; dùng `MessageCodec.write/read` cho frame. Socket chỉ xử lý một request tại một thời điểm, giữ thứ tự request; socket khác vẫn được worker pool phục vụ. Vượt giới hạn connection thì socket mới đóng mà không gửi response giả. Worker pool cố định, queue hữu hạn; queue đầy trả SERVER_BUSY với đúng requestId. LOGIN thành công bind token vào socket và đóng socket phiên cũ; LOGIN lần nữa trên socket còn binding trả CONFLICT. Token từ socket khác bị từ chối. LOGOUT bỏ binding nhưng giữ socket để LOGIN lại; disconnect chỉ thu hồi token thuộc socket đó.
 
-**Client/benchmark (entrypoint chưa triển khai)**
+**Client JavaFX — màn hình khung đã chạy được**
+
+```powershell
+# Cài dependency giữa các module rồi mở client.
+.\mvnw.cmd -B -ntp -pl quiz-client -am install '-DskipTests'
+.\mvnw.cmd -B -ntp -pl quiz-client javafx:run
+
+# Tệp cấu hình ngoài: dùng đường dẫn tuyệt đối nếu đặt ngoài thư mục quiz-client.
+.\mvnw.cmd -B -ntp -pl quiz-client javafx:run '-Djavafx.args=--config D:/path/to/client-local.properties'
+```
+
+Client khởi động tại màn Login, chưa mở kết nối mạng tự động. Form Login đang ở trạng thái xem trước; xác thực từ form sẽ hoàn thiện ở task 5.3. Màn quản trị/Teacher/Student chỉ được điều hướng khi có phiên hợp lệ; chưa có dữ liệu hoặc thao tác quản lý tài khoản ở bản khung. Xem mục 15.10 cho cách kiểm chứng ba role bằng fixture.
+
+**Benchmark (entrypoint chưa triển khai)**
+
 ```bash
-# Client (mở nhiều cửa sổ để thử nhiều học viên)
-mvn -pl quiz-client javafx:run
 # Benchmark (server phải đang chạy)
 mvn -pl quiz-benchmark exec:java -Dexec.mainClass=quiz.benchmark.LoadTestRunner -Dexec.args="--clients 10 --output results.csv"
 ```
 Tài khoản mẫu: xem mục 15.4 và `database/seed.sql`.
 
-**Test hiện tại:** nghiệm thu task 5.1 ngày 11/10/2026 bằng `.\mvnw.cmd -B -ntp -Pdb-it clean verify` đã pass **344 unit/mock/socket + 30 PostgreSQL integration = 374 tests**, 0 failures/errors/skipped. Môi trường: Windows 11, Oracle JDK 21.0.9, Maven Wrapper 3.9.9; DB local `quizdb_test` với role `quiz_test`. Test mặc định gồm 12 common, 283 server và 49 client; profile `db-it` bổ sung 30 IT repository/transaction/Auth/Account/dispatcher/ServerBootstrap. Test client mới dùng socket localhost và codec thật với server fixture, chưa nối API client chính thức vào PostgreSQL hoặc UI JavaFX. Server entrypoint đã có; ClientMain/điều hướng và giao diện thuộc task 5.2–5.4, benchmark chưa triển khai.
+**Test hiện tại:** nghiệm thu task 5.2 ngày 11/10/2026 bằng `.\mvnw.cmd -B -ntp '-Pdb-it,ui-it' clean verify` đã pass **345 unit/mock/socket + 30 PostgreSQL IT + 12 JavaFX IT = 387 tests**, 0 failures/errors/skipped. Môi trường: Windows 11, Oracle JDK 21.0.9, Maven Wrapper 3.9.9; DB local `quizdb_test` với role `quiz_test`. Test mặc định gồm 12 common, 283 server và 50 client. `db-it` kiểm chứng repository/transaction/Auth/Account/dispatcher/bootstrap server với PostgreSQL; `ui-it` kiểm chứng JavaFX/FXML/navigation với QuizApi chính thức và peer TCP localhost. Chưa có E2E form Login/CRUD Account hoặc client chính thức với PostgreSQL. ClientMain và các màn khung đã chạy; Login nghiệp vụ/Account UI thuộc task 5.3–5.4, benchmark chưa triển khai.
 
 ---
 
@@ -869,9 +881,9 @@ Report Surefire: `quiz-common/target/surefire-reports` (12 ca), `quiz-server/tar
 
 ### 15.9. Socket client & API bất đồng bộ — task 5.1
 
-**Đã triển khai:** `config/ClientConfig`, `network/ServerConnection`, `TransportException`, `PushListener`, `session/ClientSession`, `api/QuizApi`, `ApiException`, `ClientValidation`, `util/FxAsync`. Các package đều nằm dưới `quiz.client`; production client chỉ dùng `quiz-common`, không phụ thuộc server/DB. `ClientMain` vẫn là file rỗng; chưa chạy `javafx:run` như một ứng dụng hoàn chỉnh.
+**Đã triển khai ở task 5.1:** `config/ClientConfig`, `network/ServerConnection`, `TransportException`, `PushListener`, `session/ClientSession`, `api/QuizApi`, `ApiException`, `ClientValidation`, `util/FxAsync`. Các package đều nằm dưới `quiz.client`; production client chỉ dùng `quiz-common`, không phụ thuộc server/DB. Task 5.2 đã nối các dependency này vào ClientMain và màn hình khung (mục 15.10).
 
-`ClientConfig.load()` đọc resource `client.properties`. `load(Path)` ghi đè một phần bằng file ngoài; `fromArgs()` nhận không tham số hoặc đúng `--config <path>`, sẽ được nối vào entrypoint ở task 5.2. Chưa áp dụng environment/system-property overrides ở client. Mọi giá trị dưới đây phải là số nguyên dương, port không vượt 65535, host không blank.
+`ClientConfig.load()` đọc resource `client.properties`. `load(Path)` ghi đè một phần bằng file ngoài; `fromArgs()` nhận không tham số hoặc đúng `--config <path>`, đã được nối vào entrypoint. Chưa áp dụng environment/system-property overrides ở client. Mọi giá trị dưới đây phải là số nguyên dương, port không vượt 65535, host không blank.
 
 | Khóa cấu hình | Mặc định | Ý nghĩa |
 |---|---:|---|
@@ -883,7 +895,7 @@ Report Surefire: `quiz-common/target/surefire-reports` (12 ca), `quiz-server/tar
 | `max.pending.requests` | `64` | Giới hạn pending, dung lượng queue writer và queue PUSH |
 | `shutdown.timeout.ms` | `3000` | Ngân sách chờ tài nguyên của mỗi generation dừng |
 
-**Cách dùng để nối UI ở task sau:** tạo một `QuizApi(new ServerConnection(config))` dùng chung cho vòng đời ứng dụng. Gọi `api.connect()` rồi `api.login(username, password)`; không gọi `get/join` trên FX thread. `connect()` trả future chứa generation; nhiều caller cùng connect dùng chung handshake. `login()` yêu cầu kết nối đã sẵn sàng và không tự reconnect. `ClientValidation` strip text/giữ hoa thường, giữ nguyên password và kiểm tra code point/UTF-8 đúng contract mục 15.8.
+**Cách dùng trong controller:** ClientMain tạo một `QuizApi(new ServerConnection(config))` dùng chung cho vòng đời ứng dụng. Gọi `api.connect()` rồi `api.login(username, password)`; không gọi `get/join` trên FX thread. `connect()` trả future chứa generation; nhiều caller cùng connect dùng chung handshake. `login()` yêu cầu kết nối đã sẵn sàng và không tự reconnect. `ClientValidation` strip text/giữ hoa thường, giữ nguyên password và kiểm tra code point/UTF-8 đúng contract mục 15.8.
 
 | Method | Future kết quả |
 |---|---|
@@ -904,6 +916,43 @@ Report Surefire: `quiz-common/target/surefire-reports` (12 ca), `quiz-server/tar
 - `api.close()` dọn phiên/subscription và đóng kết nối mà không đợi worker trên FX thread. `closeAsync()` cho phép quan sát hoàn tất của reader/writer/timer/PUSH, gồm các generation đang dọn; quá ngân sách trả TIMEOUT, không khẳng định dừng thành công khi subscriber bỏ qua interrupt. Đóng là vĩnh viễn; reconnect dùng `disconnect(generation, reason)` ở transport rồi `connect()`.
 
 **Kiểm chứng:** `.\mvnw.cmd -B -ntp -pl quiz-client -am test` kiểm tra common/client; lần hồi quy cuối `.\mvnw.cmd -B -ntp -Pdb-it clean verify` chạy toàn dự án. 49 ca client gồm config 11, validation 3, API/session 12, transport 20, FxAsync 3. Report ở `quiz-client/target/surefire-reports`. Test bao phủ 5 contract, response đảo thứ tự/PUSH/trùng/sai ID, malformed frame, timeout/EOF, pending đầy/cancel, reconnect, peer không đọc, listener chậm/lỗi/queue đầy, shutdown có deadline và callback màn hình hết hiệu lực. Windows sandbox chặn kết nối localhost trong lượt đầu; các kết quả pass nêu trên được chạy ngoài sandbox với quyền được cấp. E2E client chính thức + PostgreSQL và smoke JavaFX thật chưa thực hiện trong task 5.1.
+
+---
+
+### 15.10. Bootstrap JavaFX & điều hướng — task 5.2
+
+`ClientMain extends Application` load cấu hình, tạo một ServerConnection/QuizApi/FxAsync/SceneNavigator dùng chung, mở Login và quản lý shutdown. `SceneNavigator` dùng một Stage và Scene; FXMLLoader controller factory inject dependency, thay root khi chuyển màn, dispose controller cũ trước khi kích hoạt màn mới. Các controller chưa có nghiệp vụ Login/Account chỉ là phần khung cho task 5.3–5.4.
+
+| Phiên hiện hành | Màn hình |
+|---|---|
+| Chưa đăng nhập hoặc mất phiên | `ui/login/login.fxml` |
+| ADMIN | `ui/admin/account/account.fxml` |
+| TEACHER | `ui/teacher/dashboard.fxml` |
+| STUDENT | `ui/student/dashboard.fxml` |
+
+Các màn đã xác thực dùng chung `ui/shell.fxml` và `ui/app.css`: tên người dùng, role, khu vực nội dung và Đăng xuất. Yêu cầu route khác role sẽ trở lại màn của role hiện hành và hiện thông báo; UI không tự sửa role. Server vẫn kiểm tra quyền cho mọi API.
+
+`ScreenController.isActive()` kiểm tra vòng đời màn hình và snapshot phiên; chuyển màn gọi dispose, gỡ subscription và xóa password của Login. Controller sau này dùng `FxAsync.observe(..., this::isActive, ...)` để bỏ callback cũ. SceneNavigator chỉ đăng ký một listener mất phiên cho toàn vòng đời; sự kiện được kiểm tra lại bằng `api.isCurrent(event)` trên FX thread. Hai request đồng thời hết phiên chỉ chuyển về Login một lần.
+
+Đăng xuất vô hiệu màn hiện tại trong lúc chờ, chống gửi trùng; thành công về Login và giữ socket, thất bại về Login với thông báo kết thúc phiên local. Đóng cửa sổ hoặc `Application.stop()` dispose navigation/API, đóng socket và dừng tài nguyên nền mà không chờ trên FX thread. Thiếu/sai FXML, CSS hoặc cấu hình hiển thị cửa sổ lỗi có nút đóng, dọn tài nguyên; không để màn hình trắng hoặc giữ màn có quyền khi tải lỗi.
+
+**Thiết kế:** người dùng cung cấp [mẫu Stitch](https://stitch.withgoogle.com/projects/2076748357872420539). Browser bị từ chối truy cập accounts.google.com nên chưa đọc được thiết kế; người dùng đã chọn tiếp tục với giao diện khung trung tính. Bản này dùng xanh đậm/nền sáng và chữ Segoe UI, chưa đối chiếu với mẫu Stitch. Không hiển thị số liệu học tập hoặc account giả trong production.
+
+**Kiểm thử JavaFX thật (máy cần desktop session):**
+
+```powershell
+# Common/client unit và 12 JavaFX integration test.
+.\mvnw.cmd -B -ntp -pl quiz-client -am -Pui-it verify
+
+# Toàn dự án, cả PostgreSQL test đã cấu hình và JavaFX toolkit.
+.\mvnw.cmd -B -ntp '-Pdb-it,ui-it' clean verify
+```
+
+Profile `ui-it` chạy Failsafe `ClientUiIT`; lỗi toolkit hoặc thiếu môi trường desktop phải fail, không tự skip. Test dùng ServerConnection/QuizApi thật với peer TCP localhost để đăng nhập từng role, không sửa phiên giả trong production. Bao phủ FXML/CSS, thông tin phiên, route trái quyền/phiên rỗng, logout và logout lỗi/relogin, callback màn cũ, nhiều request hết phiên, lỗi tài nguyên và đóng khi request đang chờ. Test chụp Login và 3 màn role ở kích thước thường/thu nhỏ vào `quiz-client/target/ui-screenshots`; report ở `quiz-client/target/failsafe-reports`.
+
+UI test xác minh navigation/lifecycle trên JavaFX thật; form Login/CRUD Account và E2E client chính thức với PostgreSQL còn thuộc các task tiếp theo. Unit mặc định vẫn chạy được mà không cần khởi động toolkit.
+
+**Nghiệm thu 11/10/2026:** 1 unit lifecycle mới và 12 JavaFX IT pass; hồi quy cả hai profile có 387 tests pass như mục 15.7. Đã kiểm tra ảnh của ba role ở kích thước thường và cửa sổ 900 × 620. Đã mở client bằng `javafx:run`, quan sát Login thật; chạy lại với `--config target/ui-smoke-invalid.properties` chứa `server.port=0` xác nhận tham số được truyền và cửa sổ báo lỗi xuất hiện. Bấm Đóng ứng dụng làm cửa sổ biến mất và tiến trình Maven kết thúc với exit code 0. File smoke/ảnh/report đều ở target, không commit.
 
 ---
 

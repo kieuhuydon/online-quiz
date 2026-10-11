@@ -1,0 +1,181 @@
+package quiz.client.ui;
+
+import javafx.application.Platform;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import quiz.client.api.QuizApi;
+import quiz.client.session.ClientSession;
+import quiz.client.ui.admin.account.AccountController;
+import quiz.client.ui.login.LoginController;
+import quiz.client.util.FxAsync;
+
+import java.io.IOException;
+import java.net.URL;
+import java.util.*;
+import java.util.function.Function;
+
+/** Owns one Stage, shared dependencies and exactly one session-loss subscription. FX thread only. */
+public final class SceneNavigator implements AutoCloseable {
+    private static final Logger log = LoggerFactory.getLogger(SceneNavigator.class);
+    private static final String STYLESHEET = "/quiz/client/ui/app.css";
+    private final Stage stage;
+    private final QuizApi api;
+    private final FxAsync fx;
+    private final Function<String, URL> resources;
+    private final AutoCloseable sessionSubscription;
+    private List<ScreenController> controllers = List.of();
+    private Screen screen;
+    private long viewVersion;
+    private boolean closed;
+    private boolean loggingOut;
+
+    public SceneNavigator(Stage stage, QuizApi api, FxAsync fx) {
+        this(stage, api, fx, SceneNavigator.class::getResource);
+    }
+
+    SceneNavigator(Stage stage, QuizApi api, FxAsync fx, Function<String, URL> resources) {
+        requireFx();
+        this.stage = Objects.requireNonNull(stage);
+        this.api = Objects.requireNonNull(api);
+        this.fx = Objects.requireNonNull(fx);
+        this.resources = Objects.requireNonNull(resources);
+        sessionSubscription = api.addSessionLostListener(event -> fx.run(() -> {
+            if (!closed && api.isCurrent(event)) {
+                loggingOut = false;
+                showLogin("Phiên làm việc đã kết thúc. Vui lòng đăng nhập lại.");
+            }
+        }));
+        stage.setMinWidth(880);
+        stage.setMinHeight(600);
+        stage.setOnCloseRequest(event -> close());
+    }
+
+    public void showHome() {
+        show(api.session().current().map(session -> Screen.home(session.role())).orElse(Screen.LOGIN));
+    }
+
+    public void show(Screen requested) { navigate(Objects.requireNonNull(requested), ""); }
+    public void showLogin(String notice) { navigate(Screen.LOGIN, notice == null ? "" : notice); }
+    public Optional<Screen> currentScreen() { return Optional.ofNullable(screen); }
+
+    private void navigate(Screen requested, String notice) {
+        requireFx();
+        if (closed || loggingOut) return;
+        ClientSession.Snapshot session = api.session().current().orElse(null);
+        Screen target = session == null ? Screen.LOGIN : Screen.home(session.role());
+        if (session != null && requested.role() == session.role()) target = requested;
+        if (requested != Screen.LOGIN && requested != target) {
+            notice = session == null ? "Vui lòng đăng nhập để tiếp tục." : "Bạn không có quyền truy cập màn hình này.";
+        }
+        List<ScreenController> created = new ArrayList<>();
+        try {
+            Loaded content = load(target.resource(), created);
+            Parent root = content.root();
+            if (target == Screen.LOGIN) ((LoginController) content.controller()).setNotice(notice);
+            else {
+                Loaded shell = load("/quiz/client/ui/shell.fxml", created);
+                ((WorkspaceController) shell.controller()).show(session, target, content.root(), notice);
+                root = shell.root();
+            }
+            String css = resource(STYLESHEET).toExternalForm();
+            replace(root, target, created, session, css);
+        } catch (IOException | RuntimeException failed) {
+            created.forEach(ScreenController::dispose);
+            failView(failed);
+        }
+    }
+
+    private void replace(Parent root, Screen target, List<ScreenController> next, ClientSession.Snapshot session, String css) {
+        disposeView();
+        screen = target;
+        controllers = List.copyOf(next);
+        long version = viewVersion;
+        for (ScreenController controller : controllers) controller.mount(() ->
+            !closed && viewVersion == version && Objects.equals(session, api.session().current().orElse(null)));
+        if (stage.getScene() == null) {
+            var bounds = javafx.stage.Screen.getPrimary().getVisualBounds();
+            stage.setScene(new Scene(root, Math.min(1120, bounds.getWidth() - 48), Math.min(740, bounds.getHeight() - 64)));
+        } else stage.getScene().setRoot(root);
+        stage.getScene().getStylesheets().setAll(css);
+        stage.setTitle("Online Quiz — " + target.title());
+    }
+
+    private Loaded load(String path, List<ScreenController> created) throws IOException {
+        FXMLLoader loader = new FXMLLoader(resource(path));
+        loader.setControllerFactory(type -> {
+            ScreenController controller = createController(type);
+            created.add(controller);
+            return controller;
+        });
+        Parent root = loader.load();
+        if (!(loader.getController() instanceof ScreenController controller)) throw new IOException("Missing screen controller");
+        return new Loaded(root, controller);
+    }
+
+    private ScreenController createController(Class<?> type) {
+        if (type == LoginController.class) return new LoginController(api, this, fx);
+        if (type == AccountController.class) return new AccountController();
+        if (type == DashboardController.class) return new DashboardController();
+        if (type == WorkspaceController.class) return new WorkspaceController(this);
+        throw new IllegalArgumentException("Unsupported screen controller");
+    }
+
+    private URL resource(String path) throws IOException {
+        URL result = resources.apply(path);
+        if (result == null) throw new IOException("Missing client UI resource: " + path);
+        return result;
+    }
+
+    /** Shared by all authenticated screens. Logout errors still return to an unauthenticated screen. */
+    public void logout() {
+        requireFx();
+        if (closed || loggingOut) return;
+        if (api.session().current().isEmpty()) { showLogin("Phiên làm việc đã kết thúc."); return; }
+        loggingOut = true;
+        long version = viewVersion;
+        stage.getScene().getRoot().setDisable(true);
+        fx.observe(api.logout(), () -> !closed && version == viewVersion,
+            ignored -> finishLogout("Bạn đã đăng xuất."),
+            failure -> finishLogout("Đã kết thúc phiên trên máy này. Vui lòng kết nối lại khi đăng nhập."),
+            () -> loggingOut = false);
+    }
+
+    private void finishLogout(String notice) {
+        loggingOut = false;
+        showLogin(notice);
+    }
+
+    private void failView(Exception failure) {
+        log.error("Cannot load client screen: {}", failure.getClass().getSimpleName());
+        close();
+        StartupErrorView.show(stage, "Không thể mở giao diện",
+            "Thiếu hoặc lỗi tài nguyên giao diện. Hãy kiểm tra bản build rồi mở lại ứng dụng.");
+    }
+
+    private void disposeView() {
+        viewVersion++;
+        controllers.forEach(ScreenController::dispose);
+        controllers = List.of();
+        screen = null;
+    }
+
+    @Override public void close() {
+        requireFx();
+        if (closed) return;
+        closed = true;
+        disposeView();
+        try { sessionSubscription.close(); }
+        catch (Exception failed) { log.warn("Cannot remove navigation subscription: {}", failed.getClass().getSimpleName()); }
+        api.close();
+    }
+
+    private static void requireFx() {
+        if (!Platform.isFxApplicationThread()) throw new IllegalStateException("Navigation requires the JavaFX thread");
+    }
+
+    private record Loaded(Parent root, ScreenController controller) { }
+}
