@@ -1004,6 +1004,18 @@ Kiểm thử dùng cùng lệnh ở mục 15.11. `ClientUiIT` bổ sung initial 
 
 **Nghiệm thu cuối 12/10/2026:** `.\mvnw.cmd -B -ntp '-Pdb-it,login-it' clean verify` → **BUILD SUCCESS, 433 tests, 0 failures/errors/skipped** (351 default + 30 server DB IT + 46 UI/peer + 6 UI/DB). Test resize chờ bố cục JavaFX ổn định với deadline trước khi đo, kiểm tra cả form sau khi lỗi làm tăng chiều cao. Ảnh `accounts-loaded.png` và `accounts-form-compact.png` nằm trong `quiz-client/target/ui-screenshots`; đã rà trực tiếp ảnh Scene thật, không ghi nhận thao tác desktop thủ công.
 
+### 15.13. Kiểm thử nền tảng — giai đoạn 6
+
+Task 6.1 tái sử dụng 50 ca đã có trong `PasswordHasherTest`, `AuthServiceTest` và
+`AuthGuardTest`. Task 6.2 bổ sung `LoginIntegrationIT` với 11 ca dùng
+`QuizApi/ServerConnection` → TCP → `ServerMain` → PostgreSQL, không khởi động JavaFX.
+Bao phủ ba role, account lifecycle, thay thế phiên giữa hai client, token trên sai
+socket và shutdown server. Chỉ dùng DB test được kiểm tra, fixture UUID được dọn riêng.
+
+Chạy riêng bằng `.\mvnw.cmd -B -ntp -Pe2e-it verify`; profile `login-it` cũng bao gồm
+bộ test này khi chạy hồi quy có giao diện. Xem [hướng dẫn kiểm thử và bàn giao](TESTING.md)
+cho điều kiện môi trường, các profile, bằng chứng nghiệm thu và điểm mở rộng cho nhóm.
+
 ## 16. Kế hoạch kiểm thử
 
 | Loại | Phạm vi | Vị trí |

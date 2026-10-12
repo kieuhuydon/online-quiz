@@ -117,6 +117,42 @@
                             <includes>
                                 <include>**/ClientUiIT.java</include>
                                 <include>**/ClientLoginDbIT.java</include>
+                                <include>**/LoginIntegrationIT.java</include>
+                            </includes>
+                            <systemPropertyVariables>
+                                <quiz.test.config>${quiz.test.config}</quiz.test.config>
+                            </systemPropertyVariables>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- Production client/server E2E for machines without a desktop session. -->
+        <profile>
+            <id>e2e-it</id>
+            <properties>
+                <quiz.test.config>${maven.multiModuleProjectDirectory}/db-test-local.properties</quiz.test.config>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${maven-failsafe-plugin.version}</version>
+                        <configuration>
+                            <failIfNoTests>true</failIfNoTests>
+                            <useManifestOnlyJar>false</useManifestOnlyJar>
+                            <reuseForks>false</reuseForks>
+                            <includes>
+                                <include>**/LoginIntegrationIT.java</include>
                             </includes>
                             <systemPropertyVariables>
                                 <quiz.test.config>${quiz.test.config}</quiz.test.config>

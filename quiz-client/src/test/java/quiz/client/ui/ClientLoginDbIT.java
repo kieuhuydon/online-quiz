@@ -186,6 +186,9 @@ class ClientLoginDbIT {
 
     private void submit(String username, String password) throws Exception {
         fx(() -> {
+            // A replaced ScrollPane needs its skin before Scene.lookup can find the form.
+            stage.getScene().getRoot().applyCss();
+            stage.getScene().getRoot().layout();
             ((TextField) stage.getScene().lookup("#usernameInput")).setText(username);
             ((PasswordField) stage.getScene().lookup("#passwordInput")).setText(password);
             loginButton().fire(); return null;
