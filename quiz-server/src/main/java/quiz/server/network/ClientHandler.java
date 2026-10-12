@@ -44,7 +44,9 @@ public final class ClientHandler implements Runnable {
             socket.setSoTimeout(readTimeout);
             while (!socket.isClosed() && !Thread.currentThread().isInterrupted()) {
                 Object frame = MessageCodec.read(in);
-                if (!(frame instanceof Request request) || request.requestId() <= 0) break;
+                if (!(frame instanceof Request request) || request.requestId() <= 0) {
+                    break;
+                }
                 Response response;
                 ClientConnection current = connection;
                 try {
@@ -62,19 +64,30 @@ public final class ClientHandler implements Runnable {
             Thread.currentThread().interrupt();
         } catch (ExecutionException failed) {
             // Do not turn VM errors into business responses.
-            if (failed.getCause() instanceof Error fatal) throw fatal;
+            if (failed.getCause() instanceof Error fatal) {
+                throw fatal;
+            }
             log.debug("Worker failed exception={}", failed.getCause().getClass().getName());
         } catch (IOException | ClassNotFoundException transport) {
             log.debug("Connection ended exception={}", transport.getClass().getName());
         } finally {
-            if (connection != null) lifecycle.disconnect(connection);
-            else try { socket.close(); } catch (IOException ignored) { }
+            if (connection != null) {
+                lifecycle.disconnect(connection);
+            } else {
+                try {
+                    socket.close();
+                } catch (IOException ignored) {
+                    // The handshake failed before a ClientConnection could own this socket.
+                }
+            }
             onClosed.run();
         }
     }
 
     private Response process(ClientConnection connection, Request request) {
-        if (connection.isClosed()) return Response.error(request.requestId(), ErrorCode.UNAUTHENTICATED, "Connection is closed");
+        if (connection.isClosed()) {
+            return Response.error(request.requestId(), ErrorCode.UNAUTHENTICATED, "Connection is closed");
+        }
         if (request.type() == MessageType.LOGIN) {
             if (connection.getToken() != null) {
                 return Response.error(request.requestId(), ErrorCode.CONFLICT, "Connection is already authenticated");

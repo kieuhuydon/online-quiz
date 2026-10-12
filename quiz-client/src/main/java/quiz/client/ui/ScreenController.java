@@ -14,7 +14,10 @@ public abstract class ScreenController {
     private BooleanSupplier sessionCurrent = () -> true;
     private boolean disposed;
 
-    final void mount(BooleanSupplier current) { this.current = current; onMount(); }
+    final void mount(BooleanSupplier current) {
+        this.current = current;
+        onMount();
+    }
 
     final void mount(BooleanSupplier current, BooleanSupplier sessionCurrent) {
         this.current = current;
@@ -23,23 +26,34 @@ public abstract class ScreenController {
     }
 
     /** Login owns a session transition: its success callback remains live after the token is installed. */
-    public final boolean isMounted() { return !disposed && current.getAsBoolean(); }
+    public final boolean isMounted() {
+        return !disposed && current.getAsBoolean();
+    }
 
     /** Pass this::isActive to FxAsync.observe so late callbacks cannot change an old screen. */
-    public final boolean isActive() { return isMounted() && sessionCurrent.getAsBoolean(); }
+    public final boolean isActive() {
+        return isMounted() && sessionCurrent.getAsBoolean();
+    }
 
     protected final void own(AutoCloseable subscription) {
-        if (disposed) throw new IllegalStateException("Controller has been disposed");
+        if (disposed) {
+            throw new IllegalStateException("Controller has been disposed");
+        }
         subscriptions.add(subscription);
     }
 
     public final void dispose() {
-        if (disposed) return;
+        if (disposed) {
+            return;
+        }
         disposed = true;
         current = () -> false;
         for (AutoCloseable subscription : subscriptions) {
-            try { subscription.close(); }
-            catch (Exception failed) { log.warn("Cannot remove screen subscription: {}", failed.getClass().getSimpleName()); }
+            try {
+                subscription.close();
+            } catch (Exception failure) {
+                log.warn("Cannot remove screen subscription: {}", failure.getClass().getSimpleName());
+            }
         }
         subscriptions.clear();
         onDispose();

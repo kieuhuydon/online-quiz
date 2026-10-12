@@ -17,9 +17,12 @@ public final class ClientMain extends Application {
     private QuizApi api;
     private SceneNavigator navigator;
 
-    public static void main(String[] args) { launch(args); }
+    public static void main(String[] args) {
+        launch(args);
+    }
 
-    @Override public void start(Stage stage) {
+    @Override
+    public void start(Stage stage) {
         try {
             ClientConfig config = ClientConfig.fromArgs(getParameters().getRaw().toArray(String[]::new));
             api = new QuizApi(new ServerConnection(config));
@@ -35,10 +38,17 @@ public final class ClientMain extends Application {
     }
 
     /** No network wait or synchronous logout on the JavaFX thread. */
-    @Override public void stop() {
-        if (navigator != null) navigator.close();
-        if (api != null) api.closeAsync().whenComplete((ignored, failure) -> {
-            if (failure != null) log.warn("Client cleanup did not finish within its shutdown budget");
-        });
+    @Override
+    public void stop() {
+        if (navigator != null) {
+            navigator.close();
+        }
+        if (api != null) {
+            api.closeAsync().whenComplete((ignored, failure) -> {
+                if (failure != null) {
+                    log.warn("Client cleanup did not finish within its shutdown budget");
+                }
+            });
+        }
     }
 }

@@ -8,14 +8,15 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ProgressIndicator;
 import quiz.client.api.ApiException;
 import quiz.client.api.ClientValidation;
+import quiz.client.api.QuizApi;
 import quiz.client.network.TransportException;
 import quiz.common.dto.LoginRequestDto;
 import quiz.common.protocol.ErrorCode;
-import java.util.concurrent.CompletableFuture;
-import quiz.client.api.QuizApi;
 import quiz.client.ui.SceneNavigator;
 import quiz.client.ui.ScreenController;
 import quiz.client.util.FxAsync;
+
+import java.util.concurrent.CompletableFuture;
 
 /** Form calls the asynchronous API only; credentials never enter navigation or logs. */
 public final class LoginController extends ScreenController {
@@ -44,17 +45,30 @@ public final class LoginController extends ScreenController {
         notice.setManaged(!message.isBlank());
     }
 
-    @FXML private void initialize() {
-        fx.run(() -> { if (isMounted()) username.requestFocus(); });
+    @FXML
+    private void initialize() {
+        fx.run(() -> {
+            if (isMounted()) {
+                username.requestFocus();
+            }
+        });
     }
 
-    @FXML private void submit() {
-        if (!isMounted() || busy) return;
+    @FXML
+    private void submit() {
+        if (!isMounted() || busy) {
+            return;
+        }
         LoginRequestDto input;
-        try { input = ClientValidation.login(username.getText(), password.getText()); }
-        catch (ApiException invalid) {
+        try {
+            input = ClientValidation.login(username.getText(), password.getText());
+        } catch (ApiException invalid) {
             showError(LoginMessages.message(invalid));
-            if (username.getText().isBlank()) username.requestFocus(); else password.requestFocus();
+            if (username.getText().isBlank()) {
+                username.requestFocus();
+            } else {
+                password.requestFocus();
+            }
             return;
         }
         username.setText(input.username());
@@ -74,8 +88,14 @@ public final class LoginController extends ScreenController {
             password.clear();
             if (api.session().current().isEmpty()) {
                 failed(new TransportException(TransportException.Kind.CONNECTION_LOST));
-            } else navigator.showHome();
-        }, this::failed, () -> { if (isMounted()) setBusy(false, "Sẵn sàng đăng nhập"); });
+            } else {
+                navigator.showHome();
+            }
+        }, this::failed, () -> {
+            if (isMounted()) {
+                setBusy(false, "Sẵn sàng đăng nhập");
+            }
+        });
     }
 
     private void failed(Throwable failure) {
@@ -103,11 +123,19 @@ public final class LoginController extends ScreenController {
         connectionStatus.setText(status);
     }
 
-    @FXML private void exit() { navigator.exit(); }
+    @FXML
+    private void exit() {
+        navigator.exit();
+    }
 
-    @Override protected void onDispose() {
-        if (password != null) password.clear();
-        if (pending != null && !pending.isDone()) pending.cancel(false);
+    @Override
+    protected void onDispose() {
+        if (password != null) {
+            password.clear();
+        }
+        if (pending != null && !pending.isDone()) {
+            pending.cancel(false);
+        }
         pending = null;
     }
 }

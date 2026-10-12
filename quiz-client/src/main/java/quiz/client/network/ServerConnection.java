@@ -33,13 +33,19 @@ public final class ServerConnection implements AutoCloseable {
     private boolean closed;
     private CompletableFuture<Void> shutdown;
 
-    public ServerConnection(ClientConfig config) { this.config = Objects.requireNonNull(config); }
+    public ServerConnection(ClientConfig config) {
+        this.config = Objects.requireNonNull(config);
+    }
 
     /** Concurrent callers share the in-progress handshake; the returned future is a detached view. */
     public CompletableFuture<Long> connect() {
         synchronized (lock) {
-            if (closed) return CompletableFuture.failedFuture(new TransportException(CLOSED));
-            if (current != null) return current.connected.copy();
+            if (closed) {
+                return CompletableFuture.failedFuture(new TransportException(CLOSED));
+            }
+            if (current != null) {
+                return current.connected.copy();
+            }
             Context context = new Context(generations.incrementAndGet());
             current = context;
             context.handshakeDeadline = context.timer.schedule(() -> terminate(context, new TransportException(TIMEOUT)),
@@ -50,22 +56,33 @@ public final class ServerConnection implements AutoCloseable {
     }
 
     public State state() {
-        synchronized (lock) { return closed ? State.CLOSED : current == null ? State.DISCONNECTED : current.state; }
+        synchronized (lock) {
+            if (closed) {
+                return State.CLOSED;
+            }
+            return current == null ? State.DISCONNECTED : current.state;
+        }
     }
 
     public boolean isConnected(long generation) {
-        synchronized (lock) { return current != null && current.generation == generation && current.state == State.CONNECTED; }
+        synchronized (lock) {
+            return current != null && current.generation == generation && current.state == State.CONNECTED;
+        }
     }
 
     /** Zero means there is no established connection. */
     public long connectedGeneration() {
-        synchronized (lock) { return current != null && current.state == State.CONNECTED ? current.generation : 0; }
+        synchronized (lock) {
+            return current != null && current.state == State.CONNECTED ? current.generation : 0;
+        }
     }
 
     /** Atomic, short in-memory session update. Action must not block, do I/O or invoke user callbacks. */
     public <T> T whileConnected(long generation, Supplier<T> action) {
         synchronized (lock) {
-            if (!isConnected(generation)) throw new TransportException(CONNECTION_LOST);
+            if (!isConnected(generation)) {
+                throw new TransportException(CONNECTION_LOST);
+            }
             return action.get();
         }
     }
@@ -74,7 +91,9 @@ public final class ServerConnection implements AutoCloseable {
     public CompletableFuture<Response> send(long generation, MessageType type, String token, Serializable payload) {
         Objects.requireNonNull(type, "Message type");
         synchronized (lock) {
-            if (!isConnected(generation)) return CompletableFuture.failedFuture(new TransportException(CONNECTION_LOST));
+            if (!isConnected(generation)) {
+                return CompletableFuture.failedFuture(new TransportException(CONNECTION_LOST));
+            }
             Context context = current;
             if (context.pending.size() >= config.maxPendingRequests()) {
                 return CompletableFuture.failedFuture(new TransportException(OVERLOADED));
@@ -89,10 +108,13 @@ public final class ServerConnection implements AutoCloseable {
             pending.deadline = context.timer.schedule(() -> expire(context, id, pending),
                 config.requestTimeoutMs(), TimeUnit.MILLISECONDS);
             pending.future.whenComplete((result, error) -> {
-                if (pending.future.isCancelled()) cancel(context, id, pending);
+                if (pending.future.isCancelled()) {
+                    cancel(context, id, pending);
+                }
             });
-            try { context.writer.execute(() -> write(context, new Request(id, type, token, payload), pending)); }
-            catch (RejectedExecutionException full) {
+            try {
+                context.writer.execute(() -> write(context, new Request(id, type, token, payload), pending));
+            } catch (RejectedExecutionException full) {
                 context.pending.remove(id);
                 pending.deadline.cancel(false);
                 complete(() -> pending.future.completeExceptionally(new TransportException(OVERLOADED)));
@@ -115,19 +137,28 @@ public final class ServerConnection implements AutoCloseable {
     /** Closes only this generation. A delayed caller cannot disconnect a replacement socket. */
     public void disconnect(long generation, TransportException reason) {
         synchronized (lock) {
-            if (current != null && current.generation == generation) terminate(current, reason);
+            if (current != null && current.generation == generation) {
+                terminate(current, reason);
+            }
         }
     }
 
     /** Permanently closes this client; use disconnect for a later reconnect. Does not wait on workers. */
-    @Override public void close() { closeAsync(); }
+    @Override
+    public void close() {
+        closeAsync();
+    }
 
     /** Awaitable shutdown, bounded by shutdown.timeout.ms, without blocking JavaFX. */
     public CompletableFuture<Void> closeAsync() {
         synchronized (lock) {
-            if (shutdown != null) return shutdown.copy();
+            if (shutdown != null) {
+                return shutdown.copy();
+            }
             closed = true;
-            if (current != null) terminate(current, new TransportException(CLOSED));
+            if (current != null) {
+                terminate(current, new TransportException(CLOSED));
+            }
             pushListeners.clear();
             disconnectListeners.clear();
             shutdown = CompletableFuture.allOf(stopping.toArray(CompletableFuture[]::new));
@@ -144,20 +175,27 @@ public final class ServerConnection implements AutoCloseable {
             ObjectInputStream in = MessageCodec.createFilteredInputStream(context.socket.getInputStream());
             context.socket.setSoTimeout(0);
             synchronized (lock) {
-                if (current != context) return;
+                if (current != context) {
+                    return;
+                }
                 context.state = State.CONNECTED;
                 context.handshakeDeadline.cancel(false);
             }
             complete(() -> context.connected.complete(context.generation));
             while (!context.socket.isClosed()) {
                 Object message = MessageCodec.read(in);
-                if (!(message instanceof Response response)) throw new TransportException(PROTOCOL);
+                if (!(message instanceof Response response)) {
+                    throw new TransportException(PROTOCOL);
+                }
                 receive(context, response);
             }
-        } catch (SocketTimeoutException timeout) { terminate(context, new TransportException(TIMEOUT)); }
-        catch (TransportException invalid) { terminate(context, invalid); }
-        catch (ObjectStreamException | ClassNotFoundException invalid) { terminate(context, new TransportException(PROTOCOL)); }
-        catch (IOException | RuntimeException lost) {
+        } catch (SocketTimeoutException timeout) {
+            terminate(context, new TransportException(TIMEOUT));
+        } catch (TransportException invalid) {
+            terminate(context, invalid);
+        } catch (ObjectStreamException | ClassNotFoundException invalid) {
+            terminate(context, new TransportException(PROTOCOL));
+        } catch (IOException | RuntimeException lost) {
             log.debug("Connection ended: {}", lost.getClass().getSimpleName());
             terminate(context, new TransportException(CONNECTION_LOST));
         }
@@ -165,26 +203,40 @@ public final class ServerConnection implements AutoCloseable {
 
     private void write(Context context, Request request, Pending pending) {
         synchronized (lock) {
-            if (current != context || context.pending.get(request.requestId()) != pending) return;
+            if (current != context || context.pending.get(request.requestId()) != pending) {
+                return;
+            }
         }
-        try { MessageCodec.write(context.out, request); }
-        catch (IOException | RuntimeException failed) { terminate(context, new TransportException(CONNECTION_LOST)); }
+        try {
+            MessageCodec.write(context.out, request);
+        } catch (IOException | RuntimeException failed) {
+            terminate(context, new TransportException(CONNECTION_LOST));
+        }
     }
 
     private void receive(Context context, Response response) {
         validateEnvelope(response);
         synchronized (lock) {
-            if (current != context) return;
-            if (response.isPush()) {
-                List<PushListener> subscribers = List.copyOf(pushListeners);
-                try { context.push.execute(() -> deliverPush(context, response, subscribers)); }
-                catch (RejectedExecutionException full) { terminate(context, new TransportException(CONNECTION_LOST)); }
+            if (current != context) {
                 return;
             }
-            if (response.requestId() > context.ids.get()) throw new TransportException(PROTOCOL);
+            if (response.isPush()) {
+                List<PushListener> subscribers = List.copyOf(pushListeners);
+                try {
+                    context.push.execute(() -> deliverPush(context, response, subscribers));
+                } catch (RejectedExecutionException full) {
+                    terminate(context, new TransportException(CONNECTION_LOST));
+                }
+                return;
+            }
+            if (response.requestId() > context.ids.get()) {
+                throw new TransportException(PROTOCOL);
+            }
             Pending pending = context.pending.remove(response.requestId());
             if (pending == null) {
-                if (!context.duplicateLogged) log.debug("Ignored completed/cancelled response in generation {}", context.generation);
+                if (!context.duplicateLogged) {
+                    log.debug("Ignored completed/cancelled response in generation {}", context.generation);
+                }
                 context.duplicateLogged = true; // Log at most once per generation, without payload/token.
                 return;
             }
@@ -202,12 +254,12 @@ public final class ServerConnection implements AutoCloseable {
     }
 
     private static void validateEnvelope(Response response) {
-        boolean errorInvalid = response.success() ? response.errorCode() != null
+        boolean invalidErrorFields = response.success() ? response.errorCode() != null
             : response.errorCode() == null || response.payload() != null;
-        boolean pushInvalid = response.isPush() && (response.requestId() != 0 || !response.success()
+        boolean invalidPush = response.isPush() && (response.requestId() != 0 || !response.success()
             || (response.pushType() != MessageType.PUSH_ANTICHEAT_WARNING
                 && response.pushType() != MessageType.PUSH_FORCE_SUBMITTED));
-        if (errorInvalid || pushInvalid || (!response.isPush() && response.requestId() <= 0)) {
+        if (invalidErrorFields || invalidPush || (!response.isPush() && response.requestId() <= 0)) {
             throw new TransportException(PROTOCOL);
         }
     }
@@ -222,21 +274,30 @@ public final class ServerConnection implements AutoCloseable {
 
     private void cancel(Context context, long id, Pending pending) {
         synchronized (lock) {
-            if (context.pending.remove(id, pending)) pending.deadline.cancel(false);
+            if (context.pending.remove(id, pending)) {
+                pending.deadline.cancel(false);
+            }
         }
     }
 
     private void terminate(Context context, TransportException reason) {
         synchronized (lock) {
-            if (current != context) return;
+            if (current != context) {
+                return;
+            }
             context.state = State.CLOSING;
             current = null;
-            try { context.socket.close(); }
-            catch (IOException ignored) { log.debug("Socket close failed"); }
+            try {
+                context.socket.close();
+            } catch (IOException ignored) {
+                log.debug("Socket close failed");
+            }
             context.writer.shutdownNow();
             context.timer.shutdownNow();
             context.push.shutdownNow();
-            if (context.reader != null) context.reader.interrupt();
+            if (context.reader != null) {
+                context.reader.interrupt();
+            }
             List<Pending> pending = new ArrayList<>(context.pending.values());
             context.pending.clear();
             complete(() -> context.connected.completeExceptionally(reason));
@@ -258,7 +319,9 @@ public final class ServerConnection implements AutoCloseable {
             try {
                 awaitStopped(context);
                 stopped.complete(null);
-                synchronized (lock) { stopping.remove(stopped); }
+                synchronized (lock) {
+                    stopping.remove(stopped);
+                }
             } catch (RuntimeException failed) {
                 stopped.completeExceptionally(failed); // Preserve failure for the final closeAsync caller.
             }
@@ -266,30 +329,48 @@ public final class ServerConnection implements AutoCloseable {
     }
 
     private void awaitStopped(Context context) {
-        long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(config.shutdownTimeoutMs());
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(config.shutdownTimeoutMs());
         try {
-            context.writer.awaitTermination(Math.max(0, until - System.nanoTime()), TimeUnit.NANOSECONDS);
-            context.timer.awaitTermination(Math.max(0, until - System.nanoTime()), TimeUnit.NANOSECONDS);
-            context.push.awaitTermination(Math.max(0, until - System.nanoTime()), TimeUnit.NANOSECONDS);
-            if (context.reader != null) context.reader.join(java.time.Duration.ofNanos(Math.max(0, until - System.nanoTime())));
+            context.writer.awaitTermination(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            context.timer.awaitTermination(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            context.push.awaitTermination(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            if (context.reader != null) {
+                context.reader.join(java.time.Duration.ofNanos(Math.max(0, deadline - System.nanoTime())));
+            }
             if (!context.writer.isTerminated() || !context.timer.isTerminated() || !context.push.isTerminated()
-                || (context.reader != null && context.reader.isAlive())) throw new TransportException(TIMEOUT);
+                || (context.reader != null && context.reader.isAlive())) {
+                throw new TransportException(TIMEOUT);
+            }
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new TransportException(CLOSED);
         }
     }
 
-    private static void complete(Runnable task) { Thread.ofVirtual().name("quiz-client-callback").start(task); }
+    private static void complete(Runnable task) {
+        Thread.ofVirtual().name("quiz-client-callback").start(task);
+    }
 
     private static void notifySafely(Runnable notification) {
-        try { notification.run(); }
-        catch (RuntimeException failed) { log.warn("Client listener failed: {}", failed.getClass().getSimpleName()); }
+        try {
+            notification.run();
+        } catch (RuntimeException failure) {
+            log.warn("Client listener failed: {}", failure.getClass().getSimpleName());
+        }
     }
 
     // Package-private diagnostics for deterministic resource assertions, never exposing payloads.
-    int pendingCount() { synchronized (lock) { return current == null ? 0 : current.pending.size(); } }
-    int timerCount() { synchronized (lock) { return current == null ? 0 : current.timer.getQueue().size(); } }
+    int pendingCount() {
+        synchronized (lock) {
+            return current == null ? 0 : current.pending.size();
+        }
+    }
+
+    int timerCount() {
+        synchronized (lock) {
+            return current == null ? 0 : current.timer.getQueue().size();
+        }
+    }
 
     private static final class Pending {
         final CompletableFuture<Response> future = new CompletableFuture<>();

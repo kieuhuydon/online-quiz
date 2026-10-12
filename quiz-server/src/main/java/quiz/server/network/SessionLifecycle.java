@@ -1,6 +1,7 @@
 package quiz.server.network;
 
 import quiz.common.dto.LoginResultDto;
+import quiz.server.exception.UnauthorizedException;
 import quiz.server.service.SessionCoordinator;
 
 import java.util.Objects;
@@ -20,27 +21,35 @@ public final class SessionLifecycle {
             try {
                 return coordinator.withCurrentSession(login.token(), session -> {
                     synchronized (connection) {
-                        if (connection.isClosed()) return false;
+                        if (connection.isClosed()) {
+                            return false;
+                        }
                         ClientConnection previous = connections.get(session.userId()).orElse(null);
                         connection.setToken(login.token());
                         connections.register(session.userId(), connection);
-                        if (previous != null && previous != connection) previous.close();
+                        if (previous != null && previous != connection) {
+                            previous.close();
+                        }
                         return true;
                     }
                 });
-            } catch (quiz.server.exception.UnauthorizedException expired) {
+            } catch (UnauthorizedException expired) {
                 return false;
             }
         });
-        if (!bound) coordinator.logout(login.token());
+        if (!bound) {
+            coordinator.logout(login.token());
+        }
         return bound;
     }
 
     public boolean owns(ClientConnection connection, String token) {
-        if (token == null || !token.equals(connection.getToken()) || connection.isClosed()) return false;
+        if (token == null || !token.equals(connection.getToken()) || connection.isClosed()) {
+            return false;
+        }
         try {
             return coordinator.withCurrentSession(token, session -> token.equals(connection.getToken()));
-        } catch (quiz.server.exception.UnauthorizedException expired) {
+        } catch (UnauthorizedException expired) {
             return false;
         }
     }

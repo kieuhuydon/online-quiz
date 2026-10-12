@@ -13,9 +13,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Quản lý giao dịch cơ sở dữ liệu (Transaction Management).
- * Đảm bảo tính nguyên tử (Atomicity), tự động setAutoCommit(false), commit khi thành công
- * và rollback khi xảy ra lỗi.
+ * Chạy một thao tác trong giao dịch; commit khi thành công và rollback khi thất bại.
+ * Kết nối được trả về pool sau khi khôi phục trạng thái auto-commit ban đầu.
  */
 public class TransactionManager {
     private static final Logger log = LoggerFactory.getLogger(TransactionManager.class);
@@ -98,14 +97,14 @@ public class TransactionManager {
     }
 
     private <T> T execute(TransactionCallback<T> action) {
-        DataSource ds = resolveDataSource();
         Connection connection = null;
+        DataSource transactionDataSource = resolveDataSource();
         boolean originalAutoCommit = true;
         boolean transactionStarted = false;
         boolean transactionEnded = false;
 
         try {
-            connection = ds.getConnection();
+            connection = transactionDataSource.getConnection();
             originalAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             transactionStarted = true;
@@ -115,28 +114,25 @@ public class TransactionManager {
             connection.commit();
             transactionEnded = true;
             return result;
-        } catch (Throwable t) {
+        } catch (Throwable failure) {
             if (connection != null && transactionStarted) {
                 try {
                     connection.rollback();
                     transactionEnded = true;
                     log.debug("Transaction rolled back successfully");
-                } catch (SQLException ex) {
-                    t.addSuppressed(ex);
-                    log.error("Failed to rollback transaction", ex);
+                } catch (SQLException rollbackFailure) {
+                    failure.addSuppressed(rollbackFailure);
+                    log.error("Failed to rollback transaction", rollbackFailure);
                 }
             }
 
-            if (t instanceof QuizException qe) {
-                throw qe;
+            if (failure instanceof RuntimeException runtimeFailure) {
+                throw runtimeFailure;
             }
-            if (t instanceof RuntimeException re) {
-                throw re;
+            if (failure instanceof Error fatal) {
+                throw fatal;
             }
-            if (t instanceof Error err) {
-                throw err;
-            }
-            throw new QuizException(ErrorCode.DATABASE_ERROR, "Database operation failed", t);
+            throw new QuizException(ErrorCode.DATABASE_ERROR, "Database operation failed", failure);
         } finally {
             if (connection != null) {
                 try {

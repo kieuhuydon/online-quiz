@@ -16,7 +16,11 @@ import quiz.client.util.FxAsync;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -66,9 +70,17 @@ public final class SceneNavigator implements AutoCloseable {
         show(api.session().current().map(session -> Screen.home(session.role())).orElse(Screen.LOGIN));
     }
 
-    public void show(Screen requested) { navigate(Objects.requireNonNull(requested), ""); }
-    public void showLogin(String notice) { navigate(Screen.LOGIN, notice == null ? "" : notice); }
-    public Optional<Screen> currentScreen() { return Optional.ofNullable(screen); }
+    public void show(Screen requested) {
+        navigate(Objects.requireNonNull(requested), "");
+    }
+
+    public void showLogin(String notice) {
+        navigate(Screen.LOGIN, notice == null ? "" : notice);
+    }
+
+    public Optional<Screen> currentScreen() {
+        return Optional.ofNullable(screen);
+    }
 
     /** Keep an unacknowledged write visible even when session loss disposes its screen first. */
     public <T> CompletableFuture<T> trackAccountWrite(CompletableFuture<T> future) {
@@ -85,10 +97,14 @@ public final class SceneNavigator implements AutoCloseable {
 
     private void navigate(Screen requested, String notice) {
         requireFx();
-        if (closed || loggingOut) return;
+        if (closed || loggingOut) {
+            return;
+        }
         ClientSession.Snapshot session = api.session().current().orElse(null);
         Screen target = session == null ? Screen.LOGIN : Screen.home(session.role());
-        if (session != null && requested.role() == session.role()) target = requested;
+        if (session != null && requested.role() == session.role()) {
+            target = requested;
+        }
         if (requested != Screen.LOGIN && requested != target) {
             notice = session == null ? "Vui lòng đăng nhập để tiếp tục." : "Bạn không có quyền truy cập màn hình này.";
         }
@@ -96,8 +112,9 @@ public final class SceneNavigator implements AutoCloseable {
         try {
             Loaded content = load(target.resource(), created);
             Parent root = content.root();
-            if (target == Screen.LOGIN) ((LoginController) content.controller()).setNotice(notice);
-            else {
+            if (target == Screen.LOGIN) {
+                ((LoginController) content.controller()).setNotice(notice);
+            } else {
                 Loaded shell = load("/quiz/client/ui/shell.fxml", created);
                 ((WorkspaceController) shell.controller()).show(session, target, content.root(), notice);
                 root = shell.root();
@@ -118,12 +135,15 @@ public final class SceneNavigator implements AutoCloseable {
         if (stage.getScene() == null) {
             var bounds = javafx.stage.Screen.getPrimary().getVisualBounds();
             stage.setScene(new Scene(root, Math.min(1120, bounds.getWidth() - 48), Math.min(740, bounds.getHeight() - 64)));
-        } else stage.getScene().setRoot(root);
+        } else {
+            stage.getScene().setRoot(root);
+        }
         stage.getScene().getStylesheets().setAll(css);
         stage.setTitle("Online Quiz — " + target.title());
-        for (ScreenController controller : controllers) controller.mount(() ->
-            !closed && viewVersion == version,
-            () -> Objects.equals(session, api.session().current().orElse(null)));
+        for (ScreenController controller : controllers) {
+            controller.mount(() -> !closed && viewVersion == version,
+                () -> Objects.equals(session, api.session().current().orElse(null)));
+        }
     }
 
     private Loaded load(String path, List<ScreenController> created) throws IOException {
@@ -134,29 +154,46 @@ public final class SceneNavigator implements AutoCloseable {
             return controller;
         });
         Parent root = loader.load();
-        if (!(loader.getController() instanceof ScreenController controller)) throw new IOException("Missing screen controller");
+        if (!(loader.getController() instanceof ScreenController controller)) {
+            throw new IOException("Missing screen controller");
+        }
         return new Loaded(root, controller);
     }
 
     private ScreenController createController(Class<?> type) {
-        if (type == LoginController.class) return new LoginController(api, this, fx);
-        if (type == AccountController.class) return new AccountController(api, this, fx);
-        if (type == DashboardController.class) return new DashboardController();
-        if (type == WorkspaceController.class) return new WorkspaceController(this);
+        if (type == LoginController.class) {
+            return new LoginController(api, this, fx);
+        }
+        if (type == AccountController.class) {
+            return new AccountController(api, this, fx);
+        }
+        if (type == DashboardController.class) {
+            return new DashboardController();
+        }
+        if (type == WorkspaceController.class) {
+            return new WorkspaceController(this);
+        }
         throw new IllegalArgumentException("Unsupported screen controller");
     }
 
     private URL resource(String path) throws IOException {
         URL result = resources.apply(path);
-        if (result == null) throw new IOException("Missing client UI resource: " + path);
+        if (result == null) {
+            throw new IOException("Missing client UI resource: " + path);
+        }
         return result;
     }
 
     /** Shared by all authenticated screens. Logout errors still return to an unauthenticated screen. */
     public void logout() {
         requireFx();
-        if (closed || loggingOut) return;
-        if (api.session().current().isEmpty()) { showLogin("Phiên làm việc đã kết thúc."); return; }
+        if (closed || loggingOut) {
+            return;
+        }
+        if (api.session().current().isEmpty()) {
+            showLogin("Phiên làm việc đã kết thúc.");
+            return;
+        }
         loggingOut = true;
         long version = viewVersion;
         stage.getScene().getRoot().setDisable(true);
@@ -168,7 +205,9 @@ public final class SceneNavigator implements AutoCloseable {
 
     private void finishLogout(String notice) {
         loggingOut = false;
-        if (!accountWrites.isEmpty()) notice += " Chưa xác nhận kết quả thao tác tài khoản. Đăng nhập lại và tải danh sách để kiểm tra.";
+        if (!accountWrites.isEmpty()) {
+            notice += " Chưa xác nhận kết quả thao tác tài khoản. Đăng nhập lại và tải danh sách để kiểm tra.";
+        }
         accountWrites.clear();
         showLogin(notice);
     }
@@ -192,19 +231,27 @@ public final class SceneNavigator implements AutoCloseable {
         screen = null;
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         requireFx();
-        if (closed) return;
+        if (closed) {
+            return;
+        }
         closed = true;
         accountWrites.clear();
         disposeView();
-        try { sessionSubscription.close(); }
-        catch (Exception failed) { log.warn("Cannot remove navigation subscription: {}", failed.getClass().getSimpleName()); }
+        try {
+            sessionSubscription.close();
+        } catch (Exception failure) {
+            log.warn("Cannot remove navigation subscription: {}", failure.getClass().getSimpleName());
+        }
         api.close();
     }
 
     private static void requireFx() {
-        if (!Platform.isFxApplicationThread()) throw new IllegalStateException("Navigation requires the JavaFX thread");
+        if (!Platform.isFxApplicationThread()) {
+            throw new IllegalStateException("Navigation requires the JavaFX thread");
+        }
     }
 
     private record Loaded(Parent root, ScreenController controller) { }

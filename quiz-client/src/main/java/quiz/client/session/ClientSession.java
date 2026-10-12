@@ -12,7 +12,9 @@ public final class ClientSession {
     private final AtomicReference<Snapshot> value = new AtomicReference<>();
     private final LongPredicate connected;
 
-    public ClientSession(LongPredicate connected) { this.connected = Objects.requireNonNull(connected); }
+    public ClientSession(LongPredicate connected) {
+        this.connected = Objects.requireNonNull(connected);
+    }
 
     public Optional<Snapshot> current() {
         Snapshot snapshot = value.get();
@@ -31,7 +33,9 @@ public final class ClientSession {
     }
 
     /** For disposal of the owning API only. */
-    public void clear() { value.set(null); }
+    public void clear() {
+        value.set(null);
+    }
 
     public record Snapshot(long generation, String token, long userId, String username, String fullName, Role role) {
         public Snapshot {
@@ -41,7 +45,8 @@ public final class ClientSession {
             }
         }
 
-        @Override public String toString() {
+        @Override
+        public String toString() {
             return "ClientSession[generation=" + generation + ", userId=" + userId + ", role=" + role + "]";
         }
     }

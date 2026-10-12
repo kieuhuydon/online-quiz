@@ -2,7 +2,11 @@ package quiz.client.util;
 
 import javafx.application.Platform;
 import java.util.Objects;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
@@ -10,19 +14,34 @@ import java.util.function.Consumer;
 public final class FxAsync {
     private final Executor uiExecutor;
 
-    public FxAsync() { this(Platform::runLater); }
-    public FxAsync(Executor uiExecutor) { this.uiExecutor = Objects.requireNonNull(uiExecutor); }
+    public FxAsync() {
+        this(Platform::runLater);
+    }
 
-    public void run(Runnable action) { uiExecutor.execute(action); }
+    public FxAsync(Executor uiExecutor) {
+        this.uiExecutor = Objects.requireNonNull(uiExecutor);
+    }
+
+    public void run(Runnable action) {
+        uiExecutor.execute(action);
+    }
 
     /** done resets busy state, including cancellation. A disposed view receives no callbacks. */
     public <T> CompletableFuture<Void> observe(CompletionStage<T> future, BooleanSupplier viewActive,
                                                Consumer<T> success, Consumer<Throwable> error, Runnable done) {
         return future.handleAsync((value, failure) -> {
-            if (!viewActive.getAsBoolean()) return null;
+            if (!viewActive.getAsBoolean()) {
+                return null;
+            }
             try {
-                if (failure == null) success.accept(value); else error.accept(unwrap(failure));
-            } finally { done.run(); }
+                if (failure == null) {
+                    success.accept(value);
+                } else {
+                    error.accept(unwrap(failure));
+                }
+            } finally {
+                done.run();
+            }
             return (Void) null;
         }, uiExecutor).toCompletableFuture();
     }

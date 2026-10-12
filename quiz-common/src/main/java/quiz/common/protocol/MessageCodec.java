@@ -30,22 +30,22 @@ public final class MessageCodec {
     private MessageCodec() { }
 
     /** Caller must serialize access to the shared output stream. */
-    public static void write(ObjectOutputStream out, Object msg) throws IOException {
-        byte[] bytes = serialize(msg);
-        out.writeInt(bytes.length);
-        out.write(bytes);
-        out.reset();
-        out.flush();
+    public static void write(ObjectOutputStream output, Object message) throws IOException {
+        byte[] bytes = serialize(message);
+        output.writeInt(bytes.length);
+        output.write(bytes);
+        output.reset();
+        output.flush();
     }
 
     /** A malformed frame is fatal for the connection; do not retry on that stream. */
-    public static Object read(ObjectInputStream in) throws IOException, ClassNotFoundException {
-        int length = in.readInt();
+    public static Object read(ObjectInputStream input) throws IOException, ClassNotFoundException {
+        int length = input.readInt();
         if (length <= 0 || length > MAX_MESSAGE_BYTES) {
             throw new InvalidObjectException("Invalid message frame length");
         }
         byte[] bytes = new byte[length];
-        in.readFully(bytes);
+        input.readFully(bytes);
         return deserialize(bytes);
     }
 
@@ -57,30 +57,11 @@ public final class MessageCodec {
     }
 
     /** Serialize one envelope, without the outer frame prefix. */
-    public static byte[] serialize(Object obj) throws IOException {
-        requireEnvelope(obj);
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        try (ObjectOutputStream stream = new ObjectOutputStream(new OutputStream() {
-            private void checkCapacity(int length) throws IOException {
-                if (length > MAX_MESSAGE_BYTES - buffer.size()) {
-                    throw new IOException("Message exceeds maximum frame size");
-                }
-            }
-
-            @Override
-            public void write(int value) throws IOException {
-                checkCapacity(1);
-                buffer.write(value);
-            }
-
-            @Override
-            public void write(byte[] bytes, int offset, int length) throws IOException {
-                Objects.checkFromIndexSize(offset, length, bytes.length);
-                checkCapacity(length);
-                buffer.write(bytes, offset, length);
-            }
-        })) {
-            stream.writeObject(obj);
+    public static byte[] serialize(Object message) throws IOException {
+        requireEnvelope(message);
+        FrameOutputStream buffer = new FrameOutputStream();
+        try (ObjectOutputStream stream = new ObjectOutputStream(buffer)) {
+            stream.writeObject(message);
         }
         return buffer.toByteArray();
     }
@@ -101,6 +82,34 @@ public final class MessageCodec {
     private static void requireEnvelope(Object message) throws InvalidObjectException {
         if (!(message instanceof Request) && !(message instanceof Response)) {
             throw new InvalidObjectException("Expected Request or Response envelope");
+        }
+    }
+
+    /** Enforce the frame limit while writing, before an oversized object fills memory. */
+    private static final class FrameOutputStream extends OutputStream {
+        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+        @Override
+        public void write(int value) throws IOException {
+            checkCapacity(1);
+            buffer.write(value);
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) throws IOException {
+            Objects.checkFromIndexSize(offset, length, bytes.length);
+            checkCapacity(length);
+            buffer.write(bytes, offset, length);
+        }
+
+        private void checkCapacity(int length) throws IOException {
+            if (length > MAX_MESSAGE_BYTES - buffer.size()) {
+                throw new IOException("Message exceeds maximum frame size");
+            }
+        }
+
+        byte[] toByteArray() {
+            return buffer.toByteArray();
         }
     }
 }

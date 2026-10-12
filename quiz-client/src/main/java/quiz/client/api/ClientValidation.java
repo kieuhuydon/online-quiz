@@ -17,29 +17,47 @@ public final class ClientValidation {
     }
 
     public static CreateAccountDto account(CreateAccountDto input) {
-        if (input == null || input.role() == null) throw invalid();
-        if (input.role() != Role.TEACHER && input.role() != Role.STUDENT) throw new ApiException(ErrorCode.FORBIDDEN);
+        if (input == null || input.role() == null) {
+            throw invalid();
+        }
+        if (input.role() != Role.TEACHER && input.role() != Role.STUDENT) {
+            throw new ApiException(ErrorCode.FORBIDDEN);
+        }
         String email = input.email() == null || input.email().isBlank() ? null : text(input.email(), 100);
-        if (email != null && !EMAIL.matcher(email).matches()) throw invalid();
+        if (email != null && !EMAIL.matcher(email).matches()) {
+            throw invalid();
+        }
         return new CreateAccountDto(text(input.username(), 50), password(input.password(), true),
             text(input.fullName(), 100), email, input.role());
     }
 
-    public static void positiveId(long id) { if (id <= 0) throw invalid(); }
+    public static void positiveId(long id) {
+        if (id <= 0) {
+            throw invalid();
+        }
+    }
 
     private static String text(String input, int limit) {
-        if (input == null) throw invalid();
+        if (input == null) {
+            throw invalid();
+        }
         String value = input.strip();
-        if (value.isBlank() || value.codePointCount(0, value.length()) > limit) throw invalid();
+        if (value.isBlank() || value.codePointCount(0, value.length()) > limit) {
+            throw invalid();
+        }
         return value;
     }
 
     private static String password(String value, boolean creating) {
         if (value == null || value.isBlank() || value.length() > 72
             || value.getBytes(StandardCharsets.UTF_8).length > 72
-            || (creating && value.codePointCount(0, value.length()) < 8)) throw invalid();
+            || (creating && value.codePointCount(0, value.length()) < 8)) {
+            throw invalid();
+        }
         return value;
     }
 
-    private static ApiException invalid() { return new ApiException(ErrorCode.VALIDATION_ERROR); }
+    private static ApiException invalid() {
+        return new ApiException(ErrorCode.VALIDATION_ERROR);
+    }
 }

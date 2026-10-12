@@ -17,7 +17,9 @@ public final class WorkspaceController extends ScreenController {
     @FXML private Label notice;
     @FXML private StackPane content;
 
-    public WorkspaceController(SceneNavigator navigator) { this.navigator = navigator; }
+    public WorkspaceController(SceneNavigator navigator) {
+        this.navigator = navigator;
+    }
 
     void show(ClientSession.Snapshot session, Screen route, Parent body, String message) {
         roleLabel.setText(Screen.roleLabel(session.role()));
@@ -31,5 +33,10 @@ public final class WorkspaceController extends ScreenController {
         content.getChildren().setAll(body);
     }
 
-    @FXML private void logout() { if (isActive()) navigator.logout(); }
+    @FXML
+    private void logout() {
+        if (isActive()) {
+            navigator.logout();
+        }
+    }
 }
