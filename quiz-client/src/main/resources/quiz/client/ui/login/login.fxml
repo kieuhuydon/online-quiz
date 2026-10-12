@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<ScrollPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.login.LoginController" fitToWidth="true" fitToHeight="true" hbarPolicy="NEVER" styleClass="authentication-scroll">
+    <StackPane styleClass="authentication-page">
+    <VBox maxWidth="520" maxHeight="-Infinity" styleClass="authentication-card">
+        <HBox spacing="14" alignment="CENTER_LEFT" styleClass="authentication-header">
+            <Label text="Q" styleClass="authentication-mark"/>
+            <VBox spacing="6">
+                <Label text="ONLINE GRAMMAR QUIZ" styleClass="authentication-title"/>
+                <Label text="Trung tâm đào tạo · Cổng đăng nhập" styleClass="muted"/>
+            </VBox>
+        </HBox>
+        <VBox spacing="18" styleClass="authentication-form">
+            <Label text="Đăng nhập tài khoản" styleClass="card-heading"/>
+            <Label text="Sử dụng tài khoản do trung tâm cung cấp." styleClass="muted" wrapText="true"/>
+            <Label fx:id="notice" id="loginNotice" wrapText="true" styleClass="notice" visible="false" managed="false" maxWidth="Infinity"/>
+            <VBox spacing="8">
+                <Label text="Tên đăng nhập" styleClass="field-label" labelFor="$username"/>
+                <TextField fx:id="username" id="usernameInput" promptText="Nhập tên đăng nhập" onAction="#submit"/>
+            </VBox>
+            <VBox spacing="8">
+                <Label text="Mật khẩu" styleClass="field-label" labelFor="$password"/>
+                <PasswordField fx:id="password" id="passwordInput" promptText="Nhập mật khẩu" onAction="#submit"/>
+            </VBox>
+            <Button fx:id="loginButton" id="loginButton" text="Đăng nhập" onAction="#submit" defaultButton="true" styleClass="primary-button,authentication-submit" maxWidth="Infinity"/>
+            <Button id="exitButton" text="Thoát ứng dụng" onAction="#exit" styleClass="secondary-button" maxWidth="Infinity"/>
+        </VBox>
+        <HBox spacing="10" alignment="CENTER_LEFT" styleClass="authentication-status">
+            <ProgressIndicator fx:id="progress" id="loginProgress" prefWidth="18" prefHeight="18" maxWidth="18" maxHeight="18" visible="false" managed="false"/>
+            <Label fx:id="connectionStatus" id="connectionStatus" text="Sẵn sàng đăng nhập" styleClass="muted" wrapText="true"/>
+        </HBox>
+    </VBox>
+    </StackPane>
+</ScrollPane>

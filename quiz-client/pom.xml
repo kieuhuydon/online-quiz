@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>quiz</groupId>
+        <artifactId>online-quiz</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>quiz-client</artifactId>
+    <packaging>jar</packaging>
+
+    <name>quiz-client</name>
+    <description>JavaFX Client: Desktop UI and Socket Client</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>quiz</groupId>
+            <artifactId>quiz-common</artifactId>
+        </dependency>
+
+        <!-- JavaFX -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+        </dependency>
+
+        <!-- Logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>quiz</groupId>
+            <artifactId>quiz-server</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>quiz.client.ClientMain</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+    <profiles>
+        <!-- Real JavaFX toolkit/window tests: opt in on a machine with a desktop session. -->
+        <profile>
+            <id>ui-it</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${maven-failsafe-plugin.version}</version>
+                        <configuration>
+                            <failIfNoTests>true</failIfNoTests>
+                            <useManifestOnlyJar>false</useManifestOnlyJar>
+                            <includes>
+                                <include>**/ClientUiIT.java</include>
+                            </includes>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>login-it</id>
+            <properties>
+                <quiz.test.config>${maven.multiModuleProjectDirectory}/db-test-local.properties</quiz.test.config>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${maven-failsafe-plugin.version}</version>
+                        <configuration>
+                            <failIfNoTests>true</failIfNoTests>
+                            <useManifestOnlyJar>false</useManifestOnlyJar>
+                            <reuseForks>false</reuseForks>
+                            <includes>
+                                <include>**/ClientUiIT.java</include>
+                                <include>**/ClientLoginDbIT.java</include>
+                                <include>**/LoginIntegrationIT.java</include>
+                            </includes>
+                            <systemPropertyVariables>
+                                <quiz.test.config>${quiz.test.config}</quiz.test.config>
+                            </systemPropertyVariables>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- Production client/server E2E for machines without a desktop session. -->
+        <profile>
+            <id>e2e-it</id>
+            <properties>
+                <quiz.test.config>${maven.multiModuleProjectDirectory}/db-test-local.properties</quiz.test.config>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${maven-failsafe-plugin.version}</version>
+                        <configuration>
+                            <failIfNoTests>true</failIfNoTests>
+                            <useManifestOnlyJar>false</useManifestOnlyJar>
+                            <reuseForks>false</reuseForks>
+                            <includes>
+                                <include>**/LoginIntegrationIT.java</include>
+                            </includes>
+                            <systemPropertyVariables>
+                                <quiz.test.config>${quiz.test.config}</quiz.test.config>
+                            </systemPropertyVariables>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

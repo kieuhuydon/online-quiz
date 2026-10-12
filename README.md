@@ -35,7 +35,11 @@
 
 | MSSV | Họ tên | Trách nhiệm chính |
 |---|---|---|
-| | | |
+| _(Điền)_ | **Việt** | **Authentication + User + Database & UI tương ứng** (Làm đầu tiên - Nền tảng hệ thống) |
+| _(Điền)_ | **Võ** | **Question Bank & UI tương ứng** (Làm sau Việt) |
+| _(Điền)_ | **Bắc** | **Quiz + Assignment & UI tương ứng** (Làm sau Võ) |
+| _(Điền)_ | **Đôn** | **Student Exam & UI tương ứng** (Làm sau Bắc) |
+| _(Điền)_ | **Nam** | **Anti-Cheat + Monitoring & UI tương ứng** (Làm sau Đôn) |
 
 ---
 
@@ -72,6 +76,11 @@ Trung tâm đào tạo (bối cảnh: trung tâm tiếng Anh) cần tạo ngân 
 | Quiz PIN | **Có trong MVP** (luồng học viên cần PIN; PIN sinh khi giáo viên mở bài) |
 | Quản lý lớp | Mức tối thiểu: tạo lớp, thêm/xóa học viên, giao bài cho lớp |
 | Tài khoản | Admin cấp sẵn, **không** tự đăng ký |
+| Cấp/khóa tài khoản | API quản trị chỉ tạo TEACHER/STUDENT; không tạo ADMIN hoặc khóa tài khoản ADMIN |
+| Chuẩn hóa thông tin user | Bỏ khoảng trắng đầu/cuối username, fullName, email; giữ hoa/thường; email trống thành null; unique theo schema hiện tại |
+| Chính sách mật khẩu | Không trim; tạo mới tối thiểu 8 ký tự, không toàn khoảng trắng, tối đa 72 byte UTF-8; login không áp dụng ngưỡng tối thiểu của tạo mới |
+| Phiên đăng nhập | Một phiên hiện hành/user; login trên socket mới thay phiên cũ; LOGIN trên socket đã đăng nhập trả CONFLICT |
+| Logout/khóa user | Logout hủy đúng token của socket và giữ socket để login lại; khóa user sau commit thu hồi phiên, mở khóa yêu cầu login lại |
 | Trạng thái Quiz | `DRAFT → OPEN → CLOSED` (không quay lại) |
 | Số lần làm | Mỗi học viên **1 Attempt / 1 Quiz** (`UNIQUE(quiz_id, student_id)`) |
 | Điểm đạt | Mặc định **50%**, cấu hình theo từng quiz (`pass_score`) |
@@ -114,6 +123,7 @@ handler  →  service  →  repository(interface)  ←  jdbc impl  →  db
 - `network` biết `dispatch`; **không** biết `service`.
 - `handlers` chỉ gọi `service`; **không** viết SQL, **không** đụng `Socket`.
 - `service` chỉ dùng `repository` (interface), `domain`, `security`, và service khác; **không** biết `Request/Response`/socket.
+- Ngoại lệ đã chốt cho Auth/Account: service được dùng `SessionRegistry`/`UserSession` như bộ lưu trữ và dữ liệu phiên trong bộ nhớ; không dùng `ClientConnection`/`ConnectionRegistry`. Tầng network dùng `SessionLifecycle` để bind/unbind socket, không gọi service.
 - `repository.jdbc` là nơi duy nhất có SQL/JDBC.
 - Client: `ui` → `QuizApi` → `ServerConnection`. Controller **không** biết `Socket`/`Request`.
 - `client` và `server` **không** import lẫn nhau; chỉ chia sẻ qua `quiz-common`.
@@ -250,9 +260,11 @@ public record Response(long requestId,          // trùng requestId của Reques
 - Payload là DTO (record `implements Serializable`) hoặc `null`.
 
 ### 6.2. MessageCodec
-- `static void write(ObjectOutputStream out, Object msg)`: `writeObject` → `flush` → **`reset()`** (tránh rò bộ nhớ do cache tham chiếu).
-- `static Object read(ObjectInputStream in)`: đọc 1 message.
-- Khi tạo `ObjectInputStream` phải đặt `ObjectInputFilter` chỉ cho phép `quiz.common.**`, `java.lang.*`, `java.util.*`, `java.time.*` (`rejectUndecidedClass`). Có unit test cho codec và cho filter.
+- Mỗi message là một frame: `int length` + `length` byte chứa một Request/Response serialize độc lập, tối đa 1 MiB. Dùng `MessageCodec.write/read` trên ObjectOutputStream/ObjectInputStream; không gọi `writeObject/readObject` trực tiếp trên stream mạng.
+- `write` serialize vào buffer có giới hạn trước khi ghi frame, rồi reset/flush stream ngoài. `read` kiểm tra length trước khi cấp phát và deserialize bằng stream riêng cho từng frame.
+- Filter nội bộ chỉ cho phép DTO/enums/protocol của common và các lớp giá trị/collection cần thiết; giới hạn depth 32, references 10.000, array 10.000. Stream ngoài từ chối serialized object, chỉ nhận primitive block data.
+- Giới hạn tính riêng cho từng message, không cộng dồn suốt phiên. Sai frame: đóng kết nối tại tầng network. Timeout handshake/read và validation quyền/payload nghiệp vụ thuộc giai đoạn tiếp theo.
+- Wire format này thay thế format writeObject trực tiếp trước đây; hai đầu phải dùng cùng phiên bản quiz-common. Test bao gồm frame sai, whitelist, giới hạn tài nguyên và nhiều message liên tiếp.
 
 ### 6.3. ErrorCode
 `INVALID_REQUEST, VALIDATION_ERROR, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, INVALID_CREDENTIALS, ACCOUNT_DISABLED, QUIZ_NOT_OPEN, QUIZ_CLOSED, WRONG_PIN, NOT_ASSIGNED, ATTEMPT_ALREADY_SUBMITTED, ATTEMPT_EXPIRED, ATTEMPT_NOT_FOUND, QUESTION_IN_USE, SERVER_BUSY, DATABASE_ERROR, INTERNAL_ERROR`
@@ -289,27 +301,33 @@ Quy tắc: nếu `type` không có handler → `INVALID_REQUEST`. `AuthGuard` ki
 
 ## 8. Database (PostgreSQL) – `database/schema.sql`
 
+DDL thực thi trong `database/schema.sql` bổ sung CHECK theo các miền dữ liệu đã chốt (điểm, phần trăm, thời hạn, policy/event/action), cùng vị trí câu hỏi dương và không trùng trong quiz. Script là khởi tạo nguyên tử trên DB mới; không xóa hay tự nâng cấp dữ liệu cũ. Các bảng và quan hệ nghiệp vụ giữ theo thiết kế dưới đây.
+
 ```sql
 CREATE TABLE users (
   id            BIGSERIAL PRIMARY KEY,
   username      VARCHAR(50)  NOT NULL UNIQUE,
-  password_hash VARCHAR(100) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
   full_name     VARCHAR(100) NOT NULL,
+  email         VARCHAR(100) UNIQUE,
   role          VARCHAR(10)  NOT NULL CHECK (role IN ('STUDENT','TEACHER','ADMIN')),
   active        BOOLEAN      NOT NULL DEFAULT TRUE,
+  created_by    BIGINT       REFERENCES users(id),
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE classes (
-  id         BIGSERIAL PRIMARY KEY,
-  name       VARCHAR(100) NOT NULL UNIQUE,
-  teacher_id BIGINT NOT NULL REFERENCES users(id),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  id          BIGSERIAL PRIMARY KEY,
+  name        VARCHAR(100) NOT NULL UNIQUE,
+  description VARCHAR(255),
+  teacher_id  BIGINT       NOT NULL REFERENCES users(id),
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE class_members (
-  class_id   BIGINT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
-  student_id BIGINT NOT NULL REFERENCES users(id),
+  class_id    BIGINT      NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  student_id  BIGINT      NOT NULL REFERENCES users(id),
+  enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (class_id, student_id)
 );
 
@@ -332,11 +350,12 @@ CREATE TABLE questions (
 CREATE TABLE quizzes (
   id               BIGSERIAL PRIMARY KEY,
   title            VARCHAR(200) NOT NULL,
+  description      VARCHAR(500),
   category         VARCHAR(100),
   duration_minutes INT NOT NULL CHECK (duration_minutes > 0),
   pass_score       NUMERIC(5,2) NOT NULL DEFAULT 50,      -- % để đạt
   status           VARCHAR(10) NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','OPEN','CLOSED')),
-  pin              VARCHAR(8),                            -- sinh khi OPEN
+  pin              VARCHAR(10),                           -- mã mời / Quiz PIN (sinh khi OPEN)
   anticheat_policy VARCHAR(30) NOT NULL DEFAULT 'WARN_THEN_AUTO_SUBMIT',
   max_violations   INT NOT NULL DEFAULT 3 CHECK (max_violations > 0),
   created_by       BIGINT NOT NULL REFERENCES users(id),
@@ -374,7 +393,8 @@ CREATE TABLE attempts (
 CREATE TABLE attempt_answers (
   attempt_id      BIGINT NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
   question_id     BIGINT NOT NULL REFERENCES questions(id),
-  selected_option CHAR(1) NOT NULL CHECK (selected_option IN ('A','B','C','D')),
+  selected_option CHAR(1) CHECK (selected_option IN ('A','B','C','D')), -- NULL nếu chưa chọn
+  is_correct      BOOLEAN,                                                -- server chấm khi nộp bài
   answered_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (attempt_id, question_id)
 );
@@ -414,8 +434,8 @@ CREATE INDEX idx_questions_filter  ON questions(topic, difficulty) WHERE active;
 
 ### 9.1. Thread model & network
 - `QuizServer`: 1 thread `accept()` trong vòng lặp; mỗi socket được bọc trong `ClientHandler` và chạy trên **`connectionExecutor`** (giới hạn bởi `server.max.connections`).
-- `ClientHandler.run()`: vòng lặp đọc `Request` → đẩy xử lý sang **`workerPool`** (`ThreadPoolExecutor` cố định, hàng đợi có giới hạn). Hàng đợi đầy → trả `SERVER_BUSY` (không treo).
-- `ClientConnection`: bọc `ObjectOutputStream`; **`send()` phải `synchronized`** vì response (worker thread) và PUSH (scheduler/worker khác) có thể ghi cùng lúc.
+- `ClientHandler.run()`: đọc `Request` → submit **`workerPool`** → chờ kết quả → gửi `Response` trên reader → đọc tiếp. Worker cố định, hàng đợi có giới hạn; queue đầy trả `SERVER_BUSY` theo requestId. Reader giữ thứ tự trên cùng socket và việc ghi ra client chậm không chiếm worker.
+- `ClientConnection`: bọc `ObjectOutputStream`; **`send()` phải `synchronized`** vì response (reader thread) và PUSH (scheduler/worker khác) có thể ghi cùng lúc.
 - `ConnectionRegistry`: `ConcurrentHashMap<Long userId, ClientConnection>` để push cảnh báo/force-submit.
 - `SessionRegistry`: `ConcurrentHashMap<String token, UserSession(userId, role, username)>`; token sinh bằng `SecureRandom` (≥ 128 bit). Hủy khi logout/ngắt kết nối.
 - Đóng kết nối: luôn dùng try-with-resources; client ngắt đột ngột không được làm sập server hay rò thread.
@@ -429,12 +449,25 @@ public interface CommandHandler {
     Response handle(Request request, UserSession session);
 }
 ```
-- `RequestDispatcher` giữ `Map<MessageType, CommandHandler>` (đăng ký khi khởi động), **bắt mọi `Throwable`**:
-  `QuizException` → `Response(success=false, errorCode, message)`; `SQLException`/pool lỗi → `DATABASE_ERROR`; còn lại → `INTERNAL_ERROR` (log đầy đủ, **không** lộ stack trace cho client). (FR-T07)
+- `RequestDispatcher` giữ map handler bất biến (đăng ký khi khởi động), bắt `Exception` để chuẩn hóa lỗi request; không nuốt `VirtualMachineError`/`ThreadDeath` rồi tiếp tục. Handler trùng type, policy null/rỗng cho lệnh khác LOGIN hoặc đăng ký PUSH là lỗi khởi động.
+  `QuizException` → `Response(success=false, errorCode, message)`; SQLException hoặc cause SQL → DATABASE_ERROR; lỗi khác → INTERNAL_ERROR. DATABASE_ERROR/INTERNAL_ERROR luôn dùng thông báo chung. Log chỉ requestId/type/userId, lớp exception và stack frame đã loại thông báo/cause chứa giá trị nhạy cảm; không log Request/DTO/password/hash/token. (FR-T07)
 - `AuthGuard.check(request, handler)`: token tồn tại? role thuộc `allowedRoles`? Sai → `UNAUTHENTICATED`/`FORBIDDEN`.
 - `DtoMapper`: chuyển domain → DTO (có hai bản câu hỏi: đầy đủ và `StudentQuestionDto`).
+- Contract task 4.3: LOGIN public, token phải null; LOGOUT cần session của mọi role; CREATE_ACCOUNT/LIST_ACCOUNTS/SET_ACCOUNT_ACTIVE chỉ ADMIN. Guard gọi AuthService.authenticate để lấy identity/role hiện tại. Request ID phải dương; lệnh chưa triển khai, PUSH từ client hoặc payload sai hình dạng là INVALID_REQUEST, giá trị DTO sai là VALIDATION_ERROR. Response thông thường giữ requestId, pushType null; null Request nội bộ dùng ID 0 cho error, network không gửi response nếu chưa có Request hợp lệ để định danh.
+- Dispatcher kiểm tra response round-trip qua codec (kích thước, allowlist, depth/reference/array), không tăng giới hạn/cắt danh sách khi LIST_ACCOUNTS quá lớn; trả INTERNAL_ERROR. Hiện có mapper Auth/Account; socket binding và LOGIN trên socket đã login được xử lý ở tầng network của task 4.4.
+- Task 4.3 đã triển khai: `CommandHandler`, `AuthGuard`, `RequestDispatcher`, `DtoMapper`, `LoginHandler`, `AccountHandler`. Giới hạn codec áp dụng cả thông báo lỗi nghiệp vụ; error quá lớn cũng thành INTERNAL_ERROR ngắn. Diagnostic lỗi tối đa 4 lớp exception/cause, mỗi lớp 12 stack frame; bỏ toàn bộ message/Throwable thô. `mvnw.cmd -B -ntp -Pdb-it verify` đã pass 283 unit/mock + 25 PostgreSQL integration test, gồm 69 unit dispatch/handler/mapper và 5 RequestDispatcherIT mới. Integration đi qua serialized Request/Response → dispatcher → service → PostgreSQL, chưa dùng socket thật.
 
 ### 9.3. Service – trách nhiệm & quy tắc chính
+
+**Domain User (task 4.1.1):** entity bất biến, không Serializable, chỉ chứa passwordHash, không chứa mật khẩu thô. Factory `User.createNew(...)` dùng `id=0`, `createdAt=null`, `active=true`; `User.restore(...)` yêu cầu ID dương và timestamp khác null, giữ trạng thái active đã lưu. `createdBy` null cho bootstrap hoặc ID dương. Username tối đa 50 ký tự Unicode, fullName/email tối đa 100, hash không rỗng và tối đa 255; email trống thành null. Lỗi invariant là `IllegalArgumentException`; domain không phụ thuộc exception/service/JDBC. `toString()` không chứa hash. Validation định dạng email và băm/kiểm tra BCrypt thuộc service/security.
+
+**UserRepository (task 4.1.2):** interface trả `Optional<User>` khi tìm theo username/ID, `boolean` khi kiểm tra tồn tại username/email, `User` đã được DB cấp ID/timestamp khi `save`, `List<User>` theo ID tăng dần khi `findAll`, và `boolean` khi `updateActiveStatus`. `save` chỉ INSERT user mới (ID 0, chưa có timestamp); không upsert user đã lưu. Email null không trùng. Cập nhật đúng trạng thái hiện tại vẫn trả true nếu ID tồn tại, ID không có trả false. Có overload nhận `Connection` cho `findById`, `save`, `updateActiveStatus` để dùng trong transaction của service: không mở connection thứ hai, không đóng connection caller, không đổi autoCommit/commit/rollback. API thông thường quản lý connection riêng. Repository không thực thi phân quyền; service kiểm tra actor. Lỗi tham số trả `IllegalArgumentException`; lỗi unique username/email trả `ConflictException`, lỗi DB khác trả `QuizException(DATABASE_ERROR)` với thông báo chung và cause. JDBC implementation thuộc task 4.1.3.
+
+**JdbcUserRepository (task 4.1.3 đã triển khai):** inject `DataSource`, dùng `PreparedStatement` và `INSERT ... RETURNING`, map `TIMESTAMPTZ` qua `OffsetDateTime` về `Instant`, giữ nullable email/createdBy. SQLSTATE `23505` cùng tên constraint `users_username_key`/`users_email_key` của schema hiện tại được chuyển thành CONFLICT; lỗi unique khác (kể cả users_pkey), FK, kết nối/query/mapping trả DATABASE_ERROR. Không parse thông báo SQL hoặc đưa chi tiết DB vào thông báo lỗi. Statement/ResultSet được đóng, connection do caller cung cấp và transaction của nó được giữ nguyên. Kiểm chứng task 4.1.4 ngày 10/10/2026: `mvnw.cmd -B -ntp -Pdb-it clean verify` thành công, 149 unit/mock test + 14 PostgreSQL integration test, 0 failures/errors/skipped. Đã kiểm tra UNIQUE, FK, Unicode, timestamp theo timezone, ownership connection, commit/rollback và hai INSERT trùng đồng thời. Xem mục 15.5 để cấu hình DB test.
+
+**Contract services task 4.2:** `AuthService.login(username, password)` trả `AuthResult(token, User)` nội bộ, không Serializable và không lộ token/hash qua toString; handler sau này map sang LoginResultDto. `authenticate(token)` kiểm tra phiên hiện hành và đọc lại user active/role từ DB; `logout(token)` nội bộ idempotent và chỉ xóa đúng token. `AccountService.createAccount(dto, adminId)`, `listAccounts(adminId)`, `setAccountActive(userId, active, adminId)` đều tự kiểm tra actor trong DB; actor thiếu/inactive trả UNAUTHENTICATED, sai role trả FORBIDDEN. Create/set kiểm tra lại actor trong transaction ghi, không SQL/socket trong service. Mật khẩu tạo mới tối thiểu 8 Unicode code point và tối đa 72 byte UTF-8; login không áp dụng ngưỡng 8. Email chỉ kiểm tra định dạng cơ bản local@domain.suffix, không xác minh mailbox. `SessionCoordinator` dùng số khóa cố định theo userId; cùng một instance dùng chung cho Auth/Account để login, xác thực, logout và khóa user phối hợp. BCrypt ở ngoài critical section/transaction ghi; khóa target giữ qua commit và thu hồi phiên. Bind/cleanup socket sẽ triển khai ở task 4.4.
+
+**Task 4.2 đã triển khai:** constructor `AuthService(UserRepository, SessionCoordinator)` và `AccountService(UserRepository, TransactionManager, SessionCoordinator)`; coordinator giữ SessionRegistry và 128 khóa cố định, không tạo map khóa tăng theo số user. `withCurrentSession(token, callback)` kiểm tra token trước/sau callback trong cùng khóa; `withUserLock(userId, callback)` dùng cho đọc lại active trước login và commit/thu hồi phiên khi khóa account. Callback không thực hiện socket I/O hoặc lấy khóa của user khác. Bootstrap phải chia sẻ một coordinator giữa các service; network sau này phối hợp bind qua tầng dispatch để giữ phụ thuộc network → dispatch. Kiểm chứng 10/10/2026: `mvnw.cmd -B -ntp -Pdb-it clean verify` → BUILD SUCCESS, 214 unit/mock + 20 PostgreSQL integration test (gồm 65 unit service/concurrency và 6 AuthAccountServiceIT mới), 0 failures/errors/skipped. Các service chưa được nối vào socket/dispatcher/UI.
 
 | Service | Trách nhiệm | Lưu ý |
 |---|---|---|
@@ -485,13 +518,13 @@ UPDATE attempts SET status='SUBMITTED', submitted_at=? WHERE id=? AND status='IN
 ## 10. Thiết kế client (JavaFX)
 
 ### 10.1. Mạng
-- `ServerConnection`: giữ socket; **1 reader thread**; `ConcurrentHashMap<Long, CompletableFuture<Response>> pending`. Gửi request → tạo future theo `requestId` → reader nhận response thì `complete`. Response có `pushType != null` → chuyển cho `PushListener`. Mất kết nối → fail toàn bộ future bằng `ConnectionLostException`. Có timeout cho mỗi request (cấu hình).
+- `ServerConnection`: mỗi generation có **1 reader**, writer tuần tự với queue hữu hạn và pending map được bảo vệ bằng khóa trạng thái. Request đăng ký future trước khi enqueue; reader ghép response theo `requestId`, complete future ngoài reader/khóa. PUSH được chuyển qua hàng đợi riêng có giới hạn, giữ thứ tự. Lỗi mạng/protocol/timeout trả `TransportException` có `Kind`; timeout đóng cả generation và fail toàn bộ pending, không tự retry.
 - `QuizApi`: mỗi method tương ứng 1 `MessageType`, trả `CompletableFuture<T>` (đã giải DTO/ném lỗi nghiệp vụ theo `ErrorCode`). Không phải gọi `Request`/`Response` trực tiếp ở controller.
-- `ClientSession`: user, token, role, attempt hiện tại.
+- `ClientSession`: snapshot bất biến gồm generation, token, userId, username, fullName, role; chỉ hiện phiên khi generation còn kết nối. Chưa lưu attempt trong task 5.1; bổ sung khi triển khai phân hệ thi.
 
 ### 10.2. UI
 - `SceneNavigator` chuyển màn theo role sau login: STUDENT → `student/dashboard`; TEACHER → `teacher/*`; ADMIN → như TEACHER + `admin/account`.
-- Controller chỉ: đọc input, gọi `QuizApi`, cập nhật UI qua `FxAsync.run(...)`. Hiển thị trạng thái loading, validate input, hộp thoại lỗi rõ ràng (NFR-06).
+- Controller chỉ: đọc input, gọi `QuizApi`, cập nhật UI qua instance `FxAsync.run(...)` hoặc `observe(...)`. `observe` kiểm tra màn hình còn hiệu lực trên FX thread và reset busy bằng callback `done`, kể cả khi lỗi/hủy. Hiển thị trạng thái loading, validate input, hộp thoại lỗi rõ ràng (NFR-06).
 - **Màn hình làm bài (`student/exam`)**: danh sách điều hướng câu (đã/chưa trả lời), chọn đáp án → gọi `SAVE_ANSWER` ngay; `TimerLabel` dùng `remainingSeconds` từ server + `System.nanoTime()` (đơn điệu, không phụ thuộc đồng hồ máy), **đồng bộ lại** mỗi lần `SAVE_ANSWER` trả về; hết giờ → gọi `SUBMIT_ATTEMPT` (server vẫn tự nộp nếu client không gọi). Nhận `PUSH_FORCE_SUBMITTED` → khóa UI và chuyển sang màn kết quả.
 
 ---
@@ -575,10 +608,14 @@ server.max.connections=100
 server.worker.pool.size=8
 server.worker.queue.capacity=200
 server.request.grace.seconds=3
+server.handshake.timeout.ms=5000
+server.read.timeout.ms=300000
+server.shutdown.timeout.ms=10000
 
 db.url=jdbc:postgresql://localhost:5432/quizdb
 db.user=quiz
-db.password=change-me
+# Set DB_PASSWORD externally; blank or placeholder passwords are rejected.
+db.password=
 db.pool.max.size=10
 ```
 
@@ -588,7 +625,9 @@ server.host=localhost
 server.port=5555
 request.timeout.seconds=10
 ```
-Có thể ghi đè bằng biến môi trường/system property (đặc biệt `db.password`; **không commit mật khẩu thật**).
+Có thể ghi đè bằng biến môi trường/system property (đặc biệt `db.password`; **không commit mật khẩu thật**). Thứ tự ưu tiên: environment → system property → file. Phải cấp `DB_PASSWORD` hoặc `db.password` hợp lệ; không còn mật khẩu fallback. `ServerMain` hỗ trợ `--config <path>` để đọc file `*-local.properties` không được commit. Ba timeout mới phải > 0, hỗ trợ `SERVER_HANDSHAKE_TIMEOUT_MS`, `SERVER_READ_TIMEOUT_MS`, `SERVER_SHUTDOWN_TIMEOUT_MS`.
+
+Handshake/read dùng `Socket.setSoTimeout`: giới hạn thời gian chờ mỗi lần đọc, không phải write timeout, TTL phiên hay deadline toàn bộ frame; client nhỏ giọt có thể kéo dài tổng thời gian đọc. Shutdown ngừng accept/submit, dành nửa ngân sách chờ worker rồi đóng mọi socket (kể cả chưa login hoặc đang ghi), cancel task còn chờ và dọn registry. Đóng socket giải phóng writer bị client đọc chậm. Sau đó bootstrap đóng pool DB. Nếu hết ngân sách, worker bị interrupt nhưng JDBC có thể chưa dừng; chưa bảo đảm trần thời gian shutdown toàn hệ thống khi driver/query bỏ qua interrupt. TLS, TTL, rate limit và deadline chống nhỏ giọt còn thuộc backlog.
 
 ---
 
@@ -596,27 +635,386 @@ Có thể ghi đè bằng biến môi trường/system property (đặc biệt `
 
 **Phần mềm:** JDK 21, Maven 3.9+, PostgreSQL 15+, (IDE tùy chọn). Thư viện chính: JavaFX 21, PostgreSQL JDBC, HikariCP, BCrypt, SLF4J + Logback, JUnit 5, Mockito.
 
-**Cài đặt**
-1. Cài JDK 21, Maven, PostgreSQL.
-2. Tạo DB và user: `quizdb`, `quiz`.
-3. Chạy `database/schema.sql` rồi `database/seed.sql`.
-4. Sửa `server.properties` (db url/user/password).
-5. Build: `mvn clean verify`.
+### 15.1. Cài PostgreSQL trên Windows
 
-**Chạy**
+Tải bản PostgreSQL 18 ổn định từ [trang download Windows chính thức](https://www.postgresql.org/download/windows/), mở installer và chọn:
+
+- **PostgreSQL Server**, **Command Line Tools**, **pgAdmin 4**.
+- Port **5432**; nếu dùng port khác, thay port trong tất cả lệnh và JDBC URL dưới đây.
+- Đặt mật khẩu riêng cho role quản trị **postgres**, ghi nhớ để tạo role/database.
+- Chọn Data Directory mới, ví dụ `C:\PostgreSQLData\quiz18`. Nếu máy còn thư mục dữ liệu từ lần cài trước, giữ lại và dùng thư mục mới cho hướng dẫn này.
+- Stack Builder có thể bỏ qua; project chỉ cần PostgreSQL và JDBC dependency đã có trong Maven.
+
+Xem [hướng dẫn installer của EDB](https://www.enterprisedb.com/docs/supported-open-source/postgresql/installing/windows/) nếu cần chi tiết.
+
+Mở PowerShell **tại thư mục gốc project**, nơi có `pom.xml`, `mvnw.cmd` và thư mục `database`. Các lệnh bên dưới chạy trong cùng cửa sổ PowerShell. Nếu cài phiên bản/vị trí khác, sửa `$pgBin`:
+
+```powershell
+$pgBin = 'C:\Program Files\PostgreSQL\18\bin'
+$env:PGCLIENTENCODING = 'UTF8'
+
+& "$pgBin\psql.exe" --version
+& "$pgBin\pg_isready.exe" -h 127.0.0.1 -p 5432
+```
+
+`pg_isready` cần báo **accepting connections**. Nếu không, kiểm tra dịch vụ PostgreSQL trong Windows Services và port đã chọn khi cài.
+
+### 15.2. Tạo role và database phát triển/kiểm thử
+
+| Mục đích | Database | Role kết nối |
+|---|---|---|
+| Phát triển, dữ liệu demo | `quizdb` | `quiz` |
+| Integration test riêng | `quizdb_test` | `quiz_test` |
+
+Kết nối quản trị; nhập mật khẩu **postgres** đã đặt trong installer:
+
+```powershell
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d postgres -W
+```
+
+Tại prompt `postgres=#`, nhập **từng lệnh** sau. `\password` sẽ yêu cầu nhập mật khẩu mới hai lần; mật khẩu không hiện trên terminal. Đây là các lệnh trong **psql**, không phải lệnh PowerShell:
+
+```sql
+CREATE ROLE quiz LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+\password quiz
+CREATE DATABASE quizdb OWNER quiz ENCODING 'UTF8' TEMPLATE template0;
+
+CREATE ROLE quiz_test LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+\password quiz_test
+CREATE DATABASE quizdb_test OWNER quiz_test ENCODING 'UTF8' TEMPLATE template0;
+\q
+```
+
+Chạy CREATE DATABASE riêng, không bao trong BEGIN/COMMIT. Nếu role/database đã tồn tại, kiểm tra cấu hình hiện hữu trước khi tiếp tục; không xóa database để chạy lại hướng dẫn. [Tài liệu CREATE DATABASE](https://www.postgresql.org/docs/18/sql-createdatabase.html), [psql và `\password`](https://www.postgresql.org/docs/18/app-psql.html).
+
+### 15.3. Khởi tạo schema và kiểm tra bảng
+
+Trở lại PowerShell, chạy **một lần trên mỗi database mới**. Mỗi lệnh dùng mật khẩu của role trong tham số `-U`:
+
+```powershell
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz -d quizdb -W -v ON_ERROR_STOP=1 -f database/schema.sql
+
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz_test -d quizdb_test -W -v ON_ERROR_STOP=1 -f database/schema.sql
+```
+
+Cả hai lệnh cần kết thúc bằng **COMMIT**, không có ERROR. Sau đó kiểm tra:
+
+```powershell
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz -d quizdb -W -c "\dt"
+
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz_test -d quizdb_test -W -c "\dt"
+```
+
+Kết quả dự kiến là **11 bảng**, gồm users, classes, class_members, questions, quizzes, quiz_questions, quiz_assignments, attempts, attempt_answers, results, anticheat_events.
+
+Schema có transaction, không DROP bảng và báo lỗi nếu bảng đã tồn tại; không dùng script này làm migration. Lỗi trước COMMIT khiến các bảng vừa tạo bị rollback khi kết nối đóng. Chỉ chạy seed sau khi schema thành công.
+
+### 15.4. Seed demo — chỉ cho database phát triển
+
+Trên `quizdb` vừa tạo schema và còn trống:
+
+```powershell
+& "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz -d quizdb -W -v ON_ERROR_STOP=1 -c "SET quiz.allow_demo_seed = 'on'" -f database/seed.sql
+```
+
+Seed cần opt-in, bảng users trống và các sequence liên quan chưa dùng. Kết quả phải kết thúc bằng COMMIT. Tài khoản ứng dụng mẫu: `admin`, `teacher1`, `teacher2`, `student01`–`student50`, cùng mật khẩu **password123**. Đây là tài khoản Online Quiz, khác với các role PostgreSQL `postgres`/`quiz`/`quiz_test`; chỉ dùng cho demo, không dùng triển khai thật.
+
+Giữ `quizdb_test` **không có seed demo** để integration test tạo fixture riêng.
+
+### 15.5. Cấu hình JDBC và mật khẩu local
+
+Mặc định `server.properties` dùng `jdbc:postgresql://localhost:5432/quizdb`, role `quiz`, password để trống và bắt buộc cấp từ bên ngoài. Để chuẩn bị cấu hình phát triển, đặt trong PowerShell:
+
+```powershell
+$env:DB_URL = 'jdbc:postgresql://127.0.0.1:5432/quizdb'
+$env:DB_USER = 'quiz'
+$taskDbSecret = Read-Host 'Mật khẩu PostgreSQL của role quiz' -AsSecureString
+$env:DB_PASSWORD = [System.Net.NetworkCredential]::new('', $taskDbSecret).Password
+Remove-Variable taskDbSecret
+```
+
+ServerConfig đọc các biến này; password không được ghi vào README hoặc file properties đã track. Cũng có thể dùng `ServerConfig.load(Path)` với file `*-local.properties` đã được gitignore. Biến môi trường trên chỉ có trong phiên PowerShell hiện tại và tiến trình khởi chạy từ phiên đó. `PGCLIENTENCODING` dành cho psql, không phải cấu hình JDBC.
+
+**Cấu hình PostgreSQL integration test (`db-it`):** tạo file UTF-8 `db-test-local.properties` tại thư mục gốc project, điền mật khẩu của role `quiz_test` tại máy. File khớp `*-local.properties` trong gitignore và không được commit:
+
+```properties
+db.url=jdbc:postgresql://127.0.0.1:5432/quizdb_test
+db.user=quiz_test
+db.password=
+```
+
+Nếu mật khẩu chứa dấu backslash, viết `\\` cho một backslash trong file properties. Có thể thay cấu hình file bằng `QUIZ_TEST_DB_URL`, `QUIZ_TEST_DB_USER`, `QUIZ_TEST_DB_PASSWORD`; các biến test này ưu tiên hơn file. Test không dùng `DB_URL`/`DB_USER`/`DB_PASSWORD` của ứng dụng làm fallback. Có thể chọn file khác bằng tham số `"-Dquiz.test.config=<đường dẫn file>"`.
+
+Profile chỉ chấp nhận JDBC URL localhost/127.0.0.1 với port hợp lệ, database **quizdb_test** và role **quiz_test**; từ chối URL có query parameter. Test kiểm tra lại database/role kết nối thực tế và đủ 11 bảng trước khi tạo fixture. Thiếu cấu hình/mật khẩu, DB không kết nối được hoặc thiếu schema sẽ làm build fail, không skip. Test dọn đúng username UUID của fixture sau mỗi ca; không truncate bảng, không reset sequence, không chạy seed. Các lần INSERT kể cả rollback có thể làm tăng sequence ID; không dùng DB test này để seed demo yêu cầu sequence chưa dùng.
+
+### 15.6. Xử lý lỗi setup thường gặp
+
+| Lỗi | Cách xử lý |
+|---|---|
+| `fe_sendauth: no password supplied` | Nhập mật khẩu khi hiện Password; ký tự không hiện là bình thường. Không nhấn Enter khi chưa nhập |
+| Chuyển encoding WIN1252 sang UTF8 thất bại | Đặt `$env:PGCLIENTENCODING = 'UTF8'` rồi chạy lại schema. Schema/seed đã khai báo `SET client_encoding TO 'UTF8'` đầu file, trước comment tiếng Việt |
+| `relation "users" does not exist` khi seed | Schema chưa chạy thành công hoặc đang kết nối sai DB; chạy schema trước và kiểm tra `\dt` |
+| `Did not find any tables` | Kiểm tra đúng database/role, xem ERROR từ bước schema. Nếu schema bị lỗi giữa chừng, transaction đã rollback |
+| `relation ... already exists` | Schema đã có hoặc DB không mới; không chạy lại script khởi tạo, kiểm tra bảng trước |
+| `connection refused` / `no response` | Kiểm tra dịch vụ PostgreSQL đã chạy, host và port đúng |
+
+Các file SQL của project là UTF-8. [Tài liệu PostgreSQL về client encoding](https://www.postgresql.org/docs/18/multibyte.html).
+
+### 15.7. Build và chạy
+
+Build bằng Maven Wrapper của project:
+
+```powershell
+.\mvnw.cmd -B -ntp clean verify
+```
+
+Chạy thêm PostgreSQL integration test sau khi chuẩn bị mục 15.2–15.3 và file cấu hình test ở mục 15.5:
+
+```powershell
+.\mvnw.cmd -B -ntp -Pdb-it clean verify
+```
+
+Surefire chạy `*Test` mặc định; profile `db-it` dùng Failsafe chạy `*IT` ở integration-test/verify. Cả hai dùng classpath trực tiếp (`useManifestOnlyJar=false`) để tránh lỗi manifest classpath khác ổ đĩa trên Windows. Report unit nằm ở `quiz-server/target/surefire-reports`, report DB ở `quiz-server/target/failsafe-reports`.
+
+**Chạy server (PowerShell tại thư mục project)**
+
+Tạo `server-local.properties` bằng cách sao chép `quiz-server/src/main/resources/server.properties`, điền `db.password` của role `quiz` trên máy. File `*-local.properties` được Git ignore. Giữ `db.url` trỏ tới `quizdb` khi chạy ứng dụng; không dùng cấu hình test cho dữ liệu ứng dụng. Environment có ưu tiên cao hơn file, nên kiểm tra các biến `DB_*`/`SERVER_*` nếu cấu hình thực tế khác file.
+
+```powershell
+# Install common/server để exec:java phân giải dependency giữa các module.
+.\mvnw.cmd -B -ntp -pl quiz-server -am install '-DskipTests'
+.\mvnw.cmd -B -ntp -pl quiz-server exec:java '-Dexec.args=--config server-local.properties'
+```
+
+Server kiểm tra truy cập bảng `users` trước khi mở port; không tự chạy schema hoặc seed. Sai cấu hình, thiếu bảng/quyền DB hoặc port đã dùng sẽ làm startup thất bại và đóng pool. Dùng Ctrl+C để shutdown. Port thực tế phải 1–65535; port 0 chỉ dùng khi inject `QuizServer` trong test.
+
+Mỗi socket tạo/flush ObjectOutputStream trước khi đọc header; dùng `MessageCodec.write/read` cho frame. Socket chỉ xử lý một request tại một thời điểm, giữ thứ tự request; socket khác vẫn được worker pool phục vụ. Vượt giới hạn connection thì socket mới đóng mà không gửi response giả. Worker pool cố định, queue hữu hạn; queue đầy trả SERVER_BUSY với đúng requestId. LOGIN thành công bind token vào socket và đóng socket phiên cũ; LOGIN lần nữa trên socket còn binding trả CONFLICT. Token từ socket khác bị từ chối. LOGOUT bỏ binding nhưng giữ socket để LOGIN lại; disconnect chỉ thu hồi token thuộc socket đó.
+
+**Client JavaFX — đăng nhập/đăng xuất đã chạy được**
+
+```powershell
+# Cài dependency giữa các module rồi mở client.
+.\mvnw.cmd -B -ntp -pl quiz-client -am install '-DskipTests'
+.\mvnw.cmd -B -ntp -pl quiz-client javafx:run
+
+# Tệp cấu hình ngoài: dùng đường dẫn tuyệt đối nếu đặt ngoài thư mục quiz-client.
+.\mvnw.cmd -B -ntp -pl quiz-client javafx:run '-Djavafx.args=--config D:/path/to/client-local.properties'
+```
+
+Client khởi động tại màn Login, mở kết nối khi người dùng submit. Nhập username/password và bấm Đăng nhập hoặc Enter; đăng nhập thành công chuyển màn theo role, nút Đăng xuất kết thúc phiên và về Login. Admin xem/tạo/khóa/mở khóa tài khoản (mục 15.12); Teacher/Student còn là khung bàn giao. Xem mục 15.11 cho hành vi và test của Login.
+
+**Benchmark (entrypoint chưa triển khai)**
+
 ```bash
-# Server
-mvn -pl quiz-server exec:java -Dexec.mainClass=quiz.server.ServerMain
-# Client (mở nhiều cửa sổ để thử nhiều học viên)
-mvn -pl quiz-client javafx:run
 # Benchmark (server phải đang chạy)
 mvn -pl quiz-benchmark exec:java -Dexec.mainClass=quiz.benchmark.LoadTestRunner -Dexec.args="--clients 10 --output results.csv"
 ```
-Tài khoản mẫu: xem `database/seed.sql` (ghi username/mật khẩu mẫu vào đây khi hoàn thành).
+Tài khoản mẫu: xem mục 15.4 và `database/seed.sql`.
 
-**Test:** `mvn test` (unit) · `mvn verify` (kèm integration/network, cần DB test `quizdb_test`).
+**Test hiện tại:** nghiệm thu task 5.4 ngày 12/10/2026 bằng `.\mvnw.cmd -B -ntp '-Pdb-it,login-it' verify` đã pass **351 unit/mock/socket + 30 PostgreSQL server IT + 52 JavaFX/Login/Account IT = 433 tests**, 0 failures/errors/skipped. Môi trường: Windows 11, Oracle JDK 21.0.9, Maven Wrapper 3.9.9; DB local `quizdb_test` với role `quiz_test`. Test mặc định gồm 12 common, 283 server và 56 client. `ui-it` chạy 46 test UI/peer; `login-it` chạy thêm 6 E2E form Login/Account với server/PostgreSQL thật. Login và Admin Account đã hoàn tất (mục 15.11–15.12), dashboard Teacher/Student vẫn là khung bàn giao; benchmark chưa triển khai. Lần nghiệm thu 5.3 trước đó pass 410 tests.
 
 ---
+
+### 15.8. Bàn giao Auth/Account cho client (giai đoạn 5)
+
+**Contract trên TCP:** dùng các class trong `quiz-common`, không gửi JSON hoặc Java domain `User`. Hai đầu tạo `ObjectOutputStream`, flush header rồi tạo input bằng `MessageCodec.createFilteredInputStream`; gửi/đọc từng envelope qua `MessageCodec.write/read`. Request ID dương, tăng theo connection; response thông thường giữ ID đó và `pushType=null`. Payload bên dưới là kết quả khi `success=true`; khi thất bại, đọc `errorCode`, không suy luận lỗi từ chuỗi `message`.
+
+| MessageType | Quyền và token | Request payload | Response payload khi thành công |
+|---|---|---|---|
+| LOGIN | Socket chưa bind; `token=null` | `LoginRequestDto(username, password)` | `LoginResultDto(token, userId, username, fullName, role)` |
+| LOGOUT | ADMIN/TEACHER/STUDENT; token hiện hành của chính socket | `null` | `null`; bỏ token local, giữ socket để LOGIN lại |
+| CREATE_ACCOUNT | ADMIN; token của socket | `CreateAccountDto(username, password, fullName, email, role)` | `AccountDto` của account mới, `active=true` |
+| LIST_ACCOUNTS | ADMIN; token của socket | `null` | `ArrayList<AccountDto>`, gồm cả account inactive, thứ tự ID tăng |
+| SET_ACCOUNT_ACTIVE | ADMIN; token của socket | `SetAccountActiveDto(userId, active)` | `null`; client tải lại danh sách để cập nhật trạng thái |
+
+`AccountDto` gồm `id, username, fullName, email, role, active, createdBy, createdAt`; email/createdBy có thể null, createdAt là `Instant`. Không có password/passwordHash. `createdBy` được server lấy từ phiên Admin, client không gửi actor ID. Username phân biệt hoa/thường; username/fullName/email được strip, giới hạn tương ứng 50/100/100 Unicode code point. Email rỗng thành null, email có giá trị phải đúng định dạng cơ bản `local@domain.suffix`. Password không trim; tạo mới ít nhất 8 code point và tối đa 72 byte UTF-8, LOGIN chỉ kiểm tra không blank và tối đa 72 byte. Chỉ tạo TEACHER/STUDENT; không tạo ADMIN hoặc thay trạng thái ADMIN qua API này.
+
+| errorCode/tình huống | Cách xử lý ở client |
+|---|---|
+| INVALID_CREDENTIALS | Báo sai thông tin đăng nhập; không tiết lộ username có tồn tại hay không |
+| ACCOUNT_DISABLED | LOGIN với mật khẩu đúng nhưng tài khoản bị khóa; không lưu phiên |
+| UNAUTHENTICATED | Token thiếu, bị thu hồi, khác socket hoặc account không còn active: xóa phiên local, đóng socket và reconnect trước LOGIN |
+| FORBIDDEN | Sai role, tạo ADMIN hoặc đổi trạng thái ADMIN: báo không có quyền, không tự sửa role local |
+| CONFLICT | Username/email trùng, hoặc LOGIN trên socket còn binding; với trùng tài khoản sửa form, với LOGIN hãy LOGOUT hợp lệ hoặc reconnect |
+| VALIDATION_ERROR / NOT_FOUND | Giá trị form/ID không hợp lệ hoặc target không còn tồn tại; sửa form/tải lại danh sách |
+| INVALID_REQUEST | DTO sai loại, payload thừa hoặc envelope/lệnh không hỗ trợ ở dispatcher; kiểm tra code gửi request |
+| SERVER_BUSY | Giữ phiên nếu còn kết nối; hiển thị bận và cho thử lại. Không tự động retry thao tác ghi khi không biết kết quả trước đó |
+| DATABASE_ERROR / INTERNAL_ERROR | Hiển thị thông báo chung; không parse SQL/stack trace. LIST_ACCOUNTS vượt giới hạn codec cũng trả INTERNAL_ERROR, chưa phân trang |
+| EOF, timeout, frame lỗi, mất socket | Fail các future đang chờ, xóa phiên local; request ghi mất response có kết quả chưa xác định, không tự gửi lại |
+
+Guard kiểm tra quyền/phiên trước payload nghiệp vụ; một request sai DTO nhưng chưa được xác thực có thể nhận UNAUTHENTICATED. Frame sai, Response từ client hoặc Request không có ID dương làm server đóng socket, không trả ID giả. Việc khóa account thu hồi token sau commit, chưa gửi PUSH hoặc chủ động đóng ngay socket đó. Request tiếp theo nhận UNAUTHENTICATED; mở khóa không phục hồi token cũ. Socket còn binding sau thu hồi không dùng cho LOGIN lại; reconnect tạo phiên mới. Login ở socket mới thay phiên hiện hành và đóng socket cũ; cleanup của socket cũ giữ nguyên phiên mới.
+
+**Ví dụ client test thực thi:** `quiz-server/src/test/java/quiz/server/integration/ServerBootstrapIT.java`, ca `realBootstrapHandlesFiveMessagesAndShutsDown`, tự tạo fixture Admin, mở TCP và thực hiện:
+
+```java
+new Request(1, MessageType.LOGIN, null, new LoginRequestDto(admin.username(), PASSWORD));
+// Đọc LoginResultDto từ response thành công, lấy token cho các request tiếp theo.
+new Request(2, MessageType.CREATE_ACCOUNT, token,
+    new CreateAccountDto(username, PASSWORD, "Nguyễn Việt", null, Role.STUDENT));
+new Request(3, MessageType.LIST_ACCOUNTS, token, null);
+new Request(4, MessageType.SET_ACCOUNT_ACTIVE, token, new SetAccountActiveDto(created.id(), false));
+new Request(5, MessageType.LOGOUT, token, null);
+```
+
+Đây là các envelope trích từ test; test gửi từng request bằng codec, kiểm tra correlation/success và lấy ID/token từ response trước. `PASSWORD` là fixture test, không phải mật khẩu DB hay tài khoản ứng dụng. Ca `rolePermissionsAndDisableReenableRequireFreshSocketSession` chạy riêng cho TEACHER/STUDENT: ba API quản trị trả FORBIDDEN, khóa làm token cũ hết hiệu lực, LOGIN khi bị khóa trả ACCOUNT_DISABLED, mở khóa vẫn phải có token mới trên socket mới. Fixture dùng tên UUID, chỉ xóa các account do test tạo, không dùng seed hoặc reset DB.
+
+Chạy riêng client smoke/contract trên DB test đã chuẩn bị ở mục 15.5:
+
+```powershell
+.\mvnw.cmd -B -ntp -pl quiz-server -am -Pdb-it verify '-Dit.test=ServerBootstrapIT'
+```
+
+Lệnh này vẫn chạy unit/socket test mặc định; phần Failsafe chỉ chọn `ServerBootstrapIT`. Client fixture trong test server này là đồng bộ. API client chính thức có test localhost riêng (mục 15.9); task 5.3 bổ sung E2E form Login với server thật/PostgreSQL bằng profile `login-it` (mục 15.11). Chỉ lưu token sau LOGIN thành công; không log Request/DTO chứa mật khẩu/token. TLS, session TTL, rate limit, deadline chống client nhỏ giọt và E2E các phân hệ khác còn là backlog; shutdown server chưa bảo đảm JDBC dừng theo ngân sách khi driver bỏ qua interrupt.
+
+**Bằng chứng nghiệm thu giai đoạn 4:**
+
+| Nội dung | Test kiểm chứng |
+|---|---|
+| SQL/mapping, transaction rollback, UNIQUE khi hai thao tác tạo trùng đồng thời | `JdbcUserRepositoryIT`, `AuthAccountServiceIT` |
+| Quyền Admin/Teacher/Student, DTO và đủ 5 lệnh | `AuthGuardTest`, `RequestDispatcherTest`, `RequestDispatcherIT`, `ServerBootstrapIT` |
+| Băm mật khẩu, DTO không chứa hash, lỗi/log dispatcher không chứa dữ liệu nhạy cảm | `PasswordHasherTest`, `DtoMapperTest`, `RequestDispatcherTest`, `RequestDispatcherIT` |
+| Login/logout/reconnect/disable/reenable, cleanup không mất phiên mới | `SessionCoordinatorTest`, `AuthAccountServiceIT`, `SessionLifecycleTest`, `QuizServerTest`, `ServerBootstrapIT` |
+| Frame/allowlist/budget, timeout, admission, bounded queue, writer chậm và shutdown | `MessageCodecSecurityTest`, `QuizServerTest`, `ClientHandlerTest` |
+| CLI/config, bootstrap thực tế, port bị chiếm, bảng users không truy cập được | `ServerMainTest`, `ServerBootstrapIT` |
+
+Report Surefire: `quiz-common/target/surefire-reports` (12 ca), `quiz-server/target/surefire-reports` (283 ca); Failsafe: `quiz-server/target/failsafe-reports` (30 ca, gồm 5 `ServerBootstrapIT`). Không commit report sinh ra hoặc file cấu hình chứa mật khẩu.
+
+### 15.9. Socket client & API bất đồng bộ — task 5.1
+
+**Đã triển khai ở task 5.1:** `config/ClientConfig`, `network/ServerConnection`, `TransportException`, `PushListener`, `session/ClientSession`, `api/QuizApi`, `ApiException`, `ClientValidation`, `util/FxAsync`. Các package đều nằm dưới `quiz.client`; production client chỉ dùng `quiz-common`, không phụ thuộc server/DB. Task 5.2 đã nối các dependency này vào ClientMain và màn hình khung (mục 15.10).
+
+`ClientConfig.load()` đọc resource `client.properties`. `load(Path)` ghi đè một phần bằng file ngoài; `fromArgs()` nhận không tham số hoặc đúng `--config <path>`, đã được nối vào entrypoint. Chưa áp dụng environment/system-property overrides ở client. Mọi giá trị dưới đây phải là số nguyên dương, port không vượt 65535, host không blank.
+
+| Khóa cấu hình | Mặc định | Ý nghĩa |
+|---|---:|---|
+| `server.host` | `localhost` | Host server, strip khoảng trắng |
+| `server.port` | `5555` | Cổng TCP |
+| `connect.timeout.ms` | `5000` | Timeout TCP connect |
+| `handshake.timeout.ms` | `5000` | Timeout đọc header; watchdog tổng connect + handshake |
+| `request.timeout.ms` | `30000` | Deadline request kể cả thời gian chờ writer |
+| `max.pending.requests` | `64` | Giới hạn pending, dung lượng queue writer và queue PUSH |
+| `shutdown.timeout.ms` | `3000` | Ngân sách chờ tài nguyên của mỗi generation dừng |
+
+**Cách dùng trong controller:** ClientMain tạo một `QuizApi(new ServerConnection(config))` dùng chung cho vòng đời ứng dụng. Gọi `api.connect()` rồi `api.login(username, password)`; không gọi `get/join` trên FX thread. `connect()` trả future chứa generation; nhiều caller cùng connect dùng chung handshake. `login()` yêu cầu kết nối đã sẵn sàng và không tự reconnect. `ClientValidation` strip text/giữ hoa thường, giữ nguyên password và kiểm tra code point/UTF-8 đúng contract mục 15.8.
+
+| Method | Future kết quả |
+|---|---|
+| `login(String username, String password)` | `LoginResultDto` |
+| `logout()` | `Void` |
+| `createAccount(CreateAccountDto dto)` | `AccountDto` |
+| `listAccounts()` | `List<AccountDto>` bất biến, kiểm tra từng phần tử |
+| `setAccountActive(long userId, boolean active)` | `Void` |
+
+- `api.session().current()` chỉ trả snapshot khi socket của nó vẫn kết nối; không lưu password hoặc token ra file. Snapshot `toString()` không chứa token. Không log LoginResultDto/Request/CreateAccountDto vì DTO vẫn có thể chứa bí mật.
+- `ApiException.errorCode()` giữ mã nghiệp vụ; `TransportException.kind()` phân biệt CONNECTION_LOST, TIMEOUT, PROTOCOL, OVERLOADED, CLOSED. Không dùng message server làm nội dung lỗi trực tiếp. OVERLOADED ở đường gửi request nghĩa là request chưa được gửi; SERVER_BUSY là phản hồi nghiệp vụ server.
+- Một reader giải frame; một writer có queue hữu hạn ghi tuần tự. Future được complete ngoài reader/khóa. PUSH hợp lệ có ID 0 và một trong hai pushType đã định nghĩa; queue riêng giữ thứ tự, listener lỗi được cô lập. Queue PUSH đầy sẽ đóng connection để tránh tích lũy vô hạn hoặc âm thầm mất sự kiện.
+- Timeout/EOF/frame sai/I/O làm đóng đúng generation và fail mọi pending. Timer được hủy khi response/cancel/close. Callback và cleanup cũ không tác động socket mới. Response trùng/đã hủy được bỏ qua; ID chưa cấp hoặc envelope sai đóng kết nối.
+- Cancel future từ `QuizApi` đóng generation liên quan để tránh phiên hoặc thao tác ghi ở trạng thái không rõ; cancel trực tiếp future transport chỉ bỏ pending và không hủy thao tác server đã nhận. **Không tự retry**. Nếu thao tác ghi đã gửi nhưng mất response, kết quả chưa xác định: đăng nhập lại, tải danh sách đối chiếu trước khi quyết định gửi lại.
+- LOGOUT thành công giữ socket và xóa phiên. LOGOUT lỗi hoặc bị hủy đóng socket, bỏ phiên local; không coi đó là server đã xác nhận thành công. UNAUTHENTICATED đóng socket, phiên hết hiệu lực; FORBIDDEN không đổi role/đăng xuất. Login/logout đang chờ sẽ chặn thao tác Auth/Account mới không phù hợp.
+- `api.addSessionLostListener(...)` phát một sự kiện cho phiên bị mất. Callback nhận `SessionLost`; chuyển lên FX thread rồi kiểm tra `api.isCurrent(event)` trước khi đổi màn hình để tránh thông báo cũ chen vào lần đăng nhập mới. Subscription trả về `AutoCloseable`, cần gỡ khi dispose. Tương tự, PUSH listener phải kiểm tra generation và vòng đời màn hình khi callback thực sự chạy trên FX thread.
+- `new FxAsync().observe(future, viewActive, onSuccess, onError, done)` dispatch bằng Platform.runLater, kiểm tra `viewActive` tại lúc thực thi, unwrap lỗi và luôn gọi `done` cho màn hình còn hiệu lực. Đây là điểm để controller reset busy; test dùng executor giả, chưa khởi động JavaFX toolkit.
+- `api.close()` dọn phiên/subscription và đóng kết nối mà không đợi worker trên FX thread. `closeAsync()` cho phép quan sát hoàn tất của reader/writer/timer/PUSH, gồm các generation đang dọn; quá ngân sách trả TIMEOUT, không khẳng định dừng thành công khi subscriber bỏ qua interrupt. Đóng là vĩnh viễn; reconnect dùng `disconnect(generation, reason)` ở transport rồi `connect()`.
+
+**Kiểm chứng:** `.\mvnw.cmd -B -ntp -pl quiz-client -am test` kiểm tra common/client; lần hồi quy cuối `.\mvnw.cmd -B -ntp -Pdb-it clean verify` chạy toàn dự án. 49 ca client gồm config 11, validation 3, API/session 12, transport 20, FxAsync 3. Report ở `quiz-client/target/surefire-reports`. Test bao phủ 5 contract, response đảo thứ tự/PUSH/trùng/sai ID, malformed frame, timeout/EOF, pending đầy/cancel, reconnect, peer không đọc, listener chậm/lỗi/queue đầy, shutdown có deadline và callback màn hình hết hiệu lực. Windows sandbox chặn kết nối localhost trong lượt đầu; các kết quả pass nêu trên được chạy ngoài sandbox với quyền được cấp. E2E client chính thức + PostgreSQL và smoke JavaFX thật chưa thực hiện trong task 5.1.
+
+---
+
+### 15.10. Bootstrap JavaFX & điều hướng — task 5.2
+
+`ClientMain extends Application` load cấu hình, tạo một ServerConnection/QuizApi/FxAsync/SceneNavigator dùng chung, mở Login và quản lý shutdown. `SceneNavigator` dùng một Stage và Scene; FXMLLoader controller factory inject dependency, thay root khi chuyển màn, dispose controller cũ trước khi kích hoạt màn mới. LoginController và AccountController đã có nghiệp vụ; `onMount()` chạy sau khi gắn root/session để tải dữ liệu màn Admin.
+
+| Phiên hiện hành | Màn hình |
+|---|---|
+| Chưa đăng nhập hoặc mất phiên | `ui/login/login.fxml` |
+| ADMIN | `ui/admin/account/account.fxml` |
+| TEACHER | `ui/teacher/dashboard.fxml` |
+| STUDENT | `ui/student/dashboard.fxml` |
+
+Các màn đã xác thực dùng chung `ui/shell.fxml` và `ui/app.css`: tên người dùng, role, khu vực nội dung và Đăng xuất. Yêu cầu route khác role sẽ trở lại màn của role hiện hành và hiện thông báo; UI không tự sửa role. Server vẫn kiểm tra quyền cho mọi API.
+
+`ScreenController.isActive()` kiểm tra vòng đời màn hình và snapshot phiên; chuyển màn gọi dispose, gỡ subscription và xóa password của Login. Controller sau này dùng `FxAsync.observe(..., this::isActive, ...)` để bỏ callback cũ. SceneNavigator chỉ đăng ký một listener mất phiên cho toàn vòng đời; sự kiện được kiểm tra lại bằng `api.isCurrent(event)` trên FX thread. Hai request đồng thời hết phiên chỉ chuyển về Login một lần.
+
+Đăng xuất vô hiệu màn hiện tại trong lúc chờ, chống gửi trùng; thành công về Login và giữ socket, thất bại về Login với thông báo kết thúc phiên local. Đóng cửa sổ hoặc `Application.stop()` dispose navigation/API, đóng socket và dừng tài nguyên nền mà không chờ trên FX thread. Thiếu/sai FXML, CSS hoặc cấu hình hiển thị cửa sổ lỗi có nút đóng, dọn tài nguyên; không để màn hình trắng hoặc giữ màn có quyền khi tải lỗi.
+
+**Thiết kế:** người dùng cung cấp [mẫu Stitch](https://stitch.withgoogle.com/projects/2076748357872420539). Task 5.2 dùng giao diện khung trung tính khi chưa truy cập được mẫu. Sau khi người dùng đăng nhập Stitch ở task 5.3, đã đọc màn Login và áp dụng bố cục form giữa nền sáng, header/nút xanh `#1d4ed8`, viền mảnh và nút thoát; dùng nhãn tiếng Việt và Segoe UI để hợp ứng dụng hiện có. Không sao chép dữ liệu mẫu, profile selector, trạng thái socket giả, cổng 8080 hoặc thông số kỹ thuật của bản mẫu vào production. Các màn role vẫn là khung của task 5.2.
+
+**Kiểm thử JavaFX thật (máy cần desktop session):**
+
+```powershell
+# Common/client unit và 12 JavaFX integration test.
+.\mvnw.cmd -B -ntp -pl quiz-client -am -Pui-it verify
+
+# Toàn dự án, cả PostgreSQL test đã cấu hình và JavaFX toolkit.
+.\mvnw.cmd -B -ntp '-Pdb-it,ui-it' clean verify
+```
+
+Profile `ui-it` chạy Failsafe `ClientUiIT`; lỗi toolkit hoặc thiếu môi trường desktop phải fail, không tự skip. Test dùng ServerConnection/QuizApi thật với peer TCP localhost để đăng nhập từng role, không sửa phiên giả trong production. Bao phủ FXML/CSS, thông tin phiên, route trái quyền/phiên rỗng, logout và logout lỗi/relogin, callback màn cũ, nhiều request hết phiên, lỗi tài nguyên và đóng khi request đang chờ. Test chụp Login và 3 màn role ở kích thước thường/thu nhỏ vào `quiz-client/target/ui-screenshots`; report ở `quiz-client/target/failsafe-reports`.
+
+Profile `ui-it` kiểm chứng Login/Admin/navigation/lifecycle trên JavaFX thật với peer TCP, không dùng DB. Profile `login-it` bổ sung server/PostgreSQL thật như mục 15.11–15.12. Unit mặc định vẫn chạy được mà không cần khởi động toolkit.
+
+**Nghiệm thu task 5.2 ngày 11/10/2026 (trước 5.3):** 1 unit lifecycle mới và 12 JavaFX IT pass; hồi quy cả hai profile có 387 tests pass. Đã kiểm tra ảnh của ba role ở kích thước thường và cửa sổ 900 × 620. Đã mở client bằng `javafx:run`, quan sát Login thật; chạy lại với `--config target/ui-smoke-invalid.properties` chứa `server.port=0` xác nhận tham số được truyền và cửa sổ báo lỗi xuất hiện. Bấm Đóng ứng dụng làm cửa sổ biến mất và tiến trình Maven kết thúc với exit code 0. File smoke/ảnh/report đều ở target, không commit.
+
+---
+
+### 15.11. Login nghiệp vụ — task 5.3
+
+Form kiểm tra input trước khi mở socket qua `ClientValidation.login`: username strip/giữ hoa thường, không blank, tối đa 50 code point; password giữ nguyên, không blank, tối đa 72 byte UTF-8. Login không áp ngưỡng 8 ký tự của tạo tài khoản mới. Enter ở cả hai trường và nút Đăng nhập dùng cùng handler, chặn submit trùng trong lúc chờ.
+
+Luồng: `api.connect()` → `api.login()` → kiểm tra phiên còn hiệu lực → `navigator.showHome()`. UI hiển thị lần lượt Đang kết nối/Đang xác thực với progress; vô hiệu form trong lúc chờ, vẫn cho thoát ứng dụng. Mạng chạy nền, callback lên FX thread, không get/join trên UI. Form có cuộn dọc để thông báo lỗi và nút thoát vẫn tiếp cận được ở cửa sổ nhỏ.
+
+`LoginMessages` chọn thông báo tiếng Việt theo mã lỗi, không hiển thị message server, SQL/stacktrace hoặc thông tin user có tồn tại. INVALID_CREDENTIALS và ACCOUNT_DISABLED có thông báo phù hợp; EOF/refused/timeout trả lại form để thử lại thủ công. CONFLICT khi LOGIN bỏ socket chưa xác thực bằng `QuizApi.resetLoginConnection()`; lần submit tiếp theo tạo kết nối mới, không tự gửi lại password. Phương thức reset từ chối tác động lên một phiên đã đăng nhập thành công.
+
+Sau xác thực lỗi/thành công hoặc dispose, PasswordField được xóa; username giữ lại khi lỗi để sửa/thử lại. Không lưu password/token vào preferences/file/log. Rời màn trong lúc xác thực hủy future để đóng generation liên quan; connect chưa hoàn tất chỉ hủy callback của màn đó, không gửi LOGIN từ màn đã rời. Thoát ứng dụng đóng cả API/connection đang handshake.
+
+`ScreenController.isMounted()` chỉ kiểm tra màn còn hiện hành; Login dùng nó để nhận callback thành công sau khi API đã cài phiên. Controller bảo vệ khác vẫn dùng `isActive()` để kiểm tra cả snapshot phiên. Điều này tránh mất callback Login do phiên đổi từ null sang token khi xác thực thành công.
+
+**Test thật, opt-in cho máy có desktop và PostgreSQL test:**
+
+```powershell
+# UI + peer localhost, không cần DB; bao gồm unit của các module phụ thuộc.
+.\mvnw.cmd -B -ntp -pl quiz-client -am -Pui-it verify
+
+# Hồi quy toàn dự án, cả DB server IT và UI Login với server/PostgreSQL thật.
+.\mvnw.cmd -B -ntp '-Pdb-it,login-it' clean verify
+```
+
+`login-it` chạy cả `ClientUiIT` và `ClientLoginDbIT` trong JVM riêng vì JavaFX toolkit chỉ khởi động một lần/JVM. `quiz-server` là dependency **test-scope** của client, không nằm trong production client. `ClientTestDatabase` chỉ chấp nhận JDBC localhost/127.0.0.1 với database `quizdb_test`, role `quiz_test`, password test rõ ràng; nhận file `${project root}/db-test-local.properties` hoặc `-Dquiz.test.config=<path>` và overrides `QUIZ_TEST_DB_*`. Sau kết nối còn kiểm tra current_database/current_user trước khi ghi. Test tạo account username UUID, chỉ DELETE fixture riêng khi cleanup; không seed/schema/reset hoặc dùng DB ứng dụng.
+
+`ClientLoginDbIT` thực thi form/controller → QuizApi → TCP → ServerMain/services → PostgreSQL: LOGIN/LOGOUT/relogin cho cả 3 role, sai mật khẩu, khóa và mở khóa fixture rồi thử lại. Đây là **E2E UI tự động thực sự cho Login**, không gọi smoke peer localhost là kiểm thử DB. Test khác dùng peer để kiểm chứng lỗi credential/disabled/conflict/busy/database, timeout/reconnect, Unicode/UTF-8, duplicate submit, callback cũ và thoát khi handshake. Task 5.4 bổ sung E2E Account vào cùng class (mục 15.12); Question/Quiz/Exam chưa có E2E.
+
+**Nghiệm thu 11/10/2026:** 56 unit client, 25 UI/peer IT và 4 E2E Login/DB IT đều pass; tổng hồi quy 410 tests như mục 15.7. Ảnh Login và lỗi compact nằm ở `quiz-client/target/ui-screenshots`. Đã rà chữ, wrap, trạng thái lỗi, vị trí trường nhập và khả năng cuộn tới nút thoát. Username/password nhập trong các ảnh/test là fixture, không phải tài khoản người dùng hay cấu hình DB.
+
+---
+
+### 15.12. Admin quản lý tài khoản — task 5.4
+
+Admin đăng nhập sẽ tự tải `LIST_ACCOUNTS`. Bảng có ID, username, họ tên, email, role, trạng thái và ngày tạo theo múi giờ máy client; email null hiển thị “—”, ô dài có tooltip. Tải lại giữ lựa chọn theo ID và chỉ áp dụng response của lần tải mới nhất. Loading, danh sách trống và lỗi là các trạng thái riêng. Reload lỗi giữ snapshot cũ với nhãn rõ ràng và tắt khóa/mở khóa cho tới khi tải thành công. Contract hiện trả toàn bộ theo ID tăng; chưa phân trang, tìm kiếm hay lọc. Vượt giới hạn codec/frame báo lỗi, cần phân trang trong backlog.
+
+Form tạo chỉ có `TEACHER`/`STUDENT`. Client dùng `ClientValidation.account`, strip username/họ tên/email, email trống thành null, giữ mật khẩu nguyên văn; giới hạn Unicode/UTF-8 khớp server. `createdBy` và `active=true` do server quyết định. Enter tại mật khẩu hoặc nút Tạo gửi một yêu cầu; khóa submit trùng khi đang chờ. Thành công xóa form, báo username và tải lại. Lỗi giữ các trường không nhạy cảm để sửa; mật khẩu được xóa sau mọi kết quả/validation và khi dispose. Thông báo ánh xạ từ ErrorCode, không hiển thị nội dung SQL/server hay credential.
+
+Chọn Teacher/Student để khóa/mở khóa; mọi Admin đều được bảo vệ. Khóa cần xác nhận trong panel với đúng username và tác động thu hồi phiên; Hủy không gửi lệnh. `SET_ACCOUNT_ACTIVE` gửi trạng thái đích tường minh, không cập nhật bảng thành công trước response. Mở khóa cần đăng nhập mới: token đã thu hồi không sống lại. Chưa có PUSH báo khóa tức thời; client bị khóa phát hiện ở request tiếp theo.
+
+Kết quả ghi và reload được hiển thị riêng: “Đã tạo/khóa/mở khóa” vẫn giữ nếu lần tải sau lỗi. `NOT_FOUND` thông báo và reload. Mất phản hồi/timeout không tự retry, không khẳng định ghi thất bại: navigator giữ cảnh báo “Chưa xác nhận” trên Login khi màn Admin đã bị dispose; đăng nhập rồi tải danh sách đối chiếu trước khi thực hiện lại. Logout khi còn ghi chưa xác nhận cũng giữ cảnh báo này. Các callback dùng `FxAsync.observe(..., this::isActive, ...)`; màn cũ hoặc session cũ không được sửa UI.
+
+Đã đọc mẫu **User Account Management (Screen 30, 31, 32)** trong [Stitch](https://stitch.withgoogle.com/projects/2076748357872420539): bảng cùng panel thông tin, nền sáng, màu xanh và viền nhỏ. FXML chuyển panel thành form tạo theo contract hiện có; cửa sổ hẹp xếp dọc và cuộn được tới nút tạo. Các chức năng reset password, đổi role, sửa tài khoản và telemetry của mẫu chưa được triển khai.
+
+**Bàn giao client:** `ui/admin/account/AccountController` nhận QuizApi/SceneNavigator/FxAsync từ controller factory, không tự mở socket; `ScreenController.onMount` tải dữ liệu, `onDispose` xóa password và vô hiệu callback. Màn mới thêm route vào `Screen`, resource cố định và dependency trong `SceneNavigator.createController`. Dùng chung API/session; mở rộng API typed theo contract thay vì socket đồng bộ trong controller. Với PUSH, inject ServerConnection dùng chung từ bootstrap vào controller cần nó, `own(connection.addPushListener((generation, response) -> fx.run(...)))`; trong callback FX kiểm tra `isActive()` và generation của session hiện tại. `own` hủy subscription lúc dispose; subscriber phải kiểm tra cả generation vì sự kiện đã xếp hàng có thể đến muộn. Admin hiện không cần PUSH listener riêng.
+
+Kiểm thử dùng cùng lệnh ở mục 15.11. `ClientUiIT` bổ sung initial LIST, stale response, selection/Admin protection, Unicode/form, duplicate/Enter, confirmation/cancel, NOT_FOUND, write-success/reload-error, unknown outcome và dispose. `ClientLoginDbIT` bổ sung hai luồng UI tạo Teacher/Student, trùng username thật, kiểm tra hash/createdBy, khóa/thu hồi phiên, đăng nhập bị từ chối, mở khóa/đăng nhập lại và logout. Chỉ dùng DB test được guard; fixture UUID được dọn theo thứ tự con trước người tạo.
+
+**Nghiệm thu cuối 12/10/2026:** `.\mvnw.cmd -B -ntp '-Pdb-it,login-it' clean verify` → **BUILD SUCCESS, 433 tests, 0 failures/errors/skipped** (351 default + 30 server DB IT + 46 UI/peer + 6 UI/DB). Test resize chờ bố cục JavaFX ổn định với deadline trước khi đo, kiểm tra cả form sau khi lỗi làm tăng chiều cao. Ảnh `accounts-loaded.png` và `accounts-form-compact.png` nằm trong `quiz-client/target/ui-screenshots`; đã rà trực tiếp ảnh Scene thật, không ghi nhận thao tác desktop thủ công.
+
+### 15.13. Kiểm thử nền tảng — giai đoạn 6
+
+Task 6.1 tái sử dụng 50 ca đã có trong `PasswordHasherTest`, `AuthServiceTest` và
+`AuthGuardTest`. Task 6.2 bổ sung `LoginIntegrationIT` với 11 ca dùng
+`QuizApi/ServerConnection` → TCP → `ServerMain` → PostgreSQL, không khởi động JavaFX.
+Bao phủ ba role, account lifecycle, thay thế phiên giữa hai client, token trên sai
+socket và shutdown server. Chỉ dùng DB test được kiểm tra, fixture UUID được dọn riêng.
+
+Chạy riêng bằng `.\mvnw.cmd -B -ntp -Pe2e-it verify`; profile `login-it` cũng bao gồm
+bộ test này khi chạy hồi quy có giao diện. Xem [hướng dẫn kiểm thử và bàn giao](TESTING.md)
+cho điều kiện môi trường, các profile, bằng chứng nghiệm thu và điểm mở rộng cho nhóm.
 
 ## 16. Kế hoạch kiểm thử
 
@@ -686,7 +1084,22 @@ Baseline: hệ thống thi trắc nghiệm client/server cơ bản (1 thread/1 c
 
 ---
 
-## 19. Lộ trình & Definition of Done
+## 19. Phân công công việc & Lộ trình thực hiện
+
+### 19.1. Phân công trách nhiệm thành viên (Theo JSD_Final)
+
+> **Thứ tự thực hiện (Workflow Pipeline):**
+> **Việt (Auth, User, DB)** ➔ **Võ (Question Bank)** ➔ **Bắc (Quiz & Assignment)** ➔ **Đôn (Student Exam)** ➔ **Nam (Anti-Cheat & Monitoring)**
+
+| Thành viên | Trách nhiệm chính | Requirement ID | Nhiệm vụ cụ thể | Thứ tự thực hiện |
+|---|---|---|---|---|
+| **Việt** | **Authentication + User + Database & UI tương ứng** | FR-A01, FR-S02, FR-AD01, NFR-04, NFR-05 | • Khởi tạo Database Schema (`schema.sql`) & dữ liệu mẫu (`seed.sql`) cho cả nhóm.<br>• Xây dựng `quiz-common` (protocol: `Request`, `Response`, `MessageType`, `ErrorCode`, `MessageCodec`, enums, DTOs cơ bản).<br>• Phía Server: DataSource HikariCP, `TransactionManager`, BCrypt `PasswordHasher`, `TokenGenerator`, Exception hierarchy, `UserSession`, `SessionRegistry`, `AuthService`, `AccountService`, `AuthGuard`, `RequestDispatcher`, `LoginHandler`, `AccountHandler`.<br>• Phía Client: Socket TCP client nền tảng (`ServerConnection`, `QuizApi`), `ClientSession`, `SceneNavigator`, UI Đăng nhập & UI Admin cấp/quản lý tài khoản. | **1 (Làm đầu tiên - Nền tảng)** |
+| **Võ** | **Question Bank & UI tương ứng** | FR-A02, FR-A03, FR-A05, FR-T05 | • Quản lý ngân hàng câu hỏi (Tạo, xem, sửa).<br>• Phân loại topic/category, gán độ khó (Easy/Medium/Hard).<br>• Chọn câu hỏi đưa vào bài test.<br>• Phía Server: `QuestionRepository`, `QuestionService`, `QuestionHandler`.<br>• Phía Client: UI quản lý câu hỏi cho Teacher. | **2 (Sau Việt)** |
+| **Bắc** | **Quiz & Assignment & UI tương ứng** | FR-A04, FR-A05, FR-A06, FR-A07, FR-A08, FR-A09, FR-S02, FR-S04 | • Tạo, sửa, mở/đóng Quiz (`DRAFT` ➔ `OPEN` ➔ `CLOSED`), sinh mã PIN.<br>• Thiết lập thời lượng (`duration_minutes`), chọn câu hỏi vào Quiz.<br>• Quản lý lớp & giao Quiz cho lớp.<br>• Phía Server: `ClassRepository`, `QuizRepository`, `ClassService`, `QuizService`, `ClassHandler`, `QuizHandler`.<br>• Phía Client: UI tạo Quiz, quản lý lớp, giao bài kiểm tra. | **3 (Sau Võ)** |
+| **Đôn** | **Student Exam & UI tương ứng** | FR-S02, FR-S03, FR-S04, FR-S05, FR-S06, FR-S07, FR-S08, FR-S09, FR-S10, FR-S11, FR-S12, FR-T04, NFR-03 | • Học viên xem quiz được giao, nhập PIN tham gia thi.<br>• Server tạo Attempt, quản lý thời gian đếm ngược chính xác.<br>• Chọn câu trả lời, lưu đáp án từng câu, nộp bài thủ công / tự động hết giờ.<br>• Server chấm điểm tự động (`GradingService`), chống nộp trùng final submit.<br>• Xem kết quả, xem lịch sử làm bài.<br>• Phía Server: `AttemptService`, `GradingService`, `ResultService`, `AttemptTimeoutScheduler`.<br>• Phía Client: UI làm bài thi (timer, chuyển câu, nộp), UI kết quả & lịch sử. | **4 (Sau Bắc)** |
+| **Nam** | **Anti-Cheat & Monitoring & UI tương ứng** | FR-S13, FR-S14, FR-T09, BR-12, BR-13, NFR-09 | • Phía Client: Monitor hành vi (rời cửa sổ thi / mất focus, phím tắt Copy/Paste/Cut, chuột phải context menu).<br>• Báo cáo vi phạm về Server (`REPORT_ANTICHEAT_EVENT`).<br>• Phía Server: Lưu log vi phạm theo Attempt, đếm vi phạm, kiểm tra policy (`WARN_THEN_AUTO_SUBMIT` / `LOG_ONLY`).<br>• Cảnh báo học viên (`PUSH_ANTICHEAT_WARNING`) hoặc tự động nộp bài khi đạt ngưỡng vi phạm.<br>• UI giám sát sự kiện vi phạm cho giáo viên. | **5 (Sau Đôn)** |
+
+### 19.2. Lộ trình Milestones & Definition of Done
 
 | Milestone | Nội dung | Done khi |
 |---|---|---|
@@ -703,11 +1116,19 @@ Mỗi milestone kết thúc bằng: build xanh, test liên quan chạy xong, REA
 
 ## 20. Quy ước code & Git
 
+### 20.1. Coding Conventions
 - Package `quiz.<module>.<layer>`; class `PascalCase`, method/biến `camelCase`, hằng `UPPER_SNAKE_CASE`.
 - Method ≤ ~40 dòng; tránh lặp code; ưu tiên `record`, `Optional`, stream khi rõ nghĩa; **không** nuốt exception (`catch` rỗng).
 - Log bằng SLF4J (`info` sự kiện chính, `warn` lỗi người dùng, `error` lỗi hệ thống). Không log mật khẩu/token.
 - Javadoc cho class/method công khai quan trọng (service, protocol).
-- Git: nhánh `main` ổn định; làm việc trên `feature/<module>-<ten>`; commit nhỏ, thông điệp dạng `feat(server): add AttemptService.submit`, `fix(client): ...`, `test(...)`, `docs(...)`; merge qua pull request/review; mọi thành viên có commit thật.
+
+### 20.2. Quy ước Git & Branching
+- **Nhánh `develop` / `main`:** ổn định, chỉ merge code đã pass build và test.
+- **Quy ước đặt tên branch:** `<type>/<feature-name>`
+  - Ví dụ: `feature/auth-login`, `feature/student-exam`, `feature/question-bank`, `fix/quiz-submission`.
+- **Quy ước commit:** `<type>: <mô tả ngắn>`
+  - Ví dụ: `feat: implement login`, `feat: add schema.sql`, `fix: fix login validation`, `test: add auth unit test`.
+- **Workflow:** Làm việc trên branch tính năng riêng ➔ commit nhỏ, rõ ràng ➔ tạo Pull Request / merge qua review; đảm bảo mọi thành viên đều có commit thực tế.
 
 ---
 
