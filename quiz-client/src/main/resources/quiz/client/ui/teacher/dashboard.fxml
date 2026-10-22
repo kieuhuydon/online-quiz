@@ -53,6 +53,7 @@
                         <Button fx:id="btnCloseQuiz" text="Đóng Đề Thi" onAction="#onCloseQuizClick" styleClass="danger-button"/>
                         <Button fx:id="btnAssignQuiz" text="Giao Cho Lớp" onAction="#onAssignQuizClick" styleClass="secondary-button"/>
                         <Button fx:id="btnViewDetail" text="Xem Chi Tiết" onAction="#onViewDetailClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnAntiCheatLogs" text="🛡️ Nhật ký Anti-Cheat" onAction="#onAntiCheatLogsClick" styleClass="secondary-button"/>
                         <Region HBox.hgrow="ALWAYS"/>
                         <ProgressIndicator fx:id="quizProgress" visible="false" prefWidth="22" prefHeight="22"/>
                         <Button fx:id="btnRefreshQuiz" text="Tải lại" onAction="#loadQuizzes" styleClass="secondary-button"/>
@@ -141,6 +142,23 @@
                     <Separator/>
                     <Label text="Danh sách câu hỏi trong đề:" styleClass="section-heading"/>
                     <ListView fx:id="listQuizQuestions" prefHeight="160"/>
+                </VBox>
+
+                <!-- SUB-PANEL 5: Anti-Cheat Evidence Logs -->
+                <VBox fx:id="antiCheatPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Label text="🛡️ Nhật Ký Giám Sát Chống Gian Lận (Anti-Cheat Logs)" styleClass="card-heading"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button text="Đóng" onAction="#onCloseAntiCheatClick" styleClass="secondary-button"/>
+                    </HBox>
+                    <Separator/>
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Label text="Nhập Attempt ID để tra cứu bằng chứng:"/>
+                        <TextField fx:id="txtAttemptIdFilter" promptText="Ví dụ: 1" prefWidth="120"/>
+                        <Button text="Tra cứu" onAction="#onLookupAttemptEventsClick" styleClass="primary-button"/>
+                        <Label fx:id="antiCheatStatusLabel" text="" styleClass="text-muted"/>
+                    </HBox>
+                    <TableView fx:id="antiCheatTable" prefHeight="200" minHeight="150" VBox.vgrow="ALWAYS"/>
                 </VBox>
             </VBox>
         </ScrollPane>

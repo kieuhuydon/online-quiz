@@ -8,10 +8,27 @@ import quiz.server.db.TransactionManager;
 import quiz.server.dispatch.AuthGuard;
 import quiz.server.dispatch.RequestDispatcher;
 import quiz.server.dispatch.handlers.AccountHandler;
+import quiz.server.dispatch.handlers.AntiCheatHandler;
+import quiz.server.dispatch.handlers.ClassHandler;
 import quiz.server.dispatch.handlers.LoginHandler;
-import quiz.server.network.*;
+import quiz.server.dispatch.handlers.QuestionHandler;
+import quiz.server.dispatch.handlers.QuizHandler;
+import quiz.server.network.ConnectionRegistry;
+import quiz.server.network.QuizServer;
+import quiz.server.network.SessionLifecycle;
+import quiz.server.network.SessionRegistry;
+import quiz.server.repository.jdbc.JdbcAntiCheatRepository;
+import quiz.server.repository.jdbc.JdbcClassRepository;
+import quiz.server.repository.jdbc.JdbcQuestionRepository;
+import quiz.server.repository.jdbc.JdbcQuizRepository;
 import quiz.server.repository.jdbc.JdbcUserRepository;
-import quiz.server.service.*;
+import quiz.server.service.AccountService;
+import quiz.server.service.AntiCheatService;
+import quiz.server.service.AuthService;
+import quiz.server.service.ClassService;
+import quiz.server.service.QuestionService;
+import quiz.server.service.QuizService;
+import quiz.server.service.SessionCoordinator;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -41,19 +58,22 @@ public final class ServerMain {
             SessionCoordinator coordinator = new SessionCoordinator(sessions);
             AuthService auth = new AuthService(users, coordinator);
             AccountService accounts = new AccountService(users, new TransactionManager(DataSourceProvider.getDataSource()), coordinator);
-            quiz.server.repository.jdbc.JdbcClassRepository classes = new quiz.server.repository.jdbc.JdbcClassRepository(DataSourceProvider.getDataSource());
-            quiz.server.repository.jdbc.JdbcQuestionRepository questions = new quiz.server.repository.jdbc.JdbcQuestionRepository(DataSourceProvider.getDataSource());
-            quiz.server.repository.jdbc.JdbcQuizRepository quizzes = new quiz.server.repository.jdbc.JdbcQuizRepository(DataSourceProvider.getDataSource());
+            JdbcClassRepository classes = new JdbcClassRepository(DataSourceProvider.getDataSource());
+            JdbcQuestionRepository questions = new JdbcQuestionRepository(DataSourceProvider.getDataSource());
+            JdbcQuizRepository quizzes = new JdbcQuizRepository(DataSourceProvider.getDataSource());
+            JdbcAntiCheatRepository antiCheatRepo = new JdbcAntiCheatRepository(DataSourceProvider.getDataSource());
             ClassService classService = new ClassService(classes, users);
             QuestionService questionService = new QuestionService(questions);
             QuizService quizService = new QuizService(quizzes, questions, classes);
+            AntiCheatService antiCheatService = new AntiCheatService(antiCheatRepo, new TransactionManager(DataSourceProvider.getDataSource()), connections);
             RequestDispatcher dispatcher = new RequestDispatcher(new AuthGuard(auth),
                 List.of(
                     new LoginHandler(auth),
                     new AccountHandler(accounts),
-                    new quiz.server.dispatch.handlers.ClassHandler(classService),
-                    new quiz.server.dispatch.handlers.QuestionHandler(questionService),
-                    new quiz.server.dispatch.handlers.QuizHandler(quizService)
+                    new ClassHandler(classService),
+                    new QuestionHandler(questionService),
+                    new QuizHandler(quizService),
+                    new AntiCheatHandler(antiCheatService)
                 ));
             return new QuizServer(config.getPort(), config, dispatcher,
                 new SessionLifecycle(coordinator, connections), sessions, connections);

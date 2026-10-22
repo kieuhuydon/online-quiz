@@ -11,7 +11,9 @@ import quiz.client.api.QuizApi;
 import quiz.client.ui.SceneNavigator;
 import quiz.client.ui.ScreenController;
 import quiz.client.util.FxAsync;
+import quiz.common.dto.AntiCheatWarningDto;
 import quiz.common.dto.QuizInfoDto;
+import quiz.common.protocol.MessageType;
 import quiz.common.enums.QuizStatus;
 
 import java.time.ZoneId;
@@ -75,6 +77,23 @@ public final class StudentController extends ScreenController {
     @Override
     protected void onMount() {
         loadAssignedQuizzes();
+
+        // FR-S13: Đăng ký lắng nghe thông báo PUSH Anti-Cheat từ Server
+        own(api.addPushListener((generation, response) -> {
+            if (response.pushType() == MessageType.PUSH_ANTICHEAT_WARNING) {
+                if (response.payload() instanceof AntiCheatWarningDto warning) {
+                    javafx.application.Platform.runLater(() -> {
+                        showWarningDialog("CẢNH BÁO VI PHẠM QUY CHẾ THI", warning.message());
+                    });
+                }
+            } else if (response.pushType() == MessageType.PUSH_FORCE_SUBMITTED) {
+                String message = response.payload() instanceof String str ? str : "Bài thi đã bị hệ thống tự động thu hồi do vi phạm quy chế!";
+                javafx.application.Platform.runLater(() -> {
+                    showForceSubmittedDialog(message);
+                    loadAssignedQuizzes();
+                });
+            }
+        }));
     }
 
     private void configureTable() {
@@ -196,6 +215,24 @@ public final class StudentController extends ScreenController {
     private void onCloseInfoClick() {
         quizInfoPanel.setVisible(false);
         quizInfoPanel.setManaged(false);
+    }
+
+    private void showWarningDialog(String title, String message) {
+        showNotice(message, true);
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle(title);
+        alert.setHeaderText("Hệ thống phát hiện hành vi bất thường!");
+        alert.setContentText(message);
+        alert.show();
+    }
+
+    private void showForceSubmittedDialog(String message) {
+        showNotice(message, true);
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("THU HỒI BÀI THI");
+        alert.setHeaderText("Bài thi đã bị tự động nộp!");
+        alert.setContentText(message);
+        alert.show();
     }
 
     private void showNotice(String msg, boolean isError) {

@@ -16,6 +16,7 @@ import quiz.client.ui.SceneNavigator;
 import quiz.client.ui.ScreenController;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.*;
+import quiz.common.dto.AntiCheatEventDto;
 import quiz.common.enums.AntiCheatPolicyType;
 import quiz.common.enums.Difficulty;
 import quiz.common.enums.QuizStatus;
@@ -53,6 +54,11 @@ public final class TeacherController extends ScreenController {
     @FXML private Button btnCloseQuiz;
     @FXML private Button btnAssignQuiz;
     @FXML private Button btnViewDetail;
+    @FXML private Button btnAntiCheatLogs;
+    @FXML private VBox antiCheatPanel;
+    @FXML private TextField txtAttemptIdFilter;
+    @FXML private Label antiCheatStatusLabel;
+    @FXML private TableView<AntiCheatEventDto> antiCheatTable;
     @FXML private Button btnRefreshQuiz;
 
     // Quiz Form (Create / Edit)
@@ -674,6 +680,10 @@ public final class TeacherController extends ScreenController {
         assignPanel.setManaged(false);
         quizDetailPanel.setVisible(false);
         quizDetailPanel.setManaged(false);
+        if (antiCheatPanel != null) {
+            antiCheatPanel.setVisible(false);
+            antiCheatPanel.setManaged(false);
+        }
         scrollToTop();
     }
 

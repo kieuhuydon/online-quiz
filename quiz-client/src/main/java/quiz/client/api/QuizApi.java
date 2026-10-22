@@ -241,6 +241,26 @@ public final class QuizApi implements AutoCloseable {
         return protectedCall(MessageType.GET_QUIZ_INFO, quizId, QuizApi::decodeQuizInfo);
     }
 
+    // --- Anti-Cheat Monitoring (FR-S13, FR-T09) ---
+    public CompletableFuture<Void> reportAntiCheat(ReportAntiCheatDto dto) {
+        return protectedCall(MessageType.REPORT_ANTICHEAT_EVENT, dto, payload -> {
+            requireNull(payload);
+            return null;
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    public CompletableFuture<List<AntiCheatEventDto>> listAttemptEvents(long attemptId) {
+        return protectedCall(MessageType.LIST_ATTEMPT_EVENTS, attemptId, payload -> {
+            if (!(payload instanceof List<?> list)) throw new TransportException(PROTOCOL);
+            return List.copyOf((List<AntiCheatEventDto>) payload);
+        });
+    }
+
+    public AutoCloseable addPushListener(quiz.client.network.PushListener listener) {
+        return connection.addPushListener(listener);
+    }
+
     private <T> CompletableFuture<T> protectedCall(MessageType type, Serializable payload, Function<Object, T> decoder) {
         synchronized (lock) {
             try {
