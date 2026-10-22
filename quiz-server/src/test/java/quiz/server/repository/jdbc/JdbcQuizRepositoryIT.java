@@ -1,4 +1,4 @@
-package quiz.server.integration;
+package quiz.server.repository.jdbc;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -7,10 +7,8 @@ import quiz.common.enums.AntiCheatPolicyType;
 import quiz.common.enums.Difficulty;
 import quiz.common.enums.QuizStatus;
 import quiz.common.enums.Role;
-import quiz.server.db.TransactionManager;
 import quiz.server.domain.Quiz;
 import quiz.server.domain.Question;
-import quiz.server.repository.jdbc.JdbcQuizRepository;
 import quiz.server.security.PasswordHasher;
 
 import javax.sql.DataSource;
@@ -34,7 +32,7 @@ class JdbcQuizRepositoryIT {
 
     @BeforeAll
     static void connectOnlyToPreparedTestDatabase() throws Exception {
-        dataSource = PostgreSqlTestConfig.load().dataSource();
+        dataSource = TestDbConfig.load().dataSource();
         try (Connection connection = dataSource.getConnection()) {
             verifyDatabaseIdentity(connection);
             verifySchema(connection);
@@ -120,17 +118,13 @@ class JdbcQuizRepositoryIT {
     void setQuestionsReplacesQuizQuestions() throws SQLException {
         creatorId = createCreator();
         JdbcQuizRepository repository = repository();
-        JdbcQuestionRepositoryIT questionRepoHelper = new JdbcQuestionRepositoryIT();
-        // We need question IDs; create questions directly via repository.
-        quiz.server.repository.jdbc.JdbcQuestionRepository qRepo =
-            new quiz.server.repository.jdbc.JdbcQuestionRepository(dataSource);
+        JdbcQuestionRepository qRepo = new JdbcQuestionRepository(dataSource);
 
         Quiz quiz = repository.save(Quiz.createNew("Quiz", null, null, 15, 50.0,
             AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3, creatorId));
 
-        QuestionCreator creator = new QuestionCreator(qRepo, creatorId);
-        Long q1 = creator.create("Câu 1?", "A", "B", "C", "D", 'A');
-        Long q2 = creator.create("Câu 2?", "A", "B", "C", "D", 'B');
+        Long q1 = createQuestion(qRepo, "Câu 1?", "A", "B", "C", "D", 'A');
+        Long q2 = createQuestion(qRepo, "Câu 2?", "A", "B", "C", "D", 'B');
 
         boolean ok = repository.setQuestions(quiz.id(), List.of(q1, q2));
         assertTrue(ok);
@@ -138,7 +132,6 @@ class JdbcQuizRepositoryIT {
         List<Long> assigned = repository.findQuestionIdsByQuiz(quiz.id());
         assertEquals(List.of(q1, q2), assigned);
 
-        // Replace with empty list clears all.
         boolean cleared = repository.setQuestions(quiz.id(), List.of());
         assertTrue(cleared);
         assertTrue(repository.findQuestionIdsByQuiz(quiz.id()).isEmpty());
@@ -171,24 +164,14 @@ class JdbcQuizRepositoryIT {
         }
     }
 
-    private JdbcQuizRepository repository() {
-        return new JdbcQuizRepository(dataSource);
+    private static Long createQuestion(JdbcQuestionRepository repo, String content, String a, String b,
+                                       String c, String d, char correct) {
+        Question q = Question.createNew(content, a, b, c, d, correct,
+            "T", Difficulty.EASY, 1L);
+        return repo.save(q).id();
     }
 
-    /** Helper to create questions for quiz_questions tests. */
-    private static final class QuestionCreator {
-        private final quiz.server.repository.jdbc.JdbcQuestionRepository repo;
-        private final long creatorId;
-
-        QuestionCreator(quiz.server.repository.jdbc.JdbcQuestionRepository repo, long creatorId) {
-            this.repo = repo;
-            this.creatorId = creatorId;
-        }
-
-        Long create(String content, String a, String b, String c, String d, char correct) {
-            Question q = Question.createNew(content, a, b, c, d, correct,
-                "T", Difficulty.EASY, creatorId);
-            return repo.save(q).id();
-        }
+    private JdbcQuizRepository repository() {
+        return new JdbcQuizRepository(dataSource);
     }
 }

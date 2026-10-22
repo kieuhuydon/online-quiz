@@ -1,13 +1,11 @@
-package quiz.server.integration;
+package quiz.server.repository.jdbc;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import quiz.common.enums.Difficulty;
 import quiz.common.enums.Role;
-import quiz.server.db.TransactionManager;
 import quiz.server.domain.Question;
-import quiz.server.repository.jdbc.JdbcQuestionRepository;
 import quiz.server.security.PasswordHasher;
 
 import javax.sql.DataSource;
@@ -27,12 +25,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Real PostgreSQL tests for question persistence: only run by the explicit db-it profile. */
 class JdbcQuestionRepositoryIT {
     private static DataSource dataSource;
-    private final List<String> fixtureUsernames = new ArrayList<>();
     private long creatorId;
 
     @BeforeAll
     static void connectOnlyToPreparedTestDatabase() throws Exception {
-        dataSource = PostgreSqlTestConfig.load().dataSource();
+        dataSource = TestDbConfig.load().dataSource();
         try (Connection connection = dataSource.getConnection()) {
             verifyDatabaseIdentity(connection);
             verifySchema(connection);
@@ -65,14 +62,7 @@ class JdbcQuestionRepositoryIT {
     }
 
     @AfterEach
-    void removeOnlyThisTestsFixtures() throws SQLException {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("DELETE FROM questions WHERE id = ?")) {
-            // Delete questions created by this test only. Creator cleanup handled separately.
-            for (int i = 0; i < fixtureUsernames.size(); i++) {
-                // We track question IDs separately if needed; here we clean up by known IDs.
-            }
-        }
+    void cleanupOnlyOwnFixtures() throws SQLException {
         if (creatorId > 0) {
             try (Connection connection = dataSource.getConnection();
                  PreparedStatement statement = connection.prepareStatement("DELETE FROM users WHERE id = ?")) {
@@ -97,8 +87,10 @@ class JdbcQuestionRepositoryIT {
         assertNotNull(saved.updatedAt());
         assertEquals(0, input.id());
         assertNull(input.createdAt());
-        assertEquals(saved.content(), repository.findById(saved.id()).orElseThrow().content());
-        assertEquals(saved.difficulty(), repository.findById(saved.id()).orElseThrow().difficulty());
+        assertTrue(saved.active());
+        Question reread = repository.findById(saved.id()).orElseThrow();
+        assertEquals(saved.content(), reread.content());
+        assertEquals(saved.difficulty(), reread.difficulty());
         assertTrue(saved.active());
     }
 
@@ -194,7 +186,6 @@ class JdbcQuestionRepositoryIT {
         Question reread = repository.findById(saved.id()).orElseThrow();
         assertFalse(reread.active());
         assertNotNull(reread.updatedAt());
-        // Row still exists, findAll still returns it.
         assertEquals(1, repository.findAll().size());
         assertEquals(0, repository.findActive().size());
     }
@@ -207,7 +198,7 @@ class JdbcQuestionRepositoryIT {
     }
 
     @Test
-    void connectionOverloadKeepsTransaction() throws SQLException {
+    void callerConnectionKeepsTransaction() throws SQLException {
         creatorId = createCreator();
         JdbcQuestionRepository repository = repository();
 
@@ -217,7 +208,6 @@ class JdbcQuestionRepositoryIT {
                 Question saved = repository.save(connection, Question.createNew(
                     "Tx câu hỏi?", "A", "B", "C", "D", 'C', "T", Difficulty.EASY, creatorId));
                 assertTrue(repository.findById(connection, saved.id()).isPresent());
-                // Uncommitted: not visible from another connection.
                 assertFalse(repository.findById(saved.id()).isPresent());
                 connection.rollback();
             } finally {
