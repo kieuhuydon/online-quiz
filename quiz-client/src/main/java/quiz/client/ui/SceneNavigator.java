@@ -167,6 +167,12 @@ public final class SceneNavigator implements AutoCloseable {
         if (type == AccountController.class) {
             return new AccountController(api, this, fx);
         }
+        if (type == quiz.client.ui.teacher.TeacherController.class) {
+            return new quiz.client.ui.teacher.TeacherController(api, this, fx);
+        }
+        if (type == quiz.client.ui.student.StudentController.class) {
+            return new quiz.client.ui.student.StudentController(api, this, fx);
+        }
         if (type == DashboardController.class) {
             return new DashboardController();
         }

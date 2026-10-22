@@ -6,11 +6,7 @@ import quiz.client.network.ServerConnection;
 import quiz.client.network.TransportException;
 import quiz.client.session.ClientSession;
 import quiz.client.util.FxAsync;
-import quiz.common.dto.AccountDto;
-import quiz.common.dto.CreateAccountDto;
-import quiz.common.dto.LoginRequestDto;
-import quiz.common.dto.LoginResultDto;
-import quiz.common.dto.SetAccountActiveDto;
+import quiz.common.dto.*;
 import quiz.common.protocol.ErrorCode;
 import quiz.common.protocol.MessageType;
 import quiz.common.protocol.Response;
@@ -161,6 +157,90 @@ public final class QuizApi implements AutoCloseable {
         }
     }
 
+    // --- Class Management ---
+    public CompletableFuture<ClassDto> createClass(CreateClassDto dto) {
+        return protectedCall(MessageType.CREATE_CLASS, dto, QuizApi::decodeClass);
+    }
+
+    public CompletableFuture<List<ClassDto>> listClasses() {
+        return protectedCall(MessageType.LIST_CLASSES, null, QuizApi::decodeClasses);
+    }
+
+    public CompletableFuture<Void> addClassMember(long classId, long studentId) {
+        return protectedCall(MessageType.ADD_CLASS_MEMBER, new AddClassMemberDto(classId, studentId), payload -> {
+            requireNull(payload);
+            return null;
+        });
+    }
+
+    public CompletableFuture<Void> removeClassMember(long classId, long studentId) {
+        return protectedCall(MessageType.REMOVE_CLASS_MEMBER, new AddClassMemberDto(classId, studentId), payload -> {
+            requireNull(payload);
+            return null;
+        });
+    }
+
+    public CompletableFuture<List<ClassMemberDto>> listClassMembers(long classId) {
+        return protectedCall(MessageType.LIST_CLASS_MEMBERS, classId, QuizApi::decodeClassMembers);
+    }
+
+    // --- Question Bank ---
+    public CompletableFuture<List<QuestionDto>> listQuestions() {
+        return protectedCall(MessageType.LIST_QUESTIONS, null, QuizApi::decodeQuestions);
+    }
+
+    public CompletableFuture<QuestionDto> getQuestion(long id) {
+        return protectedCall(MessageType.GET_QUESTION, id, QuizApi::decodeQuestion);
+    }
+
+    // --- Quiz Management ---
+    public CompletableFuture<QuizDto> createQuiz(CreateQuizDto dto) {
+        return protectedCall(MessageType.CREATE_QUIZ, dto, QuizApi::decodeQuiz);
+    }
+
+    public CompletableFuture<QuizDto> updateQuiz(UpdateQuizDto dto) {
+        return protectedCall(MessageType.UPDATE_QUIZ, dto, QuizApi::decodeQuiz);
+    }
+
+    public CompletableFuture<QuizDetailDto> getQuiz(long quizId) {
+        return protectedCall(MessageType.GET_QUIZ, quizId, QuizApi::decodeQuizDetail);
+    }
+
+    public CompletableFuture<List<QuizDto>> listQuizzes() {
+        return protectedCall(MessageType.LIST_QUIZZES, null, QuizApi::decodeQuizzes);
+    }
+
+    public CompletableFuture<Void> setQuizQuestions(long quizId, List<Long> questionIds) {
+        return protectedCall(MessageType.SET_QUIZ_QUESTIONS, new QuizQuestionsDto(quizId, questionIds), payload -> {
+            requireNull(payload);
+            return null;
+        });
+    }
+
+    public CompletableFuture<QuizDto> openQuiz(long quizId) {
+        return protectedCall(MessageType.OPEN_QUIZ, quizId, QuizApi::decodeQuiz);
+    }
+
+    public CompletableFuture<QuizDto> closeQuiz(long quizId) {
+        return protectedCall(MessageType.CLOSE_QUIZ, quizId, QuizApi::decodeQuiz);
+    }
+
+    public CompletableFuture<Void> assignQuiz(long quizId, long classId) {
+        return protectedCall(MessageType.ASSIGN_QUIZ, new AssignQuizDto(quizId, classId), payload -> {
+            requireNull(payload);
+            return null;
+        });
+    }
+
+    // --- Student Quiz Flow ---
+    public CompletableFuture<List<QuizInfoDto>> listAssignedQuizzes() {
+        return protectedCall(MessageType.LIST_ASSIGNED_QUIZZES, null, QuizApi::decodeQuizInfos);
+    }
+
+    public CompletableFuture<QuizInfoDto> getQuizInfo(long quizId) {
+        return protectedCall(MessageType.GET_QUIZ_INFO, quizId, QuizApi::decodeQuizInfo);
+    }
+
     private <T> CompletableFuture<T> protectedCall(MessageType type, Serializable payload, Function<Object, T> decoder) {
         synchronized (lock) {
             try {
@@ -301,6 +381,62 @@ public final class QuizApi implements AutoCloseable {
         if (payload != null) {
             throw new TransportException(PROTOCOL);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ClassDto decodeClass(Object payload) {
+        if (!(payload instanceof ClassDto dto)) throw new TransportException(PROTOCOL);
+        return dto;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<ClassDto> decodeClasses(Object payload) {
+        if (!(payload instanceof List<?> list)) throw new TransportException(PROTOCOL);
+        return List.copyOf((List<ClassDto>) payload);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<ClassMemberDto> decodeClassMembers(Object payload) {
+        if (!(payload instanceof List<?> list)) throw new TransportException(PROTOCOL);
+        return List.copyOf((List<ClassMemberDto>) payload);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<QuestionDto> decodeQuestions(Object payload) {
+        if (!(payload instanceof List<?> list)) throw new TransportException(PROTOCOL);
+        return List.copyOf((List<QuestionDto>) payload);
+    }
+
+    private static QuestionDto decodeQuestion(Object payload) {
+        if (!(payload instanceof QuestionDto dto)) throw new TransportException(PROTOCOL);
+        return dto;
+    }
+
+    private static QuizDto decodeQuiz(Object payload) {
+        if (!(payload instanceof QuizDto dto)) throw new TransportException(PROTOCOL);
+        return dto;
+    }
+
+    private static QuizDetailDto decodeQuizDetail(Object payload) {
+        if (!(payload instanceof QuizDetailDto dto)) throw new TransportException(PROTOCOL);
+        return dto;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<QuizDto> decodeQuizzes(Object payload) {
+        if (!(payload instanceof List<?> list)) throw new TransportException(PROTOCOL);
+        return List.copyOf((List<QuizDto>) payload);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<QuizInfoDto> decodeQuizInfos(Object payload) {
+        if (!(payload instanceof List<?> list)) throw new TransportException(PROTOCOL);
+        return List.copyOf((List<QuizInfoDto>) payload);
+    }
+
+    private static QuizInfoDto decodeQuizInfo(Object payload) {
+        if (!(payload instanceof QuizInfoDto dto)) throw new TransportException(PROTOCOL);
+        return dto;
     }
 
     /** Disposes the API and its owned connection; application shutdown need not send LOGOUT. */
