@@ -2,6 +2,9 @@ package quiz.client.api;
 
 import org.junit.jupiter.api.Test;
 import quiz.common.dto.CreateAccountDto;
+import quiz.common.dto.CreateQuestionDto;
+import quiz.common.dto.UpdateQuestionDto;
+import quiz.common.enums.Difficulty;
 import quiz.common.enums.Role;
 import quiz.common.protocol.ErrorCode;
 import static org.junit.jupiter.api.Assertions.*;
@@ -13,6 +16,31 @@ class ClientValidationTest {
         var account = ClientValidation.account(new CreateAccountDto(" Student ", " pass123 ", " Nguyễn Việt ", " ", Role.STUDENT));
         assertEquals("Student", account.username()); assertEquals("Nguyễn Việt", account.fullName());
         assertEquals(" pass123 ", account.password()); assertNull(account.email());
+    }
+
+    @Test void questionValidationNormalizesAndLimits() {
+        var q = ClientValidation.question(new CreateQuestionDto(
+            "  Câu hỏi?  ", "  A  ", "B", "C", "D", 'a', "  Ngữ pháp  ", Difficulty.EASY));
+        assertEquals("Câu hỏi?", q.content());
+        assertEquals("A", q.optionA());
+        assertEquals('A', q.correctOption());
+        assertEquals("Ngữ pháp", q.topic());
+        assertEquals(Difficulty.EASY, q.difficulty());
+    }
+
+    @Test void questionInvalidCorrectOptionRejected() {
+        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+            "Câu?", "A", "B", "C", "D", 'X', "T", Difficulty.EASY)));
+    }
+
+    @Test void questionMissingDifficultyRejected() {
+        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+            "Câu?", "A", "B", "C", "D", 'A', "T", null)));
+    }
+
+    @Test void updateQuestionRequiresPositiveId() {
+        assertThrows(ApiException.class, () -> ClientValidation.updateQuestion(new UpdateQuestionDto(
+            0, "Câu?", "A", "B", "C", "D", 'A', "T", Difficulty.EASY)));
     }
 
     @Test void unicodeLimitsUseCodePointsAndPasswordBytes() {

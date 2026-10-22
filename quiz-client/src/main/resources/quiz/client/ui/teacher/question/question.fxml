@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.teacher.question.QuestionController" spacing="20" minWidth="0">
+    <VBox spacing="8">
+        <Label text="NGÂN HÀNG CÂU HỎI" styleClass="eyebrow"/>
+        <Label text="Quản lý câu hỏi" styleClass="page-heading" wrapText="true"/>
+        <Label text="Tạo, xem, sửa và vô hiệu hóa câu hỏi trắc nghiệm 4 đáp án." styleClass="muted" wrapText="true"/>
+    </VBox>
+    <Label fx:id="questionNotice" styleClass="notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
+    <GridPane fx:id="questionPanels" hgap="20" vgap="20" minWidth="0">
+        <VBox spacing="14" styleClass="account-card" minWidth="0" GridPane.columnIndex="0" GridPane.rowIndex="0">
+            <HBox spacing="12" alignment="CENTER_LEFT">
+                <Label text="Danh sách câu hỏi" styleClass="card-heading" wrapText="true"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <ProgressIndicator fx:id="questionProgress" prefWidth="24" prefHeight="24" maxWidth="24" maxHeight="24"/>
+                <Button fx:id="refreshQuestions" text="Tải lại" onAction="#reload" styleClass="secondary-button"/>
+            </HBox>
+            <Label fx:id="listStatus" wrapText="true" styleClass="muted"/>
+            <TableView fx:id="questionTable" prefHeight="330" minHeight="240" minWidth="0"/>
+            <Separator/>
+            <Label fx:id="selectedQuestion" wrapText="true"/>
+            <HBox spacing="10">
+                <Button fx:id="newQuestion" text="Tạo mới" onAction="#newQuestion" styleClass="secondary-button"/>
+                <Button fx:id="editSelected" text="Sửa" onAction="#editSelected" styleClass="secondary-button"/>
+                <Button fx:id="deactivateQuestion" text="Vô hiệu hóa" onAction="#deactivate" styleClass="danger-button"/>
+            </HBox>
+        </VBox>
+        <VBox fx:id="questionForm" spacing="12" styleClass="account-card" minWidth="0" GridPane.columnIndex="1" GridPane.rowIndex="0" visible="false" managed="false">
+            <Label text="Chi tiết câu hỏi" styleClass="card-heading" wrapText="true"/>
+            <Label text="Các trường có dấu * là bắt buộc." styleClass="muted" wrapText="true"/>
+            <Label text="Nội dung câu hỏi *" styleClass="field-label" labelFor="$questionContent"/>
+            <TextArea fx:id="questionContent" promptText="Nhập nội dung câu hỏi" wrapText="true" prefRowCount="4"/>
+            <GridPane hgap="10" vgap="8">
+                <columnConstraints>
+                    <ColumnConstraints percentWidth="25"/>
+                    <ColumnConstraints percentWidth="25"/>
+                    <ColumnConstraints percentWidth="25"/>
+                    <ColumnConstraints percentWidth="25"/>
+                </columnConstraints>
+                <Label text="Đáp án A *" styleClass="field-label" labelFor="$questionOptionA" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                <TextField fx:id="questionOptionA" promptText="Đáp án A" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                <Label text="Đáp án B *" styleClass="field-label" labelFor="$questionOptionB" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                <TextField fx:id="questionOptionB" promptText="Đáp án B" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                <Label text="Đáp án C *" styleClass="field-label" labelFor="$questionOptionC" GridPane.columnIndex="2" GridPane.rowIndex="0"/>
+                <TextField fx:id="questionOptionC" promptText="Đáp án C" GridPane.columnIndex="2" GridPane.rowIndex="1"/>
+                <Label text="Đáp án D *" styleClass="field-label" labelFor="$questionOptionD" GridPane.columnIndex="3" GridPane.rowIndex="0"/>
+                <TextField fx:id="questionOptionD" promptText="Đáp án D" GridPane.columnIndex="3" GridPane.rowIndex="1"/>
+            </GridPane>
+            <GridPane hgap="10" vgap="8">
+                <columnConstraints>
+                    <ColumnConstraints percentWidth="20"/>
+                    <ColumnConstraints percentWidth="20"/>
+                    <ColumnConstraints percentWidth="20"/>
+                    <ColumnConstraints percentWidth="20"/>
+                    <ColumnConstraints percentWidth="20"/>
+                </columnConstraints>
+                <Label text="Đáp án đúng *" styleClass="field-label" labelFor="$questionCorrectOption" GridPane.columnIndex="0" GridPane.rowIndex="0"/>
+                <ComboBox fx:id="questionCorrectOption" GridPane.columnIndex="0" GridPane.rowIndex="1"/>
+                <Label text="Chủ đề *" styleClass="field-label" labelFor="$questionTopic" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+                <TextField fx:id="questionTopic" promptText="Ví dụ: Ngữ pháp, Từ vựng" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+                <Label text="Độ khó *" styleClass="field-label" labelFor="$questionDifficulty" GridPane.columnIndex="2" GridPane.rowIndex="0"/>
+                <ComboBox fx:id="questionDifficulty" GridPane.columnIndex="2" GridPane.rowIndex="1"/>
+                <Label fx:id="formError" styleClass="notice,error-notice" wrapText="true" visible="false" managed="false" GridPane.columnIndex="3" GridPane.rowIndex="0" GridPane.columnSpan="2" GridPane.rowSpan="2"/>
+            </GridPane>
+            <HBox spacing="10">
+                <Button fx:id="cancelEdit" text="Hủy" onAction="#cancelEdit" styleClass="secondary-button"/>
+                <Button fx:id="createQuestion" text="Tạo câu hỏi" onAction="#create" styleClass="primary-button" maxWidth="Infinity"/>
+                <Button fx:id="updateQuestion" text="Cập nhật" onAction="#update" styleClass="secondary-button" maxWidth="Infinity"/>
+            </HBox>
+        </VBox>
+    </GridPane>
+    <Label text="Chỉ Giáo viên và Quản trị viên được quản lý câu hỏi. Máy chủ xác thực quyền cho từng thao tác." styleClass="muted" wrapText="true"/>
+</VBox>

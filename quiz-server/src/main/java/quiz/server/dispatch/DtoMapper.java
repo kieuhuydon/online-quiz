@@ -2,6 +2,8 @@ package quiz.server.dispatch;
 
 import quiz.common.dto.AccountDto;
 import quiz.common.dto.LoginResultDto;
+import quiz.common.dto.QuestionDto;
+import quiz.server.domain.Question;
 import quiz.server.domain.User;
 import quiz.server.service.AuthResult;
 
@@ -9,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/** Auth/Account wire mapping; password hashes are deliberately excluded. */
+/** Auth/Account and Question wire mapping; password hashes are deliberately excluded. */
 public final class DtoMapper {
     private DtoMapper() {
     }
@@ -33,5 +35,21 @@ public final class DtoMapper {
             accounts.add(account(user));
         }
         return accounts;
+    }
+
+    public static QuestionDto question(Question question) {
+        Objects.requireNonNull(question, "Question cannot be null");
+        return new QuestionDto(question.id(), question.content(), question.optionA(), question.optionB(),
+            question.optionC(), question.optionD(), question.correctOption(), question.topic(),
+            question.difficulty(), question.active(), question.createdBy(), question.createdAt());
+    }
+
+    public static ArrayList<QuestionDto> questions(List<Question> questionList) {
+        Objects.requireNonNull(questionList, "Questions cannot be null");
+        ArrayList<QuestionDto> dtos = new ArrayList<>(questionList.size());
+        for (Question question : questionList) {
+            dtos.add(question(question));
+        }
+        return dtos;
     }
 }

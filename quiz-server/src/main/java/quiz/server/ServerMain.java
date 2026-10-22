@@ -9,7 +9,9 @@ import quiz.server.dispatch.AuthGuard;
 import quiz.server.dispatch.RequestDispatcher;
 import quiz.server.dispatch.handlers.AccountHandler;
 import quiz.server.dispatch.handlers.LoginHandler;
+import quiz.server.dispatch.handlers.QuestionHandler;
 import quiz.server.network.*;
+import quiz.server.repository.jdbc.JdbcQuestionRepository;
 import quiz.server.repository.jdbc.JdbcUserRepository;
 import quiz.server.service.*;
 
@@ -36,13 +38,17 @@ public final class ServerMain {
             JdbcUserRepository users = new JdbcUserRepository(DataSourceProvider.getDataSource());
             // Executes a repository query even when there are no accounts: pool creation is insufficient.
             users.findByUsername("bootstrap-readiness-probe");
+            JdbcQuestionRepository questionRepo = new JdbcQuestionRepository(DataSourceProvider.getDataSource());
+            QuestionService questionService = new QuestionService(questionRepo, users,
+                new TransactionManager(DataSourceProvider.getDataSource()));
             SessionRegistry sessions = new SessionRegistry();
             ConnectionRegistry connections = new ConnectionRegistry();
             SessionCoordinator coordinator = new SessionCoordinator(sessions);
             AuthService auth = new AuthService(users, coordinator);
             AccountService accounts = new AccountService(users, new TransactionManager(DataSourceProvider.getDataSource()), coordinator);
             RequestDispatcher dispatcher = new RequestDispatcher(new AuthGuard(auth),
-                List.of(new LoginHandler(auth), new AccountHandler(accounts)));
+                List.of(new LoginHandler(auth), new AccountHandler(accounts),
+                    new QuestionHandler(questionService)));
             return new QuizServer(config.getPort(), config, dispatcher,
                 new SessionLifecycle(coordinator, connections), sessions, connections);
         } catch (Exception failure) {

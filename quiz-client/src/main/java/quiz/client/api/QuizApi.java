@@ -8,9 +8,12 @@ import quiz.client.session.ClientSession;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.AccountDto;
 import quiz.common.dto.CreateAccountDto;
+import quiz.common.dto.CreateQuestionDto;
 import quiz.common.dto.LoginRequestDto;
 import quiz.common.dto.LoginResultDto;
+import quiz.common.dto.QuestionDto;
 import quiz.common.dto.SetAccountActiveDto;
+import quiz.common.dto.UpdateQuestionDto;
 import quiz.common.protocol.ErrorCode;
 import quiz.common.protocol.MessageType;
 import quiz.common.protocol.Response;
@@ -161,6 +164,42 @@ public final class QuizApi implements AutoCloseable {
         }
     }
 
+    public CompletableFuture<QuestionDto> createQuestion(CreateQuestionDto dto) {
+        try {
+            return protectedCall(MessageType.CREATE_QUESTION, ClientValidation.question(dto),
+                QuizApi::decodeQuestion);
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    public CompletableFuture<QuestionDto> getQuestion(long questionId) {
+        ClientValidation.positiveId(questionId);
+        return protectedCall(MessageType.GET_QUESTION, questionId, QuizApi::decodeQuestion);
+    }
+
+    public CompletableFuture<List<QuestionDto>> listQuestions() {
+        return protectedCall(MessageType.LIST_QUESTIONS, null, QuizApi::decodeQuestions);
+    }
+
+    public CompletableFuture<QuestionDto> updateQuestion(UpdateQuestionDto dto) {
+        try {
+            return protectedCall(MessageType.UPDATE_QUESTION, ClientValidation.updateQuestion(dto),
+                QuizApi::decodeQuestion);
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    public CompletableFuture<Void> deactivateQuestion(long questionId) {
+        ClientValidation.positiveId(questionId);
+        return protectedCall(MessageType.DEACTIVATE_QUESTION, questionId,
+            payload -> {
+                requireNull(payload);
+                return null;
+            });
+    }
+
     private <T> CompletableFuture<T> protectedCall(MessageType type, Serializable payload, Function<Object, T> decoder) {
         synchronized (lock) {
             try {
@@ -301,6 +340,28 @@ public final class QuizApi implements AutoCloseable {
         if (payload != null) {
             throw new TransportException(PROTOCOL);
         }
+    }
+
+    private static List<QuestionDto> decodeQuestions(Object payload) {
+        if (!(payload instanceof List<?> items)) {
+            throw new TransportException(PROTOCOL);
+        }
+        List<QuestionDto> questions = new ArrayList<>(items.size());
+        for (Object item : items) {
+            questions.add(decodeQuestion(item));
+        }
+        return List.copyOf(questions);
+    }
+
+    private static QuestionDto decodeQuestion(Object payload) {
+        if (!(payload instanceof QuestionDto dto) || dto.id() <= 0
+            || dto.content() == null || dto.content().isBlank()
+            || dto.optionA() == null || dto.optionB() == null || dto.optionC() == null
+            || dto.optionD() == null || dto.topic() == null || dto.topic().isBlank()
+            || dto.difficulty() == null || dto.createdAt() == null || dto.createdBy() <= 0) {
+            throw new TransportException(PROTOCOL);
+        }
+        return dto;
     }
 
     /** Disposes the API and its owned connection; application shutdown need not send LOGOUT. */
