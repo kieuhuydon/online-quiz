@@ -320,3 +320,119 @@
 .account-card .table-row-cell:filled:selected .table-cell {
     -fx-text-fill: white;
 }
+
+/* --- Badge styles for Quiz and Status --- */
+.badge {
+    -fx-padding: 4 10;
+    -fx-background-radius: 12;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.badge-draft {
+    -fx-background-color: #fef3c7;
+    -fx-text-fill: #92400e;
+    -fx-border-color: #fcd34d;
+    -fx-border-radius: 12;
+}
+
+.badge-open {
+    -fx-background-color: #d1fae5;
+    -fx-text-fill: #065f46;
+    -fx-border-color: #6ee7b7;
+    -fx-border-radius: 12;
+}
+
+.badge-closed {
+    -fx-background-color: #fee2e2;
+    -fx-text-fill: #991b1b;
+    -fx-border-color: #fca5a5;
+    -fx-border-radius: 12;
+}
+
+.badge-pin {
+    -fx-background-color: #eff6ff;
+    -fx-text-fill: #1d4ed8;
+    -fx-border-color: #93c5fd;
+    -fx-border-radius: 6;
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-padding: 3 8;
+}
+
+/* --- Stat Cards --- */
+.stat-card {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 16 20;
+}
+
+.stat-value {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1e3a8a;
+}
+
+.stat-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #64748b;
+    -fx-font-weight: bold;
+}
+
+/* --- Action buttons --- */
+.success-button {
+    -fx-background-color: #059669;
+    -fx-text-fill: white;
+}
+
+.success-button:hover {
+    -fx-background-color: #047857;
+}
+
+.warning-button {
+    -fx-background-color: #d97706;
+    -fx-text-fill: white;
+}
+
+.warning-button:hover {
+    -fx-background-color: #b45309;
+}
+
+/* --- Tabs --- */
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: transparent;
+}
+
+.tab-pane .tab {
+    -fx-background-color: #e2e8f0;
+    -fx-background-radius: 6 6 0 0;
+    -fx-padding: 8 18;
+}
+
+.tab-pane .tab:selected {
+    -fx-background-color: #1d4ed8;
+}
+
+.tab-pane .tab:selected .tab-label {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.tab-pane .tab .tab-label {
+    -fx-text-fill: #475569;
+    -fx-font-size: 13px;
+}
+
+/* --- ScrollPane --- */
+.content-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
+.content-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+

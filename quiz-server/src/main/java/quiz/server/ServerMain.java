@@ -41,8 +41,20 @@ public final class ServerMain {
             SessionCoordinator coordinator = new SessionCoordinator(sessions);
             AuthService auth = new AuthService(users, coordinator);
             AccountService accounts = new AccountService(users, new TransactionManager(DataSourceProvider.getDataSource()), coordinator);
+            quiz.server.repository.jdbc.JdbcClassRepository classes = new quiz.server.repository.jdbc.JdbcClassRepository(DataSourceProvider.getDataSource());
+            quiz.server.repository.jdbc.JdbcQuestionRepository questions = new quiz.server.repository.jdbc.JdbcQuestionRepository(DataSourceProvider.getDataSource());
+            quiz.server.repository.jdbc.JdbcQuizRepository quizzes = new quiz.server.repository.jdbc.JdbcQuizRepository(DataSourceProvider.getDataSource());
+            ClassService classService = new ClassService(classes, users);
+            QuestionService questionService = new QuestionService(questions);
+            QuizService quizService = new QuizService(quizzes, questions, classes);
             RequestDispatcher dispatcher = new RequestDispatcher(new AuthGuard(auth),
-                List.of(new LoginHandler(auth), new AccountHandler(accounts)));
+                List.of(
+                    new LoginHandler(auth),
+                    new AccountHandler(accounts),
+                    new quiz.server.dispatch.handlers.ClassHandler(classService),
+                    new quiz.server.dispatch.handlers.QuestionHandler(questionService),
+                    new quiz.server.dispatch.handlers.QuizHandler(quizService)
+                ));
             return new QuizServer(config.getPort(), config, dispatcher,
                 new SessionLifecycle(coordinator, connections), sessions, connections);
         } catch (Exception failure) {
