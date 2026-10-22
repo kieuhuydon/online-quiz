@@ -10,8 +10,10 @@ import quiz.server.dispatch.RequestDispatcher;
 import quiz.server.dispatch.handlers.AccountHandler;
 import quiz.server.dispatch.handlers.LoginHandler;
 import quiz.server.dispatch.handlers.QuestionHandler;
+import quiz.server.dispatch.handlers.QuizHandler;
 import quiz.server.network.*;
 import quiz.server.repository.jdbc.JdbcQuestionRepository;
+import quiz.server.repository.jdbc.JdbcQuizRepository;
 import quiz.server.repository.jdbc.JdbcUserRepository;
 import quiz.server.service.*;
 
@@ -41,6 +43,9 @@ public final class ServerMain {
             JdbcQuestionRepository questionRepo = new JdbcQuestionRepository(DataSourceProvider.getDataSource());
             QuestionService questionService = new QuestionService(questionRepo, users,
                 new TransactionManager(DataSourceProvider.getDataSource()));
+            JdbcQuizRepository quizRepo = new JdbcQuizRepository(DataSourceProvider.getDataSource());
+            QuizService quizService = new QuizService(quizRepo, questionRepo, users,
+                new TransactionManager(DataSourceProvider.getDataSource()));
             SessionRegistry sessions = new SessionRegistry();
             ConnectionRegistry connections = new ConnectionRegistry();
             SessionCoordinator coordinator = new SessionCoordinator(sessions);
@@ -48,7 +53,7 @@ public final class ServerMain {
             AccountService accounts = new AccountService(users, new TransactionManager(DataSourceProvider.getDataSource()), coordinator);
             RequestDispatcher dispatcher = new RequestDispatcher(new AuthGuard(auth),
                 List.of(new LoginHandler(auth), new AccountHandler(accounts),
-                    new QuestionHandler(questionService)));
+                    new QuestionHandler(questionService), new QuizHandler(quizService)));
             return new QuizServer(config.getPort(), config, dispatcher,
                 new SessionLifecycle(coordinator, connections), sessions, connections);
         } catch (Exception failure) {

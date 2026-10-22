@@ -12,6 +12,8 @@ import quiz.common.dto.CreateQuestionDto;
 import quiz.common.dto.LoginRequestDto;
 import quiz.common.dto.LoginResultDto;
 import quiz.common.dto.QuestionDto;
+import quiz.common.dto.QuizDto;
+import quiz.common.dto.QuizQuestionsDto;
 import quiz.common.dto.SetAccountActiveDto;
 import quiz.common.dto.UpdateQuestionDto;
 import quiz.common.protocol.ErrorCode;
@@ -200,6 +202,23 @@ public final class QuizApi implements AutoCloseable {
             });
     }
 
+    public CompletableFuture<QuizDto> setQuizQuestions(QuizQuestionsDto dto) {
+        try {
+            return protectedCall(MessageType.SET_QUIZ_QUESTIONS, dto, QuizApi::decodeQuiz);
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    public CompletableFuture<QuizDto> getQuiz(long quizId) {
+        ClientValidation.positiveId(quizId);
+        return protectedCall(MessageType.GET_QUIZ, quizId, QuizApi::decodeQuiz);
+    }
+
+    public CompletableFuture<List<QuizDto>> listQuizzes() {
+        return protectedCall(MessageType.LIST_QUIZZES, null, QuizApi::decodeQuizzes);
+    }
+
     private <T> CompletableFuture<T> protectedCall(MessageType type, Serializable payload, Function<Object, T> decoder) {
         synchronized (lock) {
             try {
@@ -359,6 +378,27 @@ public final class QuizApi implements AutoCloseable {
             || dto.optionA() == null || dto.optionB() == null || dto.optionC() == null
             || dto.optionD() == null || dto.topic() == null || dto.topic().isBlank()
             || dto.difficulty() == null || dto.createdAt() == null || dto.createdBy() <= 0) {
+            throw new TransportException(PROTOCOL);
+        }
+        return dto;
+    }
+
+    private static List<QuizDto> decodeQuizzes(Object payload) {
+        if (!(payload instanceof List<?> items)) {
+            throw new TransportException(PROTOCOL);
+        }
+        List<QuizDto> quizzes = new ArrayList<>(items.size());
+        for (Object item : items) {
+            quizzes.add(decodeQuiz(item));
+        }
+        return List.copyOf(quizzes);
+    }
+
+    private static QuizDto decodeQuiz(Object payload) {
+        if (!(payload instanceof QuizDto dto) || dto.id() <= 0
+            || dto.title() == null || dto.title().isBlank()
+            || dto.durationMinutes() <= 0 || dto.status() == null || dto.createdAt() == null
+            || dto.createdBy() <= 0) {
             throw new TransportException(PROTOCOL);
         }
         return dto;
