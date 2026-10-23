@@ -5,6 +5,7 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.VBox;
 import quiz.client.api.ApiException;
 import quiz.client.api.QuizApi;
@@ -49,6 +50,7 @@ public final class StudentController extends ScreenController {
     @FXML private Label infoPin;
     @FXML private Label infoDescription;
     @FXML private Button btnCloseInfo;
+    @FXML private Button btnStartExam;
 
     private final ObservableList<QuizInfoDto> quizList = FXCollections.observableArrayList();
 
@@ -129,7 +131,7 @@ public final class StudentController extends ScreenController {
 
         TableColumn<QuizInfoDto, String> colPin = new TableColumn<>("Mã PIN");
         colPin.setPrefWidth(100);
-        colPin.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().pin() == null ? "—" : q.getValue().pin()));
+        colPin.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().pinRequired() ? "Yêu cầu PIN" : "—"));
         colPin.setCellFactory(col -> new TableCell<>() {
             @Override
             protected void updateItem(String item, boolean empty) {
@@ -185,7 +187,8 @@ public final class StudentController extends ScreenController {
         infoPassScore.setText(String.format("%.0f%%", sel.passScore()));
         infoQuestionCount.setText(sel.questionCount() + " câu hỏi");
         infoStatus.setText(sel.status() == QuizStatus.OPEN ? "Đang mở thi" : (sel.status() == QuizStatus.CLOSED ? "Đã đóng" : "Chưa mở"));
-        infoPin.setText(sel.pin() != null ? sel.pin() : "Chưa cấp");
+        infoPin.setText(sel.pinRequired() ? "Cần nhập mã PIN khi bắt đầu" : "Không yêu cầu PIN");
+        btnStartExam.setDisable(sel.status() != QuizStatus.OPEN);
         infoDescription.setText(sel.description() != null && !sel.description().isBlank() ? sel.description() : "Không có mô tả chi tiết.");
 
         quizInfoPanel.setVisible(true);
@@ -196,6 +199,29 @@ public final class StudentController extends ScreenController {
     private void onCloseInfoClick() {
         quizInfoPanel.setVisible(false);
         quizInfoPanel.setManaged(false);
+    }
+
+    @FXML private void onHistoryClick() { navigator.show(quiz.client.ui.Screen.STUDENT_HISTORY); }
+
+    @FXML
+    private void onStartExamClick() {
+        QuizInfoDto selected = assignedQuizTable.getSelectionModel().getSelectedItem();
+        if (selected == null || selected.status() != QuizStatus.OPEN) return;
+        String pin = null;
+        if (selected.pinRequired()) {
+            TextInputDialog dialog = new TextInputDialog();
+            dialog.setTitle("Tham gia bài kiểm tra"); dialog.setHeaderText("Nhập mã PIN");
+            dialog.setContentText("Mã PIN:");
+            var entered = dialog.showAndWait();
+            if (entered.isEmpty()) return;
+            pin = entered.get().strip();
+        }
+        final String code = pin;
+        btnStartExam.setDisable(true);
+        fx.observe(api.startAttempt(selected.id(), code), this::isActive,
+            navigator::showExam,
+            err -> { showNotice("Không thể bắt đầu bài thi: " + err.getMessage(), true); btnStartExam.setDisable(false); },
+            () -> btnStartExam.setDisable(false));
     }
 
     private void showNotice(String msg, boolean isError) {

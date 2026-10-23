@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import quiz.client.network.ServerConnection;
 import quiz.client.network.TransportException;
+import quiz.client.network.PushListener;
 import quiz.client.session.ClientSession;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.*;
@@ -52,6 +53,10 @@ public final class QuizApi implements AutoCloseable {
 
     public ClientSession session() {
         return session;
+    }
+
+    public AutoCloseable addPushListener(PushListener listener) {
+        return connection.addPushListener(listener);
     }
 
     /** Recover from LOGIN conflict without silently logging out an authenticated user. */
@@ -239,6 +244,32 @@ public final class QuizApi implements AutoCloseable {
 
     public CompletableFuture<QuizInfoDto> getQuizInfo(long quizId) {
         return protectedCall(MessageType.GET_QUIZ_INFO, quizId, QuizApi::decodeQuizInfo);
+    }
+
+    public CompletableFuture<AttemptStateDto> startAttempt(long quizId, String pin) {
+        return protectedCall(MessageType.START_ATTEMPT, new StartAttemptRequestDto(quizId, pin), QuizApi::decodeAttemptState);
+    }
+
+    public CompletableFuture<Void> saveAnswer(long attemptId, long questionId, Character option) {
+        return protectedCall(MessageType.SAVE_ANSWER, new SaveAnswerDto(attemptId, questionId, option), payload -> {
+            requireNull(payload); return null;
+        });
+    }
+
+    public CompletableFuture<ResultDto> submitAttempt(long attemptId) {
+        return protectedCall(MessageType.SUBMIT_ATTEMPT, new SubmitAttemptDto(attemptId), QuizApi::decodeResult);
+    }
+
+    public CompletableFuture<AttemptStateDto> getAttemptState(long attemptId) {
+        return protectedCall(MessageType.GET_ATTEMPT_STATE, attemptId, QuizApi::decodeAttemptState);
+    }
+
+    public CompletableFuture<ResultDto> getMyResult(long attemptId) {
+        return protectedCall(MessageType.GET_MY_RESULT, attemptId, QuizApi::decodeResult);
+    }
+
+    public CompletableFuture<List<ResultDto>> listMyHistory() {
+        return protectedCall(MessageType.LIST_MY_HISTORY, null, QuizApi::decodeResults);
     }
 
     private <T> CompletableFuture<T> protectedCall(MessageType type, Serializable payload, Function<Object, T> decoder) {
@@ -437,6 +468,23 @@ public final class QuizApi implements AutoCloseable {
     private static QuizInfoDto decodeQuizInfo(Object payload) {
         if (!(payload instanceof QuizInfoDto dto)) throw new TransportException(PROTOCOL);
         return dto;
+    }
+
+    private static AttemptStateDto decodeAttemptState(Object payload) {
+        if (!(payload instanceof AttemptStateDto dto)) throw new TransportException(PROTOCOL);
+        return dto;
+    }
+
+    private static ResultDto decodeResult(Object payload) {
+        if (!(payload instanceof ResultDto dto)) throw new TransportException(PROTOCOL);
+        return dto;
+    }
+
+    private static List<ResultDto> decodeResults(Object payload) {
+        if (!(payload instanceof List<?> items)) throw new TransportException(PROTOCOL);
+        List<ResultDto> results = new ArrayList<>(items.size());
+        for (Object item : items) results.add(decodeResult(item));
+        return List.copyOf(results);
     }
 
     /** Disposes the API and its owned connection; application shutdown need not send LOGOUT. */

@@ -8,7 +8,9 @@ import quiz.server.db.TransactionManager;
 import quiz.server.dispatch.AuthGuard;
 import quiz.server.dispatch.RequestDispatcher;
 import quiz.server.dispatch.handlers.AccountHandler;
+import quiz.server.dispatch.handlers.AttemptHandler;
 import quiz.server.dispatch.handlers.LoginHandler;
+import quiz.server.dispatch.handlers.ResultHandler;
 import quiz.server.network.*;
 import quiz.server.repository.jdbc.JdbcUserRepository;
 import quiz.server.service.*;
@@ -44,19 +46,25 @@ public final class ServerMain {
             quiz.server.repository.jdbc.JdbcClassRepository classes = new quiz.server.repository.jdbc.JdbcClassRepository(DataSourceProvider.getDataSource());
             quiz.server.repository.jdbc.JdbcQuestionRepository questions = new quiz.server.repository.jdbc.JdbcQuestionRepository(DataSourceProvider.getDataSource());
             quiz.server.repository.jdbc.JdbcQuizRepository quizzes = new quiz.server.repository.jdbc.JdbcQuizRepository(DataSourceProvider.getDataSource());
+            quiz.server.repository.jdbc.JdbcAttemptRepository attempts = new quiz.server.repository.jdbc.JdbcAttemptRepository(DataSourceProvider.getDataSource());
             ClassService classService = new ClassService(classes, users);
             QuestionService questionService = new QuestionService(questions);
             QuizService quizService = new QuizService(quizzes, questions, classes);
+            AttemptService attemptService = new AttemptService(attempts, quizzes, questions, users,
+                new TransactionManager(DataSourceProvider.getDataSource()), new GradingService());
             RequestDispatcher dispatcher = new RequestDispatcher(new AuthGuard(auth),
                 List.of(
                     new LoginHandler(auth),
                     new AccountHandler(accounts),
                     new quiz.server.dispatch.handlers.ClassHandler(classService),
                     new quiz.server.dispatch.handlers.QuestionHandler(questionService),
-                    new quiz.server.dispatch.handlers.QuizHandler(quizService)
+                    new quiz.server.dispatch.handlers.QuizHandler(quizService),
+                    new AttemptHandler(attemptService),
+                    new ResultHandler(attemptService)
                 ));
             return new QuizServer(config.getPort(), config, dispatcher,
-                new SessionLifecycle(coordinator, connections), sessions, connections);
+                new SessionLifecycle(coordinator, connections), sessions, connections,
+                attemptService::finalizeExpiredAttempts);
         } catch (Exception failure) {
             DataSourceProvider.close();
             throw failure;

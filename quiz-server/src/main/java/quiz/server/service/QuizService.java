@@ -266,7 +266,7 @@ public final class QuizService {
     private static QuizInfoDto toInfoDto(Quiz q, int questionCount) {
         return new QuizInfoDto(
             q.id(), q.title(), q.description(), q.category(), q.durationMinutes(),
-            q.passScore(), questionCount, q.status(), q.pin(), q.openedAt(), q.closedAt()
+            q.passScore(), questionCount, q.status(), q.pin(), q.pin() != null, q.openedAt(), q.closedAt()
         );
     }
 }

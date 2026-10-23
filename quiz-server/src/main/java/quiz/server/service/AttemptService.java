@@ -1,0 +1,75 @@
+package quiz.server.service;
+
+import quiz.common.dto.*;
+import quiz.common.enums.*;
+import quiz.server.db.TransactionManager;
+import quiz.server.domain.*;
+import quiz.server.exception.*;
+import quiz.server.repository.*;
+import java.time.*;
+import java.util.*;
+
+public final class AttemptService {
+    private final AttemptRepository attempts; private final QuizRepository quizzes; private final QuestionRepository questions;
+    private final UserRepository users; private final TransactionManager transactions; private final GradingService grading;
+    private final Clock clock;
+    public AttemptService(AttemptRepository attempts, QuizRepository quizzes, QuestionRepository questions,
+                          UserRepository users, TransactionManager transactions, GradingService grading) {
+        this(attempts,quizzes,questions,users,transactions,grading,Clock.systemUTC());
+    }
+    AttemptService(AttemptRepository attempts,QuizRepository quizzes,QuestionRepository questions,UserRepository users,
+                   TransactionManager transactions,GradingService grading,Clock clock) {
+        this.attempts=Objects.requireNonNull(attempts);this.quizzes=Objects.requireNonNull(quizzes);
+        this.questions=Objects.requireNonNull(questions);this.users=Objects.requireNonNull(users);
+        this.transactions=Objects.requireNonNull(transactions);this.grading=Objects.requireNonNull(grading);this.clock=Objects.requireNonNull(clock);
+    }
+    public AttemptStateDto startAttempt(long quizId,String pin,long studentId) {
+        Quiz quiz=quizzes.findById(quizId).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
+        if(quiz.status()!=QuizStatus.OPEN)throw new ConflictException("Bài kiểm tra hiện không mở");
+        if(!quizzes.findAssignedQuizzesForStudent(studentId).stream().anyMatch(q->q.id()==quizId))throw new ForbiddenException("Bài kiểm tra chưa được giao cho bạn");
+        if(!Objects.equals(quiz.pin(),pin))throw new ForbiddenException("Mã PIN không chính xác");
+        Optional<Attempt> existing=attempts.findByStudentAndQuiz(studentId,quizId);
+        if(existing.isPresent()) {
+            Attempt a=existing.get();
+            if(a.status()==AttemptStatus.SUBMITTED)throw new ConflictException("Bạn đã hoàn thành bài kiểm tra này");
+            return state(a);
+        }
+        Instant start=clock.instant();
+        Attempt created=transactions.executeWithException(c->attempts.create(c,new Attempt(0,quizId,studentId,AttemptStatus.IN_PROGRESS,start,start.plusSeconds(quiz.durationMinutes()*60L),null,null)));
+        return state(created);
+    }
+    public void saveAnswer(long attemptId,long questionId,Character option,long studentId) {
+        if(option!=null && "ABCD".indexOf(Character.toUpperCase(option))<0)throw new ValidationException("Đáp án không hợp lệ");
+        transactions.executeWithException(c->{
+            Attempt a=attempts.findByIdForUpdate(c,attemptId).orElseThrow(()->new NotFoundException("Attempt không tồn tại"));
+            authorize(a,studentId); if(a.status()!=AttemptStatus.IN_PROGRESS)throw new ConflictException("Bài làm đã được nộp");
+            if(!clock.instant().isBefore(a.deadlineAt()))throw new ConflictException("Đã hết thời gian làm bài");
+            List<Question> qs=questions.findQuestionsByQuizId(a.quizId());
+            if(qs.stream().noneMatch(q->q.id()==questionId))throw new ValidationException("Câu hỏi không thuộc bài kiểm tra");
+            attempts.saveAnswer(c,new AnswerRecord(attemptId,questionId,option,clock.instant())); return null;
+        });
+    }
+    public ResultDto submitAttempt(long attemptId,long studentId,SubmitReason requestedReason) {
+        ExamResult result=transactions.executeWithException(c->{
+            Attempt a=attempts.findByIdForUpdate(c,attemptId).orElseThrow(()->new NotFoundException("Attempt không tồn tại"));
+            authorize(a,studentId);
+            Optional<ExamResult> existing=attempts.findResult(attemptId);
+            if(existing.isPresent())return existing.get();
+            if(a.status()!=AttemptStatus.IN_PROGRESS)throw new ConflictException("Attempt đã được nộp");
+            Instant now=clock.instant(); SubmitReason reason=requestedReason==SubmitReason.ANTICHEAT?SubmitReason.ANTICHEAT:SubmitReason.MANUAL; if(!now.isBefore(a.deadlineAt()))reason=SubmitReason.TIMEOUT;
+            Quiz quiz=quizzes.findById(a.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
+            User user=users.findById(studentId).orElseThrow(()->new NotFoundException("Tài khoản không tồn tại"));
+            List<Question> qs=questions.findQuestionsByQuizId(a.quizId());
+            ExamResult graded=grading.grade(a,attempts.getAnswers(c,attemptId),qs,quiz,user.fullName(),reason,now);
+            attempts.submit(c,attemptId,now,reason);attempts.saveResult(c,graded);return graded;
+        });
+        return resultDto(result);
+    }
+    public AttemptStateDto getAttemptState(long id,long studentId){Attempt a=attempts.findById(id).orElseThrow(()->new NotFoundException("Attempt không tồn tại"));authorize(a,studentId);if(a.status()==AttemptStatus.SUBMITTED)throw new ConflictException("Attempt đã được nộp");if(!clock.instant().isBefore(a.deadlineAt())){submitAttempt(id,studentId,SubmitReason.TIMEOUT);throw new ConflictException("Bài kiểm tra đã hết giờ và được tự động nộp");}return state(a);}
+    public ResultDto getResult(long id,long studentId){ExamResult r=attempts.findResult(id).orElseThrow(()->new NotFoundException("Kết quả chưa có"));if(r.studentId()!=studentId)throw new ForbiddenException("Bạn không có quyền xem kết quả này");return resultDto(r);}
+    public List<ResultDto> listHistory(long studentId){return attempts.findResultsByStudent(studentId).stream().map(this::resultDto).toList();}
+    public void finalizeExpiredAttempts(){for(Attempt a:attempts.findExpiredInProgress(clock.instant())){try{submitAttempt(a.id(),a.studentId(),SubmitReason.TIMEOUT);}catch(ConflictException ignored){/* Another request finalized it under the attempt lock. */}}}
+    private AttemptStateDto state(Attempt a){Quiz quiz=quizzes.findById(a.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));List<Question> qs=questions.findQuestionsByQuizId(a.quizId());List<StudentQuestionDto> ds=new ArrayList<>();for(int i=0;i<qs.size();i++){Question q=qs.get(i);ds.add(new StudentQuestionDto(q.id(),i+1,q.content(),q.optionA(),q.optionB(),q.optionC(),q.optionD(),q.topic(),q.difficulty()));}Map<Long,Character> saved=transactions.executeInTransaction(c->attempts.getAnswers(c,a.id()));long millis=Duration.between(clock.instant(),a.deadlineAt()).toMillis();long remain=millis<=0?0:(millis+999)/1000;return new AttemptStateDto(a.id(),a.quizId(),quiz.title(),remain,List.copyOf(ds),saved);}
+    private ResultDto resultDto(ExamResult r){String title=quizzes.findById(r.quizId()).map(Quiz::title).orElse("Bài kiểm tra");return new ResultDto(r.attemptId(),r.quizId(),title,r.studentName(),r.score(),r.correctCount(),r.totalQuestions(),r.passed(),r.submitReason(),r.submittedAt());}
+    private static void authorize(Attempt a,long student){if(a.studentId()!=student)throw new ForbiddenException("Attempt không thuộc về bạn");}
+}
