@@ -17,4 +17,203 @@
         <Label text="Các công cụ đề kiểm tra và giao bài sẽ được bổ sung vào không gian này." styleClass="muted" wrapText="true"/>
         <Label text="Chưa tải dữ liệu lớp học hoặc bài kiểm tra." styleClass="note" wrapText="true"/>
     </VBox>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.teacher.TeacherController" spacing="16">
+    <padding>
+        <Insets top="16" right="20" bottom="20" left="20"/>
+    </padding>
+
+    <!-- Header -->
+    <HBox alignment="CENTER_LEFT" spacing="16">
+        <VBox spacing="4" HBox.hgrow="ALWAYS">
+            <Label text="KHÔNG GIAN GIẢNG DẠY" styleClass="eyebrow"/>
+            <Label text="Quản lý Đề kiểm tra, Ngân hàng câu hỏi và Lớp học" styleClass="page-heading"/>
+            <Label text="Thiết lập đề thi, chọn câu hỏi, quản trị trạng thái (DRAFT -> OPEN -> CLOSED) và giao bài cho lớp." styleClass="muted"/>
+        </VBox>
+    </HBox>
+
+    <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS" styleClass="tab-pane">
+        <!-- =================================================================== -->
+        <!-- TAB 1: QUẢN LÝ ĐỀ KIỂM TRA (QUIZZES) -->
+        <!-- =================================================================== -->
+        <Tab text="  Đề Kiểm Tra (Quizzes)  ">
+            <ScrollPane fx:id="quizScrollPane" fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED" styleClass="content-scroll">
+                <VBox spacing="16" style="-fx-padding: 16 12 16 0;">
+                    <!-- Stat Cards -->
+                    <HBox spacing="16">
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+                            <Label text="TỔNG SỐ ĐỀ THI" styleClass="stat-label"/>
+                            <Label fx:id="totalQuizzesCount" text="0" styleClass="stat-value"/>
+                        </VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+                            <Label text="ĐANG MỞ THI (ACTIVE)" styleClass="stat-label"/>
+                            <Label fx:id="openQuizzesCount" text="0" styleClass="stat-value" style="-fx-text-fill: #059669;"/>
+                        </VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+                            <Label text="BẢN NHÁP (DRAFT)" styleClass="stat-label"/>
+                            <Label fx:id="draftQuizzesCount" text="0" styleClass="stat-value" style="-fx-text-fill: #d97706;"/>
+                        </VBox>
+                    </HBox>
+
+                    <!-- Notification message -->
+                    <Label fx:id="quizNotice" visible="false" managed="false" styleClass="notice" wrapText="true" maxWidth="Infinity"/>
+
+                    <!-- Action Toolbar -->
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Button fx:id="btnNewQuiz" text="+ Tạo Đề Mới" onAction="#onNewQuizClick" styleClass="primary-button"/>
+                        <Button fx:id="btnEditQuiz" text="Sửa Đề" onAction="#onEditQuizClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnSelectQuestions" text="Chọn Câu Hỏi" onAction="#onSelectQuestionsClick" styleClass="warning-button"/>
+                        <Button fx:id="btnOpenQuiz" text="Mở Đề (Sinh PIN)" onAction="#onOpenQuizClick" styleClass="success-button"/>
+                        <Button fx:id="btnCloseQuiz" text="Đóng Đề Thi" onAction="#onCloseQuizClick" styleClass="danger-button"/>
+                        <Button fx:id="btnAssignQuiz" text="Giao Cho Lớp" onAction="#onAssignQuizClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnViewDetail" text="Xem Chi Tiết" onAction="#onViewDetailClick" styleClass="secondary-button"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <ProgressIndicator fx:id="quizProgress" visible="false" prefWidth="22" prefHeight="22"/>
+                        <Button fx:id="btnRefreshQuiz" text="Tải lại" onAction="#loadQuizzes" styleClass="secondary-button"/>
+                    </HBox>
+
+                    <!-- Quizzes Table -->
+                    <TableView fx:id="quizTable" prefHeight="220" minHeight="160" VBox.vgrow="ALWAYS" styleClass="account-card"/>
+
+                <!-- SUB-PANEL 1: Form Create/Edit Quiz -->
+                <VBox fx:id="quizFormPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
+                    <Label fx:id="formTitle" text="Tạo Đề Kiểm Tra Mới" styleClass="card-heading"/>
+                    <Separator/>
+                    <Label fx:id="formError" visible="false" managed="false" styleClass="error-notice" wrapText="true"/>
+                    <GridPane hgap="16" vgap="12">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="130" prefWidth="130"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                            <ColumnConstraints minWidth="130" prefWidth="130"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label text="Tiêu đề đề thi:" styleClass="field-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <TextField fx:id="txtQuizTitle" promptText="VD: English Grammar Placement Test" GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
+
+                        <Label text="Chủ đề:" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <TextField fx:id="txtQuizCategory" promptText="VD: Grammar / Reading" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label text="Thời lượng (phút):" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+                        <TextField fx:id="txtQuizDuration" promptText="30" GridPane.rowIndex="1" GridPane.columnIndex="3"/>
+
+                        <Label text="Điểm đạt (%):" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <TextField fx:id="txtQuizPassScore" promptText="50" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label text="Chính sách vi phạm:" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="2"/>
+                        <ComboBox fx:id="cmbQuizPolicy" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="3"/>
+
+                        <Label text="Số vi phạm tối đa:" styleClass="field-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <TextField fx:id="txtQuizMaxViolations" promptText="3" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label text="Mô tả bài thi:" styleClass="field-label" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                        <TextArea fx:id="txtQuizDescription" promptText="Mô tả chi tiết về bài kiểm tra..." prefRowCount="2" GridPane.rowIndex="4" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
+                    </GridPane>
+                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                        <Button fx:id="btnCancelQuizForm" text="Hủy bỏ" onAction="#onCancelQuizFormClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnSaveQuiz" text="Lưu Đề Thi" onAction="#onSaveQuizClick" styleClass="primary-button"/>
+                    </HBox>
+                </VBox>
+
+                <!-- SUB-PANEL 2: Select Questions Panel -->
+                <VBox fx:id="questionSelectionPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <VBox spacing="2" HBox.hgrow="ALWAYS">
+                            <Label fx:id="questionSelectionTitle" text="Chọn câu hỏi từ Ngân hàng câu hỏi" styleClass="card-heading"/>
+                            <Label fx:id="selectedQuestionsCount" text="Đã chọn: 0 câu hỏi" style="-fx-font-weight: bold; -fx-text-fill: #1d4ed8;"/>
+                        </VBox>
+                        <Button fx:id="btnCancelQuestionSelection" text="Đóng" onAction="#onCancelQuestionSelectionClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnSaveSelectedQuestions" text="Lưu Danh Sách Câu Hỏi Vào Đề" onAction="#onSaveSelectedQuestionsClick" styleClass="primary-button"/>
+                    </HBox>
+                    <Separator/>
+                    <TableView fx:id="questionTable" prefHeight="240" styleClass="account-card"/>
+                </VBox>
+
+                <!-- SUB-PANEL 3: Assign Quiz to Class Panel -->
+                <VBox fx:id="assignPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
+                    <Label fx:id="assignQuizTitle" text="Giao Đề Kiểm Tra Cho Lớp Học" styleClass="card-heading"/>
+                    <Separator/>
+                    <HBox spacing="12" alignment="CENTER_LEFT">
+                        <Label text="Chọn Lớp Học:" styleClass="field-label"/>
+                        <ComboBox fx:id="cmbAssignClass" prefWidth="280"/>
+                        <Button fx:id="btnConfirmAssign" text="Xác Nhận Giao Bài" onAction="#onConfirmAssignClick" styleClass="primary-button"/>
+                        <Button fx:id="btnCancelAssign" text="Hủy" onAction="#onCancelAssignClick" styleClass="secondary-button"/>
+                    </HBox>
+                </VBox>
+
+                <!-- SUB-PANEL 4: Quiz Details Panel -->
+                <VBox fx:id="quizDetailPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
+                    <HBox alignment="CENTER_LEFT">
+                        <VBox spacing="2" HBox.hgrow="ALWAYS">
+                            <Label fx:id="detailQuizTitle" text="Chi tiết đề thi" styleClass="card-heading"/>
+                            <Label fx:id="detailQuizInfo" text="" styleClass="muted"/>
+                            <Label fx:id="detailQuestionsCount" text="" style="-fx-font-weight: bold;"/>
+                            <Label fx:id="detailAssignedClasses" text="" style="-fx-text-fill: #059669; -fx-font-weight: bold;"/>
+                        </VBox>
+                        <Button fx:id="btnCloseDetail" text="Đóng chi tiết" onAction="#onCloseDetailClick" styleClass="secondary-button"/>
+                    </HBox>
+                    <Separator/>
+                    <Label text="Danh sách câu hỏi trong đề:" styleClass="section-heading"/>
+                    <ListView fx:id="listQuizQuestions" prefHeight="160"/>
+                </VBox>
+            </VBox>
+        </ScrollPane>
+    </Tab>
+
+        <!-- =================================================================== -->
+        <!-- TAB 2: QUẢN LÝ LỚP HỌC & THÀNH VIÊN (CLASSES & MEMBERS - FR-A07) -->
+        <!-- =================================================================== -->
+        <Tab text="  Quản Lý Lớp Học (Classes)  ">
+            <ScrollPane fx:id="classScrollPane" fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED" styleClass="content-scroll">
+                <VBox spacing="16" style="-fx-padding: 16 12 16 0;">
+                    <Label fx:id="classNotice" visible="false" managed="false" styleClass="notice" wrapText="true" maxWidth="Infinity"/>
+
+                    <!-- Two-Column Layout -->
+                    <HBox spacing="16" VBox.vgrow="ALWAYS">
+                        <!-- Left Column: Classes List & Create -->
+                        <VBox spacing="12" HBox.hgrow="ALWAYS" prefWidth="440">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label text="Danh sách lớp học" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
+                                <ProgressIndicator fx:id="classProgress" visible="false" prefWidth="20" prefHeight="20"/>
+                                <Button fx:id="btnRefreshClasses" text="Tải lại" onAction="#loadClasses" styleClass="secondary-button"/>
+                            </HBox>
+                            <TableView fx:id="classTable" prefHeight="260" VBox.vgrow="ALWAYS" styleClass="account-card"/>
+
+                            <!-- Create class form -->
+                            <VBox styleClass="content-card" spacing="10">
+                                <Label text="Tạo lớp học mới" styleClass="section-heading"/>
+                                <HBox spacing="8" alignment="CENTER_LEFT">
+                                    <TextField fx:id="txtNewClassName" promptText="Tên lớp (VD: ENG-B1-02)" HBox.hgrow="ALWAYS"/>
+                                    <TextField fx:id="txtNewClassDesc" promptText="Mô tả lớp học" HBox.hgrow="ALWAYS"/>
+                                    <Button fx:id="btnCreateClass" text="Tạo Lớp" onAction="#onCreateClassClick" styleClass="primary-button"/>
+                                </HBox>
+                            </VBox>
+                        </VBox>
+
+                        <!-- Right Column: Class Members List & Management -->
+                        <VBox spacing="12" HBox.hgrow="ALWAYS" prefWidth="480">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label fx:id="selectedClassLabel" text="Chưa chọn lớp nào" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
+                                <Button fx:id="btnRemoveMember" text="Xóa Học Viên" onAction="#onRemoveMemberClick" styleClass="danger-button"/>
+                            </HBox>
+                            <TableView fx:id="memberTable" prefHeight="260" VBox.vgrow="ALWAYS" styleClass="account-card"/>
+
+                            <!-- Add student to class -->
+                            <VBox styleClass="content-card" spacing="10">
+                                <Label text="Thêm học viên vào lớp" styleClass="section-heading"/>
+                                <HBox spacing="8" alignment="CENTER_LEFT">
+                                    <TextField fx:id="txtAddStudentId" promptText="Nhập Student ID (VD: 4)" prefWidth="180"/>
+                                    <Button fx:id="btnAddMember" text="Thêm Vào Lớp" onAction="#onAddMemberClick" styleClass="primary-button"/>
+                                    <Label text="(Xem ID học viên ở Quản lý tài khoản Admin)" styleClass="muted"/>
+                                </HBox>
+                            </VBox>
+                        </VBox>
+                    </HBox>
+                </VBox>
+            </ScrollPane>
+        </Tab>
+    </TabPane>
 </VBox>

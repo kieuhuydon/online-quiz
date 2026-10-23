@@ -5,6 +5,7 @@ import quiz.server.exception.QuizException;
 import quiz.common.enums.Difficulty;
 
 import java.sql.Connection;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +23,7 @@ import java.util.Optional;
  * <p>Invalid arguments produce {@link IllegalArgumentException}. Database failures
  * produce {@link QuizException} with DATABASE_ERROR, a safe message and the original
  * cause.</p>
+ * Persistence contract for Question Bank.
  */
 public interface QuestionRepository {
 
@@ -81,6 +83,7 @@ public interface QuestionRepository {
      * @return a new persisted Question containing database-generated metadata
      * @throws IllegalArgumentException if the question is null or already persisted
      * @throws QuizException if the database operation fails
+     * Inserts a new question.
      */
     Question save(Question question);
 
@@ -150,4 +153,27 @@ public interface QuestionRepository {
      * @throws QuizException if the database operation fails
      */
     boolean existsById(long id);
+     * Finds a question by ID.
+     */
+    Optional<Question> findById(long id);
+
+    /**
+     * Returns all active questions in the Question Bank.
+     */
+    List<Question> findAllActive();
+
+    /**
+     * Finds multiple questions by IDs.
+     */
+    List<Question> findByIds(List<Long> ids);
+
+    /**
+     * Returns questions assigned to a quiz in position order.
+     */
+    List<Question> findQuestionsByQuizId(long quizId);
+
+    /**
+     * Counts active questions.
+     */
+    int countActive();
 }
