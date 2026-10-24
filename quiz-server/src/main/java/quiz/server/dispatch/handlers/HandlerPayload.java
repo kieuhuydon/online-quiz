@@ -17,6 +17,14 @@ final class HandlerPayload {
         return type.cast(request.payload());
     }
 
+    static long requiredLong(Request request) {
+        Object payload = request.payload();
+        if (!(payload instanceof Long id) || id <= 0) {
+            throw new QuizException(ErrorCode.INVALID_REQUEST, "ID phải là số dương");
+        }
+        return id;
+    }
+
     static void absent(Request request) {
         if (request.payload() != null) {
             throw new QuizException(ErrorCode.INVALID_REQUEST, "This command requires a null payload");

@@ -1,7 +1,10 @@
 package quiz.client.api;
 
 import quiz.common.dto.CreateAccountDto;
+import quiz.common.dto.CreateQuestionDto;
 import quiz.common.dto.LoginRequestDto;
+import quiz.common.dto.UpdateQuestionDto;
+import quiz.common.enums.Difficulty;
 import quiz.common.enums.Role;
 import quiz.common.protocol.ErrorCode;
 import java.nio.charset.StandardCharsets;
@@ -31,10 +34,39 @@ public final class ClientValidation {
             text(input.fullName(), 100), email, input.role());
     }
 
+    public static CreateQuestionDto question(CreateQuestionDto input) {
+        if (input == null || input.difficulty() == null) {
+            throw invalid();
+        }
+        return new CreateQuestionDto(text(input.content(), 1000),
+            text(input.optionA(), 255), text(input.optionB(), 255),
+            text(input.optionC(), 255), text(input.optionD(), 255),
+            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty());
+    }
+
+    public static UpdateQuestionDto updateQuestion(UpdateQuestionDto input) {
+        if (input == null || input.difficulty() == null) {
+            throw invalid();
+        }
+        positiveId(input.id());
+        return new UpdateQuestionDto(input.id(), text(input.content(), 1000),
+            text(input.optionA(), 255), text(input.optionB(), 255),
+            text(input.optionC(), 255), text(input.optionD(), 255),
+            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty());
+    }
+
     public static void positiveId(long id) {
         if (id <= 0) {
             throw invalid();
         }
+    }
+
+    private static char correctOption(char value) {
+        char upper = Character.toUpperCase(value);
+        if (upper != 'A' && upper != 'B' && upper != 'C' && upper != 'D') {
+            throw invalid();
+        }
+        return upper;
     }
 
     private static String text(String input, int limit) {
