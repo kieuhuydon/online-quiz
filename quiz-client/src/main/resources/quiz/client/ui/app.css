@@ -278,6 +278,12 @@
     -fx-border-color: #dce4ef transparent transparent transparent;
 }
 
+.breadcrumb-link {
+    -fx-padding: 0;
+    -fx-underline: true;
+    -fx-text-fill: #2563eb;
+}
+
 .account-card {
     -fx-background-color: #ffffff;
     -fx-border-color: #dce4ef;
@@ -299,6 +305,11 @@
 .account-card .table-cell {
     -fx-padding: 10 8;
     -fx-border-color: transparent transparent #edf1f7 transparent;
+}
+
+.account-card .table-row-cell:empty {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
 }
 
 .account-card .table-row-cell:filled:selected {
