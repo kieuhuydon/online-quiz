@@ -1,13 +1,10 @@
 package quiz.server.repository;
 
+import quiz.common.enums.QuizStatus;
 import quiz.server.domain.Quiz;
 import quiz.server.exception.QuizException;
-import quiz.common.enums.QuizStatus;
 
 import java.sql.Connection;
-import quiz.common.enums.QuizStatus;
-import quiz.server.domain.Quiz;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -21,7 +18,6 @@ import java.util.Optional;
  * <p>Invalid arguments produce {@link IllegalArgumentException}. Database failures
  * produce {@link QuizException} with DATABASE_ERROR, a safe message and the original
  * cause.</p>
- * Persistence contract for Quizzes, Quiz Questions, and Quiz Assignments.
  */
 public interface QuizRepository {
 
@@ -150,24 +146,6 @@ public interface QuizRepository {
      * @throws QuizException if the database operation fails
      */
     boolean existsById(long id);
-     * Inserts a new quiz (status DRAFT).
-     */
-    Quiz save(Quiz quiz);
-
-    /**
-     * Updates an existing quiz (only when DRAFT).
-     */
-    boolean update(Quiz quiz);
-
-    /**
-     * Finds a quiz by ID.
-     */
-    Optional<Quiz> findById(long id);
-
-    /**
-     * Returns all quizzes.
-     */
-    List<Quiz> findAll();
 
     /**
      * Returns quizzes created by a specific teacher.
@@ -180,14 +158,11 @@ public interface QuizRepository {
     boolean updateStatus(long quizId, QuizStatus status, String pin, Instant openedAt, Instant closedAt);
 
     /**
-     * Replaces quiz questions with the specified list of question IDs in position order (1..N).
-     */
-    void setQuestions(long quizId, List<Long> questionIds);
-
-    /**
      * Returns the ordered list of question IDs in a quiz.
      */
-    List<Long> getQuestionIds(long quizId);
+    default List<Long> getQuestionIds(long quizId) {
+        return findQuestionIdsByQuiz(quizId);
+    }
 
     /**
      * Counts the number of questions in a quiz.

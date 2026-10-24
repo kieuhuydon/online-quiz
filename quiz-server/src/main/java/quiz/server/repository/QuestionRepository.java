@@ -153,9 +153,6 @@ public interface QuestionRepository {
      * @throws QuizException if the database operation fails
      */
     boolean existsById(long id);
-     * Finds a question by ID.
-     */
-    Optional<Question> findById(long id);
 
     /**
      * Returns all active questions in the Question Bank.

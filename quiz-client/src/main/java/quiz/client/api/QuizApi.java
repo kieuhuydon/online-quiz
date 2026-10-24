@@ -244,12 +244,7 @@ public final class QuizApi implements AutoCloseable {
         }
     }
 
-    public CompletableFuture<QuizDto> getQuiz(long quizId) {
-        ClientValidation.positiveId(quizId);
-        return protectedCall(MessageType.GET_QUIZ, quizId, QuizApi::decodeQuiz);
-    public CompletableFuture<QuestionDto> getQuestion(long id) {
-        return protectedCall(MessageType.GET_QUESTION, id, QuizApi::decodeQuestion);
-    }
+
 
     // --- Quiz Management ---
     public CompletableFuture<QuizDto> createQuiz(CreateQuizDto dto) {
@@ -467,46 +462,7 @@ public final class QuizApi implements AutoCloseable {
         }
     }
 
-    private static List<QuestionDto> decodeQuestions(Object payload) {
-        if (!(payload instanceof List<?> items)) {
-            throw new TransportException(PROTOCOL);
-        }
-        List<QuestionDto> questions = new ArrayList<>(items.size());
-        for (Object item : items) {
-            questions.add(decodeQuestion(item));
-        }
-        return List.copyOf(questions);
-    }
 
-    private static QuestionDto decodeQuestion(Object payload) {
-        if (!(payload instanceof QuestionDto dto) || dto.id() <= 0
-            || dto.content() == null || dto.content().isBlank()
-            || dto.optionA() == null || dto.optionB() == null || dto.optionC() == null
-            || dto.optionD() == null || dto.topic() == null || dto.topic().isBlank()
-            || dto.difficulty() == null || dto.createdAt() == null || dto.createdBy() <= 0) {
-            throw new TransportException(PROTOCOL);
-        }
-        return dto;
-    }
-
-    private static List<QuizDto> decodeQuizzes(Object payload) {
-        if (!(payload instanceof List<?> items)) {
-            throw new TransportException(PROTOCOL);
-        }
-        List<QuizDto> quizzes = new ArrayList<>(items.size());
-        for (Object item : items) {
-            quizzes.add(decodeQuiz(item));
-        }
-        return List.copyOf(quizzes);
-    }
-
-    private static QuizDto decodeQuiz(Object payload) {
-        if (!(payload instanceof QuizDto dto) || dto.id() <= 0
-            || dto.title() == null || dto.title().isBlank()
-            || dto.durationMinutes() <= 0 || dto.status() == null || dto.createdAt() == null
-            || dto.createdBy() <= 0) {
-            throw new TransportException(PROTOCOL);
-        }
     @SuppressWarnings("unchecked")
     private static ClassDto decodeClass(Object payload) {
         if (!(payload instanceof ClassDto dto)) throw new TransportException(PROTOCOL);

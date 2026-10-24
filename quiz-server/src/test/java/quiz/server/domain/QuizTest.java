@@ -73,7 +73,7 @@ class QuizTest {
         String s = q.toString();
         assertTrue(s.contains("id=0"));
         assertTrue(s.contains("DRAFT"));
-class QuizTest {
+    }
 
     @Test
     void createNewSetsStatusDraftAndZeroId() {

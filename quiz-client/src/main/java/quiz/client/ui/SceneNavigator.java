@@ -109,8 +109,8 @@ public final class SceneNavigator implements AutoCloseable {
         }
         ClientSession.Snapshot session = api.session().current().orElse(null);
         Screen target = session == null ? Screen.LOGIN : Screen.home(session.role());
-        boolean canAccess = requested.role() == session.role()
-            || (session != null && session.role() == Role.ADMIN && requested.role() == Role.TEACHER);
+        boolean canAccess = session != null && (requested.role() == session.role()
+            || (session.role() == Role.ADMIN && requested.role() == Role.TEACHER));
         if (canAccess) {
             target = requested;
         }

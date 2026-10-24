@@ -76,7 +76,7 @@ class QuestionTest {
         assertTrue(s.contains("Ngữ pháp"));
         assertTrue(s.contains("EASY"));
         assertTrue(s.contains("active=true"));
-class QuestionTest {
+    }
 
     @Test
     void createNewCreatesActiveQuestion() {
