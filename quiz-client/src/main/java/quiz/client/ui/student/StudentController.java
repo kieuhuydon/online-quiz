@@ -6,8 +6,8 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import quiz.client.api.ApiException;
 import quiz.client.api.QuizApi;
 import quiz.client.ui.SceneNavigator;
 import quiz.client.ui.ScreenController;
@@ -15,8 +15,6 @@ import quiz.client.util.FxAsync;
 import quiz.common.dto.QuizInfoDto;
 import quiz.common.enums.QuizStatus;
 
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
 
@@ -24,9 +22,6 @@ import java.util.Objects;
  * Controller cho Học viên xem các bài kiểm tra được giao (FR-S02) và thông tin bài kiểm tra (FR-S04).
  */
 public final class StudentController extends ScreenController {
-    private static final DateTimeFormatter DATE_FORMAT =
-        DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.systemDefault());
-
     private final QuizApi api;
     private final SceneNavigator navigator;
     private final FxAsync fx;
@@ -37,7 +32,7 @@ public final class StudentController extends ScreenController {
     @FXML private Label studentNotice;
     @FXML private ProgressIndicator studentProgress;
     @FXML private Button btnRefresh;
-    @FXML private Button btnViewInfo;
+    @FXML private HBox actionToolbar;
 
     // Quiz Info Details Panel (FR-S04)
     @FXML private VBox quizInfoPanel;
@@ -47,7 +42,6 @@ public final class StudentController extends ScreenController {
     @FXML private Label infoPassScore;
     @FXML private Label infoQuestionCount;
     @FXML private Label infoStatus;
-    @FXML private Label infoPin;
     @FXML private Label infoDescription;
     @FXML private Button btnCloseInfo;
     @FXML private Button btnStartExam;
@@ -64,8 +58,21 @@ public final class StudentController extends ScreenController {
     private void initialize() {
         configureTable();
         assignedQuizTable.getSelectionModel().selectedItemProperty()
-            .addListener((obs, oldVal, selected) -> btnViewInfo.setDisable(selected == null));
-        btnViewInfo.setDisable(true);
+            .addListener((obs, oldVal, selected) -> {
+                if (selected != null) {
+                    showQuizInfo(selected);
+                    assignedQuizTable.setVisible(false);
+                    assignedQuizTable.setManaged(false);
+                    actionToolbar.setVisible(false);
+                    actionToolbar.setManaged(false);
+                } else {
+                    hideQuizInfo();
+                    assignedQuizTable.setVisible(true);
+                    assignedQuizTable.setManaged(true);
+                    actionToolbar.setVisible(true);
+                    actionToolbar.setManaged(true);
+                }
+            });
         quizInfoPanel.setVisible(false);
         quizInfoPanel.setManaged(false);
 
@@ -129,26 +136,7 @@ public final class StudentController extends ScreenController {
             }
         });
 
-        TableColumn<QuizInfoDto, String> colPin = new TableColumn<>("Mã PIN");
-        colPin.setPrefWidth(100);
-        colPin.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().pinRequired() ? "Yêu cầu PIN" : "—"));
-        colPin.setCellFactory(col -> new TableCell<>() {
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null || "—".equals(item)) {
-                    setText(item);
-                    setGraphic(null);
-                } else {
-                    Label pinLabel = new Label(item);
-                    pinLabel.getStyleClass().add("badge-pin");
-                    setGraphic(pinLabel);
-                    setText(null);
-                }
-            }
-        });
-
-        assignedQuizTable.getColumns().setAll(List.of(colTitle, colCategory, colDuration, colQuestions, colPass, colStatus, colPin));
+        assignedQuizTable.getColumns().setAll(List.of(colTitle, colCategory, colDuration, colQuestions, colPass, colStatus));
         assignedQuizTable.setItems(quizList);
         assignedQuizTable.setPlaceholder(new Label("Hiện tại bạn chưa có bài kiểm tra nào được giao."));
     }
@@ -176,27 +164,26 @@ public final class StudentController extends ScreenController {
         );
     }
 
-    @FXML
-    private void onViewInfoClick() {
-        QuizInfoDto sel = assignedQuizTable.getSelectionModel().getSelectedItem();
-        if (sel == null) return;
-
+    private void showQuizInfo(QuizInfoDto sel) {
         infoTitle.setText(sel.title());
         infoCategory.setText(sel.category() != null ? sel.category() : "Tiếng Anh");
         infoDuration.setText(sel.durationMinutes() + " phút");
         infoPassScore.setText(String.format("%.0f%%", sel.passScore()));
         infoQuestionCount.setText(sel.questionCount() + " câu hỏi");
         infoStatus.setText(sel.status() == QuizStatus.OPEN ? "Đang mở thi" : (sel.status() == QuizStatus.CLOSED ? "Đã đóng" : "Chưa mở"));
-        infoPin.setText(sel.pinRequired() ? "Cần nhập mã PIN khi bắt đầu" : "Không yêu cầu PIN");
         btnStartExam.setDisable(sel.status() != QuizStatus.OPEN);
         infoDescription.setText(sel.description() != null && !sel.description().isBlank() ? sel.description() : "Không có mô tả chi tiết.");
-
         quizInfoPanel.setVisible(true);
         quizInfoPanel.setManaged(true);
     }
 
     @FXML
     private void onCloseInfoClick() {
+        assignedQuizTable.getSelectionModel().clearSelection();
+        hideQuizInfo();
+    }
+
+    private void hideQuizInfo() {
         quizInfoPanel.setVisible(false);
         quizInfoPanel.setManaged(false);
     }
