@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,9 +34,16 @@ public final class QuizServer implements AutoCloseable {
     private final SessionRegistry sessions;
     private final ConnectionRegistry connections;
     private final Thread acceptThread;
+    private final ScheduledExecutorService backgroundTasks;
 
     public QuizServer(int port, ServerConfig config, RequestDispatcher dispatcher,
                       SessionLifecycle lifecycle, SessionRegistry sessions, ConnectionRegistry connections) throws IOException {
+        this(port, config, dispatcher, lifecycle, sessions, connections, () -> { });
+    }
+
+    public QuizServer(int port, ServerConfig config, RequestDispatcher dispatcher,
+                      SessionLifecycle lifecycle, SessionRegistry sessions, ConnectionRegistry connections,
+                      Runnable periodicTask) throws IOException {
         if (port < 0 || port > 65535) {
             throw new IllegalArgumentException("Invalid bind port");
         }
@@ -49,6 +57,16 @@ public final class QuizServer implements AutoCloseable {
         workers = new ThreadPoolExecutor(config.getWorkerPoolSize(), config.getWorkerPoolSize(), 0,
             TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(config.getWorkerQueueCapacity()),
             new ThreadPoolExecutor.AbortPolicy());
+        backgroundTasks = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "quiz-background-tasks");
+            thread.setDaemon(true);
+            return thread;
+        });
+        backgroundTasks.scheduleWithFixedDelay(() -> {
+            try { periodicTask.run(); }
+            catch (RuntimeException failure) { org.slf4j.LoggerFactory.getLogger(QuizServer.class)
+                .warn("Background task failed exception={}", failure.getClass().getSimpleName()); }
+        }, 1, 1, TimeUnit.SECONDS);
         acceptThread = new Thread(this::accept, "quiz-accept");
         acceptThread.start();
     }
@@ -114,6 +132,7 @@ public final class QuizServer implements AutoCloseable {
             return;
         }
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(config.getShutdownTimeoutMs());
+        backgroundTasks.shutdownNow();
         synchronized (acceptance) {
             try {
                 listener.close();

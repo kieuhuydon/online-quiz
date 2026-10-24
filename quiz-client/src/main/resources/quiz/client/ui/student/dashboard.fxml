@@ -25,6 +25,7 @@
     <!-- Action Toolbar -->
     <HBox spacing="10" alignment="CENTER_LEFT">
         <Button fx:id="btnViewInfo" text="Xem Thông Tin Đề Thi (FR-S04)" onAction="#onViewInfoClick" styleClass="primary-button"/>
+        <Button text="Lịch sử làm bài" onAction="#onHistoryClick" styleClass="secondary-button"/>
         <Region HBox.hgrow="ALWAYS"/>
     </HBox>
 
@@ -71,6 +72,7 @@
             <Label fx:id="infoDescription" text="" wrapText="true" GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
         </GridPane>
         <Separator/>
-        <Label text="Lưu ý: Bạn cần nhập đúng mã PIN khi bắt đầu làm bài. Đề thi áp dụng chính sách giám sát tự động." styleClass="note" wrapText="true"/>
+        <Label text="Nếu bài thi yêu cầu mã PIN, bạn sẽ nhập mã này khi bắt đầu làm bài." styleClass="note" wrapText="true"/>
+        <Button fx:id="btnStartExam" text="Bắt đầu thi" onAction="#onStartExamClick" styleClass="primary-button"/>
     </VBox>
 </VBox>

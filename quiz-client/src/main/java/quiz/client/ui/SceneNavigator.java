@@ -41,6 +41,8 @@ public final class SceneNavigator implements AutoCloseable {
     private long viewVersion;
     private boolean closed;
     private boolean loggingOut;
+    private quiz.common.dto.AttemptStateDto activeAttempt;
+    private quiz.common.dto.ResultDto activeResult;
     private final Set<CompletableFuture<?>> accountWrites = ConcurrentHashMap.newKeySet();
 
     public SceneNavigator(Stage stage, QuizApi api, FxAsync fx) {
@@ -75,6 +77,9 @@ public final class SceneNavigator implements AutoCloseable {
     public void show(Screen requested) {
         navigate(Objects.requireNonNull(requested), "");
     }
+
+    public void showExam(quiz.common.dto.AttemptStateDto attempt) { activeAttempt = Objects.requireNonNull(attempt); navigate(Screen.STUDENT_EXAM, ""); }
+    public void showResult(quiz.common.dto.ResultDto result) { activeResult = Objects.requireNonNull(result); navigate(Screen.STUDENT_RESULT, ""); }
 
     public void showLogin(String notice) {
         navigate(Screen.LOGIN, notice == null ? "" : notice);
@@ -176,6 +181,15 @@ public final class SceneNavigator implements AutoCloseable {
         }
         if (type == quiz.client.ui.student.StudentController.class) {
             return new quiz.client.ui.student.StudentController(api, this, fx);
+        }
+        if (type == quiz.client.ui.student.ExamController.class) {
+            return new quiz.client.ui.student.ExamController(api, this, fx, Objects.requireNonNull(activeAttempt));
+        }
+        if (type == quiz.client.ui.student.ResultController.class) {
+            return new quiz.client.ui.student.ResultController(api, this, Objects.requireNonNull(activeResult));
+        }
+        if (type == quiz.client.ui.student.HistoryController.class) {
+            return new quiz.client.ui.student.HistoryController(api, this, fx);
         }
         if (type == DashboardController.class) {
             return new DashboardController(api, this, fx);

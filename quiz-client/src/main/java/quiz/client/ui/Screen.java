@@ -8,7 +8,10 @@ public enum Screen {
     ADMIN_ACCOUNTS("/quiz/client/ui/admin/account/account.fxml", "Quản lý tài khoản", Role.ADMIN),
     TEACHER_QUESTIONS("/quiz/client/ui/teacher/question/question.fxml", "Ngân hàng câu hỏi", Role.TEACHER),
     TEACHER_DASHBOARD("/quiz/client/ui/teacher/dashboard.fxml", "Không gian giảng dạy", Role.TEACHER),
-    STUDENT_DASHBOARD("/quiz/client/ui/student/dashboard.fxml", "Không gian học tập", Role.STUDENT);
+    STUDENT_DASHBOARD("/quiz/client/ui/student/dashboard.fxml", "Không gian học tập", Role.STUDENT),
+    STUDENT_EXAM("/quiz/client/ui/student/exam.fxml", "Đang làm bài", Role.STUDENT),
+    STUDENT_RESULT("/quiz/client/ui/student/result.fxml", "Kết quả bài thi", Role.STUDENT),
+    STUDENT_HISTORY("/quiz/client/ui/student/history.fxml", "Lịch sử làm bài", Role.STUDENT);
 
     private final String resource;
     private final String title;
