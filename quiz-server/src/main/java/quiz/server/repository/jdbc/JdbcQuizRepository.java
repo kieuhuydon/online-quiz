@@ -2,8 +2,10 @@ package quiz.server.repository.jdbc;
 
 import org.postgresql.util.PSQLException;
 import org.postgresql.util.ServerErrorMessage;
+import quiz.common.dto.ResultDto;
 import quiz.common.enums.AntiCheatPolicyType;
 import quiz.common.enums.QuizStatus;
+import quiz.common.enums.SubmitReason;
 import quiz.common.protocol.ErrorCode;
 import quiz.server.domain.Quiz;
 import quiz.server.exception.ConflictException;
@@ -90,6 +92,17 @@ public final class JdbcQuizRepository implements QuizRepository {
         JOIN class_members cm ON qa.class_id = cm.class_id
         WHERE cm.student_id = ?
         ORDER BY q.id DESC
+        """;
+    private static final String FIND_RESULTS_BY_QUIZ = """
+        SELECT r.attempt_id, a.quiz_id, q.title AS quiz_title, u.full_name AS student_name,
+               r.score, r.correct_count, r.total_questions, r.passed, r.submit_reason,
+               a.submitted_at
+        FROM results r
+        JOIN attempts a ON r.attempt_id = a.id
+        JOIN users u ON a.student_id = u.id
+        JOIN quizzes q ON a.quiz_id = q.id
+        WHERE a.quiz_id = ?
+        ORDER BY r.score DESC, a.submitted_at DESC
         """;
 
     private final DataSource dataSource;
@@ -309,6 +322,35 @@ public final class JdbcQuizRepository implements QuizRepository {
                     List<Quiz> list = new ArrayList<>();
                     while (results.next()) {
                         list.add(mapRow(results));
+                    }
+                    return List.copyOf(list);
+                }
+            }
+        });
+    }
+
+    @Override
+    public List<ResultDto> findResultsByQuizId(long quizId) {
+        if (quizId <= 0) return List.of();
+        return withConnection(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(FIND_RESULTS_BY_QUIZ)) {
+                statement.setLong(1, quizId);
+                try (ResultSet results = statement.executeQuery()) {
+                    List<ResultDto> list = new ArrayList<>();
+                    while (results.next()) {
+                        OffsetDateTime submitted = results.getObject("submitted_at", OffsetDateTime.class);
+                        list.add(new ResultDto(
+                            results.getLong("attempt_id"),
+                            results.getLong("quiz_id"),
+                            results.getString("quiz_title"),
+                            results.getString("student_name"),
+                            results.getBigDecimal("score").doubleValue(),
+                            results.getInt("correct_count"),
+                            results.getInt("total_questions"),
+                            results.getBoolean("passed"),
+                            SubmitReason.valueOf(results.getString("submit_reason")),
+                            submitted != null ? submitted.toInstant() : Instant.now()
+                        ));
                     }
                     return List.copyOf(list);
                 }

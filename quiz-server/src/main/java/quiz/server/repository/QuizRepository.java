@@ -71,4 +71,9 @@ public interface QuizRepository {
      * Finds quizzes assigned to classes that the specified student is enrolled in.
      */
     List<Quiz> findAssignedQuizzesForStudent(long studentId);
+
+    /**
+     * Finds exam results for a quiz.
+     */
+    List<quiz.common.dto.ResultDto> findResultsByQuizId(long quizId);
 }

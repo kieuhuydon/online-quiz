@@ -2,18 +2,23 @@
 echo =============================================
 echo   Online Quiz - Khoi dong Client (JavaFX)
 echo =============================================
+cd /d "%~dp0"
 
-set JAVA_HOME=
-for /f "tokens=*" %%i in ('where java') do set JAVA_CMD=%%i
+if not exist "quiz-client\target\quiz-client-1.0.0-SNAPSHOT.jar" (
+    echo Dang bien dich va dong goi quiz-client...
+    call .\mvnw.cmd package -DskipTests
+)
 
-set CP=quiz-client\target\quiz-client-1.0.0-SNAPSHOT.jar;C:\Users\MSI\.m2\repository\quiz\quiz-common\1.0.0-SNAPSHOT\quiz-common-1.0.0-SNAPSHOT.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-controls\21.0.5\javafx-controls-21.0.5.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-controls\21.0.5\javafx-controls-21.0.5-win.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-fxml\21.0.5\javafx-fxml-21.0.5.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-fxml\21.0.5\javafx-fxml-21.0.5-win.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-graphics\21.0.5\javafx-graphics-21.0.5.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-graphics\21.0.5\javafx-graphics-21.0.5-win.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-base\21.0.5\javafx-base-21.0.5.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-base\21.0.5\javafx-base-21.0.5-win.jar;C:\Users\MSI\.m2\repository\org\slf4j\slf4j-api\2.0.16\slf4j-api-2.0.16.jar;C:\Users\MSI\.m2\repository\ch\qos\logback\logback-classic\1.6.5\logback-classic-1.6.5.jar;C:\Users\MSI\.m2\repository\ch\qos\logback\logback-core\1.6.5\logback-core-1.6.5.jar;C:\Users\MSI\.m2\repository\quiz\quiz-server\1.0.0-SNAPSHOT\quiz-server-1.0.0-SNAPSHOT.jar;C:\Users\MSI\.m2\repository\org\postgresql\postgresql\42.7.14\postgresql-42.7.14.jar;C:\Users\MSI\.m2\repository\com\zaxxer\HikariCP\5.1.0\HikariCP-5.1.0.jar;C:\Users\MSI\.m2\repository\org\mindrot\jbcrypt\0.4\jbcrypt-0.4.jar
-
-set JFX_MODS=C:\Users\MSI\.m2\repository\org\openjfx\javafx-controls\21.0.5\javafx-controls-21.0.5-win.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-fxml\21.0.5\javafx-fxml-21.0.5-win.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-graphics\21.0.5\javafx-graphics-21.0.5-win.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-base\21.0.5\javafx-base-21.0.5-win.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-controls\21.0.5\javafx-controls-21.0.5.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-fxml\21.0.5\javafx-fxml-21.0.5.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-graphics\21.0.5\javafx-graphics-21.0.5.jar;C:\Users\MSI\.m2\repository\org\openjfx\javafx-base\21.0.5\javafx-base-21.0.5.jar
-
-java --module-path "%JFX_MODS%" --add-modules javafx.controls,javafx.fxml,javafx.graphics -cp "%CP%" quiz.client.ClientMain
+echo Dang khoi dong ung dung Client...
+call .\mvnw.cmd javafx:run -pl quiz-client
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo Loi khoi dong client! Kiem tra server dang chay tren port 5555
+    echo ========================================================
+    echo [LOI] Khong the khoi dong ung dung Client!
+    echo Vui long kiem tra:
+    echo 1. Server da duoc khoi dong truoc (chay run-server.bat).
+    echo 2. Server dang lang nghe tren cong 5555.
+    echo ========================================================
     pause
 )

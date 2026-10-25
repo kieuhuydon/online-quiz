@@ -436,3 +436,88 @@
     -fx-background-color: transparent;
 }
 
+/* --- Difficulty Badges --- */
+.badge-easy {
+    -fx-background-color: #dcfce7;
+    -fx-text-fill: #15803d;
+    -fx-border-color: #86efac;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 3 8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.badge-medium {
+    -fx-background-color: #fef3c7;
+    -fx-text-fill: #b45309;
+    -fx-border-color: #fde68a;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 3 8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.badge-hard {
+    -fx-background-color: #fee2e2;
+    -fx-text-fill: #b91c1c;
+    -fx-border-color: #fca5a5;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 3 8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.badge-pass {
+    -fx-background-color: #d1fae5;
+    -fx-text-fill: #065f46;
+    -fx-border-color: #6ee7b7;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 3 10;
+    -fx-font-weight: bold;
+}
+
+.badge-fail {
+    -fx-background-color: #fee2e2;
+    -fx-text-fill: #991b1b;
+    -fx-border-color: #fca5a5;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 3 10;
+    -fx-font-weight: bold;
+}
+
+.field-error-text {
+    -fx-text-fill: #dc2626;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 2 0 0 0;
+}
+
+.preset-chip {
+    -fx-background-color: #f1f5f9;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 16;
+    -fx-background-radius: 16;
+    -fx-padding: 5 12;
+    -fx-font-size: 11px;
+    -fx-text-fill: #334155;
+    -fx-cursor: hand;
+}
+
+.preset-chip:hover {
+    -fx-background-color: #e2e8f0;
+    -fx-border-color: #94a3b8;
+}
+
+.btn-small {
+    -fx-padding: 4 8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 4;
+}
+
+

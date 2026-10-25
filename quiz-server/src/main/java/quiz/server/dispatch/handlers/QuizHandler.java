@@ -39,7 +39,8 @@ public final class QuizHandler implements CommandHandler {
             MessageType.CLOSE_QUIZ,
             MessageType.ASSIGN_QUIZ,
             MessageType.LIST_ASSIGNED_QUIZZES,
-            MessageType.GET_QUIZ_INFO
+            MessageType.GET_QUIZ_INFO,
+            MessageType.LIST_QUIZ_RESULTS
         );
     }
 
@@ -47,7 +48,7 @@ public final class QuizHandler implements CommandHandler {
     public Set<Role> allowedRoles(MessageType type) {
         return switch (type) {
             case CREATE_QUIZ, UPDATE_QUIZ, GET_QUIZ, LIST_QUIZZES,
-                 SET_QUIZ_QUESTIONS, OPEN_QUIZ, CLOSE_QUIZ, ASSIGN_QUIZ -> Set.of(Role.TEACHER, Role.ADMIN);
+                 SET_QUIZ_QUESTIONS, OPEN_QUIZ, CLOSE_QUIZ, ASSIGN_QUIZ, LIST_QUIZ_RESULTS -> Set.of(Role.TEACHER, Role.ADMIN);
             case LIST_ASSIGNED_QUIZZES, GET_QUIZ_INFO -> Set.of(Role.STUDENT);
             default -> throw new IllegalArgumentException("Unsupported quiz command");
         };
@@ -98,6 +99,10 @@ public final class QuizHandler implements CommandHandler {
             case GET_QUIZ_INFO -> {
                 Long quizId = HandlerPayload.required(request, Long.class);
                 yield Response.success(request.requestId(), quizService.getQuizInfo(quizId, authSession.userId()));
+            }
+            case LIST_QUIZ_RESULTS -> {
+                Long quizId = HandlerPayload.required(request, Long.class);
+                yield Response.success(request.requestId(), quizService.listQuizResults(quizId, authSession));
             }
             default -> throw new QuizException(ErrorCode.INVALID_REQUEST, "Unsupported quiz command");
         };

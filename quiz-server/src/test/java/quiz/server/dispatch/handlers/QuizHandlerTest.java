@@ -36,6 +36,7 @@ class QuizHandlerTest {
         assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.CREATE_QUIZ));
         assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.OPEN_QUIZ));
         assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.ASSIGN_QUIZ));
+        assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.LIST_QUIZ_RESULTS));
         assertEquals(Set.of(Role.STUDENT), handler.allowedRoles(MessageType.LIST_ASSIGNED_QUIZZES));
         assertEquals(Set.of(Role.STUDENT), handler.allowedRoles(MessageType.GET_QUIZ_INFO));
     }
@@ -77,6 +78,14 @@ class QuizHandlerTest {
     void studentListAssignedQuizzesDispatchesToService() {
         when(quizService.listAssignedQuizzesForStudent(5L)).thenReturn(new ArrayList<>());
         var res = handler.handle(new Request(4, MessageType.LIST_ASSIGNED_QUIZZES, "token", null), studentSession);
+        assertTrue(res.success());
+        assertInstanceOf(ArrayList.class, res.payload());
+    }
+
+    @Test
+    void listQuizResultsDispatchesToService() {
+        when(quizService.listQuizResults(1L, teacherSession)).thenReturn(new ArrayList<>());
+        var res = handler.handle(new Request(5, MessageType.LIST_QUIZ_RESULTS, "token", 1L), teacherSession);
         assertTrue(res.success());
         assertInstanceOf(ArrayList.class, res.payload());
     }
