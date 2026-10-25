@@ -324,6 +324,17 @@ public final class QuizApi implements AutoCloseable {
         return protectedCall(MessageType.LIST_MY_HISTORY, null, QuizApi::decodeResults);
     }
 
+    // --- Anti-Cheat Monitoring Flow ---
+    public CompletableFuture<Void> reportAntiCheat(ReportAntiCheatDto dto) {
+        return protectedCall(MessageType.REPORT_ANTICHEAT_EVENT, dto, payload -> {
+            requireNull(payload); return null;
+        });
+    }
+
+    public CompletableFuture<List<AntiCheatEventDto>> listAttemptEvents(long attemptId) {
+        return protectedCall(MessageType.LIST_ATTEMPT_EVENTS, attemptId, QuizApi::decodeAntiCheatEvents);
+    }
+
     private <T> CompletableFuture<T> protectedCall(MessageType type, Serializable payload, Function<Object, T> decoder) {
         synchronized (lock) {
             try {
@@ -523,10 +534,26 @@ public final class QuizApi implements AutoCloseable {
         return dto;
     }
 
+    private static AttemptStateDto decodeAttemptState(Object payload) {
+        if (!(payload instanceof AttemptStateDto dto)) throw new TransportException(PROTOCOL);
+        return dto;
+    }
+
+    private static ResultDto decodeResult(Object payload) {
+        if (!(payload instanceof ResultDto dto)) throw new TransportException(PROTOCOL);
+        return dto;
+    }
+
     @SuppressWarnings("unchecked")
     private static List<ResultDto> decodeResults(Object payload) {
         if (!(payload instanceof List<?> list)) throw new TransportException(PROTOCOL);
         return List.copyOf((List<ResultDto>) payload);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<AntiCheatEventDto> decodeAntiCheatEvents(Object payload) {
+        if (!(payload instanceof List<?> list)) throw new TransportException(PROTOCOL);
+        return List.copyOf((List<AntiCheatEventDto>) payload);
     }
 
     /** Disposes the API and its owned connection; application shutdown need not send LOGOUT. */

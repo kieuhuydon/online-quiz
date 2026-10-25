@@ -4,10 +4,8 @@ echo   Online Quiz - Khoi dong Client (JavaFX)
 echo =============================================
 cd /d "%~dp0"
 
-if not exist "quiz-client\target\quiz-client-1.0.0-SNAPSHOT.jar" (
-    echo Dang bien dich va dong goi quiz-client...
-    call .\mvnw.cmd package -DskipTests
-)
+echo Dang bien dich quiz-client...
+call .\mvnw.cmd compile -pl quiz-client -am
 
 echo Dang khoi dong ung dung Client...
 call .\mvnw.cmd javafx:run -pl quiz-client

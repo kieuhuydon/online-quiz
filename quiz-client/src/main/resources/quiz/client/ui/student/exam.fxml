@@ -2,22 +2,54 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.ExamController" spacing="14">
-    <padding><Insets top="18" right="22" bottom="20" left="22"/></padding>
-    <HBox alignment="CENTER_LEFT" spacing="14"><Label fx:id="title" styleClass="page-heading" wrapText="true"/><Region HBox.hgrow="ALWAYS"/><Label fx:id="timer"/></HBox>
-    <Separator/>
-    <fx:define><ToggleGroup fx:id="options"/></fx:define>
-    <Label fx:id="questionPosition" styleClass="eyebrow"/>
-    <Label fx:id="questionText" wrapText="true" styleClass="card-heading" minHeight="70"/>
-    <VBox spacing="10">
-        <RadioButton fx:id="optionA" toggleGroup="$options" onAction="#selectAnswer" wrapText="true"/>
-        <RadioButton fx:id="optionB" toggleGroup="$options" onAction="#selectAnswer" wrapText="true"/>
-        <RadioButton fx:id="optionC" toggleGroup="$options" onAction="#selectAnswer" wrapText="true"/>
-        <RadioButton fx:id="optionD" toggleGroup="$options" onAction="#selectAnswer" wrapText="true"/>
+<StackPane fx:id="examRoot" xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.ExamController">
+    <!-- Giao diện làm bài chính -->
+    <VBox spacing="14">
+        <padding><Insets top="18" right="22" bottom="20" left="22"/></padding>
+        <HBox alignment="CENTER_LEFT" spacing="14"><Label fx:id="title" styleClass="page-heading" wrapText="true"/><Region HBox.hgrow="ALWAYS"/><Label fx:id="timer"/></HBox>
+        <Separator/>
+        <fx:define><ToggleGroup fx:id="options"/></fx:define>
+        <Label fx:id="questionPosition" styleClass="eyebrow"/>
+        <TextArea fx:id="questionText" wrapText="true" editable="false" prefRowCount="3" minHeight="75"
+                  style="-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 8; -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #0f172a;"/>
+        <VBox spacing="10">
+            <RadioButton fx:id="optionA" toggleGroup="$options" onAction="#selectAnswer" wrapText="true"/>
+            <RadioButton fx:id="optionB" toggleGroup="$options" onAction="#selectAnswer" wrapText="true"/>
+            <RadioButton fx:id="optionC" toggleGroup="$options" onAction="#selectAnswer" wrapText="true"/>
+            <RadioButton fx:id="optionD" toggleGroup="$options" onAction="#selectAnswer" wrapText="true"/>
+        </VBox>
+        <HBox alignment="CENTER_LEFT" spacing="10"><Button fx:id="previous" text="← Trước" onAction="#previous" styleClass="secondary-button"/><Button fx:id="next" text="Tiếp theo →" onAction="#next" styleClass="secondary-button"/><Label fx:id="saveStatus" styleClass="muted"/></HBox>
+        <Label text="Điều hướng / xem lại câu hỏi" styleClass="field-label"/>
+        <GridPane fx:id="reviewGrid" hgap="6" vgap="6"/>
+        <Region VBox.vgrow="ALWAYS"/>
+        <Button fx:id="submit" text="Nộp bài" onAction="#manualSubmit" styleClass="primary-button" maxWidth="Infinity"/>
     </VBox>
-    <HBox alignment="CENTER_LEFT" spacing="10"><Button fx:id="previous" text="← Trước" onAction="#previous" styleClass="secondary-button"/><Button fx:id="next" text="Tiếp theo →" onAction="#next" styleClass="secondary-button"/><Label fx:id="saveStatus" styleClass="muted"/></HBox>
-    <Label text="Điều hướng / xem lại câu hỏi" styleClass="field-label"/>
-    <GridPane fx:id="reviewGrid" hgap="6" vgap="6"/>
-    <Region VBox.vgrow="ALWAYS"/>
-    <Button fx:id="submit" text="Nộp bài" onAction="#manualSubmit" styleClass="primary-button" maxWidth="Infinity"/>
-</VBox>
+
+    <!-- Modal in-scene: Xác nhận nộp bài (Giữ nguyên toàn màn hình, không làm mất focus) -->
+    <StackPane fx:id="confirmOverlay" visible="false" style="-fx-background-color: rgba(0, 0, 0, 0.65);">
+        <VBox alignment="CENTER" spacing="18" maxWidth="450" maxHeight="230"
+              style="-fx-background-color: white; -fx-background-radius: 14; -fx-padding: 26; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 22, 0, 0, 8);">
+            <Label text="Xác nhận nộp bài" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #111827;"/>
+            <Label text="Bạn có chắc chắn muốn nộp bài thi không? Sau khi nộp bài, bạn sẽ không thể thay đổi các câu trả lời."
+                   wrapText="true" textAlignment="CENTER" style="-fx-font-size: 14px; -fx-text-fill: #4b5563; -fx-line-spacing: 3;"/>
+            <HBox alignment="CENTER" spacing="14">
+                <Button text="Tiếp tục làm bài" onAction="#cancelSubmit"
+                        style="-fx-background-color: #f3f4f6; -fx-text-fill: #374151; -fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 9 18; -fx-background-radius: 8; -fx-cursor: hand;"/>
+                <Button text="Đồng ý nộp bài" onAction="#confirmSubmit"
+                        style="-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 9 22; -fx-background-radius: 8; -fx-cursor: hand;"/>
+            </HBox>
+        </VBox>
+    </StackPane>
+
+    <!-- Modal in-scene: Cảnh báo vi phạm Anti-Cheat (Giữ nguyên toàn màn hình) -->
+    <StackPane fx:id="warningOverlay" visible="false" style="-fx-background-color: rgba(0, 0, 0, 0.65);">
+        <VBox alignment="CENTER" spacing="16" maxWidth="480" maxHeight="250"
+              style="-fx-background-color: #fff1f2; -fx-border-color: #f43f5e; -fx-border-width: 2; -fx-background-radius: 14; -fx-border-radius: 14; -fx-padding: 26; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 22, 0, 0, 8);">
+            <Label fx:id="warningHeader" text="⚠️ CẢNH BÁO VI PHẠM QUY CHẾ" style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #be123c;"/>
+            <Label fx:id="warningDetail" text="Hành vi vi phạm đã được ghi nhận vào hệ thống."
+                   wrapText="true" textAlignment="CENTER" style="-fx-font-size: 14px; -fx-text-fill: #881337; -fx-line-spacing: 3;"/>
+            <Button text="Tôi đã hiểu và tiếp tục làm bài" onAction="#dismissWarning"
+                    style="-fx-background-color: #e11d48; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 9 20; -fx-background-radius: 8; -fx-cursor: hand;"/>
+        </VBox>
+    </StackPane>
+</StackPane>

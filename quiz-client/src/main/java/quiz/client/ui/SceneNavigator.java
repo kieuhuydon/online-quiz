@@ -89,6 +89,10 @@ public final class SceneNavigator implements AutoCloseable {
         return Optional.ofNullable(screen);
     }
 
+    public Stage stage() {
+        return stage;
+    }
+
     /** Keep an unacknowledged write visible even when session loss disposes its screen first. */
     public <T> CompletableFuture<T> trackAccountWrite(CompletableFuture<T> future) {
         requireFx();

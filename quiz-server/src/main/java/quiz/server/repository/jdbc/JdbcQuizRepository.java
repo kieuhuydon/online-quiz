@@ -339,30 +339,28 @@ public final class JdbcQuizRepository implements QuizRepository {
         });
     }
 
-    private static Quiz mapRow(ResultSet results) throws SQLException {
-        OffsetDateTime opened = results.getObject("opened_at", OffsetDateTime.class);
-        OffsetDateTime closed = results.getObject("closed_at", OffsetDateTime.class);
-        return Quiz.restore(
-            results.getLong("id"),
-            results.getString("title"),
-            results.getString("description"),
-            results.getString("category"),
-            results.getInt("duration_minutes"),
-            results.getBigDecimal("pass_score").doubleValue(),
-            QuizStatus.valueOf(results.getString("status")),
-            results.getString("pin"),
-            AntiCheatPolicyType.valueOf(results.getString("anticheat_policy")),
-            results.getInt("max_violations"),
-            results.getLong("created_by"),
-            results.getObject("created_at", OffsetDateTime.class).toInstant(),
-            opened == null ? null : opened.toInstant(),
-            closed == null ? null : closed.toInstant()
-        );
+    @Override
+    public boolean existsById(long id) {
+        validateId(id);
+        return withConnection(connection -> exists(connection, EXISTS_ID, id));
     }
 
-    private RuntimeException translateException(SQLException error) {
-        if (error instanceof PSQLException psql && "23505".equals(psql.getSQLState())) {
-            return new ConflictException("Dữ liệu bài kiểm tra bị trùng lặp", error);
+    private Optional<Quiz> findOne(Connection connection, String sql,
+                                   StatementBinder binder) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            binder.bind(statement);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? Optional.of(mapQuiz(rows)) : Optional.empty();
+            }
+        }
+    }
+
+    private boolean exists(Connection connection, String sql, long id) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, id);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next();
+            }
         }
     }
 
