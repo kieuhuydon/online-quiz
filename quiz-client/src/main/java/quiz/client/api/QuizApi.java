@@ -4,8 +4,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import quiz.client.network.ServerConnection;
 import quiz.client.network.TransportException;
+import quiz.client.network.PushListener;
 import quiz.client.session.ClientSession;
 import quiz.client.util.FxAsync;
+import quiz.common.dto.AccountDto;
+import quiz.common.dto.CreateAccountDto;
+import quiz.common.dto.CreateQuestionDto;
+import quiz.common.dto.LoginRequestDto;
+import quiz.common.dto.LoginResultDto;
+import quiz.common.dto.QuestionDto;
+import quiz.common.dto.QuizDto;
+import quiz.common.dto.QuizQuestionsDto;
+import quiz.common.dto.SetAccountActiveDto;
+import quiz.common.dto.UpdateQuestionDto;
 import quiz.common.dto.*;
 import quiz.common.protocol.ErrorCode;
 import quiz.common.protocol.MessageType;
@@ -52,6 +63,10 @@ public final class QuizApi implements AutoCloseable {
 
     public ClientSession session() {
         return session;
+    }
+
+    public AutoCloseable addPushListener(PushListener listener) {
+        return connection.addPushListener(listener);
     }
 
     /** Recover from LOGIN conflict without silently logging out an authenticated user. */
@@ -157,6 +172,20 @@ public final class QuizApi implements AutoCloseable {
         }
     }
 
+    public CompletableFuture<QuestionDto> createQuestion(CreateQuestionDto dto) {
+        try {
+            return protectedCall(MessageType.CREATE_QUESTION, ClientValidation.question(dto),
+                QuizApi::decodeQuestion);
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    public CompletableFuture<QuestionDto> getQuestion(long questionId) {
+        ClientValidation.positiveId(questionId);
+        return protectedCall(MessageType.GET_QUESTION, questionId, QuizApi::decodeQuestion);
+    }
+
     // --- Class Management ---
     public CompletableFuture<ClassDto> createClass(CreateClassDto dto) {
         return protectedCall(MessageType.CREATE_CLASS, dto, QuizApi::decodeClass);
@@ -189,9 +218,33 @@ public final class QuizApi implements AutoCloseable {
         return protectedCall(MessageType.LIST_QUESTIONS, null, QuizApi::decodeQuestions);
     }
 
-    public CompletableFuture<QuestionDto> getQuestion(long id) {
-        return protectedCall(MessageType.GET_QUESTION, id, QuizApi::decodeQuestion);
+    public CompletableFuture<QuestionDto> updateQuestion(UpdateQuestionDto dto) {
+        try {
+            return protectedCall(MessageType.UPDATE_QUESTION, ClientValidation.updateQuestion(dto),
+                QuizApi::decodeQuestion);
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
     }
+
+    public CompletableFuture<Void> deactivateQuestion(long questionId) {
+        ClientValidation.positiveId(questionId);
+        return protectedCall(MessageType.DEACTIVATE_QUESTION, questionId,
+            payload -> {
+                requireNull(payload);
+                return null;
+            });
+    }
+
+    public CompletableFuture<QuizDto> setQuizQuestions(QuizQuestionsDto dto) {
+        try {
+            return protectedCall(MessageType.SET_QUIZ_QUESTIONS, dto, QuizApi::decodeQuiz);
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+
 
     // --- Quiz Management ---
     public CompletableFuture<QuizDto> createQuiz(CreateQuizDto dto) {
@@ -243,6 +296,32 @@ public final class QuizApi implements AutoCloseable {
 
     public CompletableFuture<QuizInfoDto> getQuizInfo(long quizId) {
         return protectedCall(MessageType.GET_QUIZ_INFO, quizId, QuizApi::decodeQuizInfo);
+    }
+
+    public CompletableFuture<AttemptStateDto> startAttempt(long quizId, String pin) {
+        return protectedCall(MessageType.START_ATTEMPT, new StartAttemptRequestDto(quizId, pin), QuizApi::decodeAttemptState);
+    }
+
+    public CompletableFuture<Void> saveAnswer(long attemptId, long questionId, Character option) {
+        return protectedCall(MessageType.SAVE_ANSWER, new SaveAnswerDto(attemptId, questionId, option), payload -> {
+            requireNull(payload); return null;
+        });
+    }
+
+    public CompletableFuture<ResultDto> submitAttempt(long attemptId) {
+        return protectedCall(MessageType.SUBMIT_ATTEMPT, new SubmitAttemptDto(attemptId), QuizApi::decodeResult);
+    }
+
+    public CompletableFuture<AttemptStateDto> getAttemptState(long attemptId) {
+        return protectedCall(MessageType.GET_ATTEMPT_STATE, attemptId, QuizApi::decodeAttemptState);
+    }
+
+    public CompletableFuture<ResultDto> getMyResult(long attemptId) {
+        return protectedCall(MessageType.GET_MY_RESULT, attemptId, QuizApi::decodeResult);
+    }
+
+    public CompletableFuture<List<ResultDto>> listMyHistory() {
+        return protectedCall(MessageType.LIST_MY_HISTORY, null, QuizApi::decodeResults);
     }
 
     private <T> CompletableFuture<T> protectedCall(MessageType type, Serializable payload, Function<Object, T> decoder) {
@@ -386,6 +465,7 @@ public final class QuizApi implements AutoCloseable {
             throw new TransportException(PROTOCOL);
         }
     }
+
 
     @SuppressWarnings("unchecked")
     private static ClassDto decodeClass(Object payload) {

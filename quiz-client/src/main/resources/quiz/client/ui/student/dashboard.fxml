@@ -23,8 +23,9 @@
     <Label fx:id="studentNotice" visible="false" managed="false" styleClass="notice" wrapText="true" maxWidth="Infinity"/>
 
     <!-- Action Toolbar -->
-    <HBox spacing="10" alignment="CENTER_LEFT">
-        <Button fx:id="btnViewInfo" text="Xem Thông Tin Đề Thi (FR-S04)" onAction="#onViewInfoClick" styleClass="primary-button"/>
+    <HBox fx:id="actionToolbar" spacing="10" alignment="CENTER_LEFT">
+        <Label text="Chọn một bài thi để xem thông tin chi tiết." styleClass="muted"/>
+        <Button text="Lịch sử làm bài" onAction="#onHistoryClick" styleClass="secondary-button"/>
         <Region HBox.hgrow="ALWAYS"/>
     </HBox>
 
@@ -38,7 +39,6 @@
                 <Label text="THÔNG TIN CHI TIẾT BÀI KIỂM TRA" styleClass="eyebrow"/>
                 <Label fx:id="infoTitle" text="Tên đề thi" styleClass="card-heading"/>
             </VBox>
-            <Button fx:id="btnCloseInfo" text="Đóng" onAction="#onCloseInfoClick" styleClass="secondary-button"/>
         </HBox>
         <Separator/>
         <GridPane hgap="24" vgap="12">
@@ -64,13 +64,13 @@
             <Label text="Trạng thái đề thi:" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
             <Label fx:id="infoStatus" text="" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
 
-            <Label text="Mã PIN tham gia:" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="2"/>
-            <Label fx:id="infoPin" text="" styleClass="badge-pin" GridPane.rowIndex="2" GridPane.columnIndex="3"/>
-
             <Label text="Mô tả bài thi:" styleClass="field-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
             <Label fx:id="infoDescription" text="" wrapText="true" GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
         </GridPane>
         <Separator/>
-        <Label text="Lưu ý: Bạn cần nhập đúng mã PIN khi bắt đầu làm bài. Đề thi áp dụng chính sách giám sát tự động." styleClass="note" wrapText="true"/>
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Button fx:id="btnCloseInfo" text="Quay lại" onAction="#onCloseInfoClick" styleClass="secondary-button"/>
+            <Button fx:id="btnStartExam" text="Bắt đầu thi" onAction="#onStartExamClick" styleClass="primary-button"/>
+        </HBox>
     </VBox>
 </VBox>

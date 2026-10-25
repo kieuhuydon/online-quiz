@@ -12,7 +12,9 @@ import quiz.client.network.TransportException;
 import quiz.client.session.ClientSession;
 import quiz.client.ui.admin.account.AccountController;
 import quiz.client.ui.login.LoginController;
+import quiz.client.ui.teacher.question.QuestionController;
 import quiz.client.util.FxAsync;
+import quiz.common.enums.Role;
 
 import java.io.IOException;
 import java.net.URL;
@@ -39,6 +41,8 @@ public final class SceneNavigator implements AutoCloseable {
     private long viewVersion;
     private boolean closed;
     private boolean loggingOut;
+    private quiz.common.dto.AttemptStateDto activeAttempt;
+    private quiz.common.dto.ResultDto activeResult;
     private final Set<CompletableFuture<?>> accountWrites = ConcurrentHashMap.newKeySet();
 
     public SceneNavigator(Stage stage, QuizApi api, FxAsync fx) {
@@ -74,6 +78,9 @@ public final class SceneNavigator implements AutoCloseable {
         navigate(Objects.requireNonNull(requested), "");
     }
 
+    public void showExam(quiz.common.dto.AttemptStateDto attempt) { activeAttempt = Objects.requireNonNull(attempt); navigate(Screen.STUDENT_EXAM, ""); }
+    public void showResult(quiz.common.dto.ResultDto result) { activeResult = Objects.requireNonNull(result); navigate(Screen.STUDENT_RESULT, ""); }
+
     public void showLogin(String notice) {
         navigate(Screen.LOGIN, notice == null ? "" : notice);
     }
@@ -102,7 +109,9 @@ public final class SceneNavigator implements AutoCloseable {
         }
         ClientSession.Snapshot session = api.session().current().orElse(null);
         Screen target = session == null ? Screen.LOGIN : Screen.home(session.role());
-        if (session != null && requested.role() == session.role()) {
+        boolean canAccess = session != null && (requested.role() == session.role()
+            || (session.role() == Role.ADMIN && requested.role() == Role.TEACHER));
+        if (canAccess) {
             target = requested;
         }
         if (requested != Screen.LOGIN && requested != target) {
@@ -173,8 +182,20 @@ public final class SceneNavigator implements AutoCloseable {
         if (type == quiz.client.ui.student.StudentController.class) {
             return new quiz.client.ui.student.StudentController(api, this, fx);
         }
+        if (type == quiz.client.ui.student.ExamController.class) {
+            return new quiz.client.ui.student.ExamController(api, this, fx, Objects.requireNonNull(activeAttempt));
+        }
+        if (type == quiz.client.ui.student.ResultController.class) {
+            return new quiz.client.ui.student.ResultController(api, this, Objects.requireNonNull(activeResult));
+        }
+        if (type == quiz.client.ui.student.HistoryController.class) {
+            return new quiz.client.ui.student.HistoryController(api, this, fx);
+        }
         if (type == DashboardController.class) {
-            return new DashboardController();
+            return new DashboardController(api, this, fx);
+        }
+        if (type == QuestionController.class) {
+            return new QuestionController(api, this, fx);
         }
         if (type == WorkspaceController.class) {
             return new WorkspaceController(this);

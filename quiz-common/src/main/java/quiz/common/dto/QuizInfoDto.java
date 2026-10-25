@@ -17,6 +17,7 @@ public record QuizInfoDto(
     int questionCount,
     QuizStatus status,
     String pin,
+    boolean pinRequired,
     Instant openedAt,
     Instant closedAt
 ) implements Serializable {
