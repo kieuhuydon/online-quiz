@@ -21,10 +21,11 @@
             <Label fx:id="listStatus" wrapText="true" styleClass="muted"/>
             <TableView fx:id="questionTable" prefHeight="330" minHeight="240" minWidth="0"/>
             <Separator/>
-            <Label fx:id="selectedQuestion" wrapText="true"/>
+            <TextArea fx:id="selectedQuestion" wrapText="true" editable="false" prefRowCount="2" promptText="Chọn một câu hỏi trong bảng để xem/sao chép nội dung." style="-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 4 8; -fx-font-size: 13px;"/>
             <HBox spacing="10">
                 <Button fx:id="newQuestion" text="Tạo mới" onAction="#newQuestion" styleClass="secondary-button"/>
                 <Button fx:id="editSelected" text="Sửa" onAction="#editSelected" styleClass="secondary-button"/>
+                <Button fx:id="copySelected" text="📋 Sao chép" onAction="#copySelected" styleClass="secondary-button"/>
                 <Button fx:id="deactivateQuestion" text="Vô hiệu hóa" onAction="#deactivate" styleClass="danger-button"/>
             </HBox>
         </VBox>

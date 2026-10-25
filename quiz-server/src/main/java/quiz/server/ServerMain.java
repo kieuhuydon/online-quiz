@@ -39,6 +39,7 @@ public final class ServerMain {
             JdbcQuestionRepository questions = new JdbcQuestionRepository(DataSourceProvider.getDataSource());
             JdbcQuizRepository quizzes = new JdbcQuizRepository(DataSourceProvider.getDataSource());
             JdbcAttemptRepository attempts = new JdbcAttemptRepository(DataSourceProvider.getDataSource());
+            JdbcAntiCheatRepository antiCheatRepo = new JdbcAntiCheatRepository(DataSourceProvider.getDataSource());
             ClassService classService = new ClassService(classes, users);
             QuestionService questionService = new QuestionService(questions, users,
                 new TransactionManager(DataSourceProvider.getDataSource()));
@@ -48,6 +49,9 @@ public final class ServerMain {
                 new TransactionManager(DataSourceProvider.getDataSource()), new GradingService());
             SessionRegistry sessions = new SessionRegistry();
             ConnectionRegistry connections = new ConnectionRegistry();
+            AntiCheatService antiCheatService = new AntiCheatService(
+                antiCheatRepo, attempts, quizzes, attemptService, connections,
+                new TransactionManager(DataSourceProvider.getDataSource()));
             SessionCoordinator coordinator = new SessionCoordinator(sessions);
             AuthService auth = new AuthService(users, coordinator);
             AccountService accounts = new AccountService(users, new TransactionManager(DataSourceProvider.getDataSource()), coordinator);
@@ -59,7 +63,8 @@ public final class ServerMain {
                     new QuestionHandler(questionService),
                     new QuizHandler(quizService),
                     new AttemptHandler(attemptService),
-                    new ResultHandler(attemptService)
+                    new ResultHandler(attemptService),
+                    new AntiCheatHandler(antiCheatService)
                 ));
             return new QuizServer(config.getPort(), config, dispatcher,
                 new SessionLifecycle(coordinator, connections), sessions, connections,

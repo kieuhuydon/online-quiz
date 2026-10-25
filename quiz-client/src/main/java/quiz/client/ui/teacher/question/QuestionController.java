@@ -48,9 +48,10 @@ public final class QuestionController extends ScreenController {
     @FXML private Button updateQuestion;
     @FXML private Button deactivateQuestion;
     @FXML private Button cancelEdit;
+    @FXML private Button copySelected;
     @FXML private Label listStatus;
     @FXML private Label questionNotice;
-    @FXML private Label selectedQuestion;
+    @FXML private TextArea selectedQuestion;
     @FXML private Label formError;
     @FXML private ProgressIndicator questionProgress;
     private long loadVersion;
@@ -317,12 +318,25 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setDisable(writing);
         questionTopic.setDisable(writing);
         questionDifficulty.setDisable(writing);
-        selectedQuestion.setText(selected == null ? "Chọn một câu hỏi để sửa hoặc vô hiệu hóa."
-            : "Đã chọn: " + truncate(selected.content(), 80)
-            + (selected.active() ? "" : " • Đã bị vô hiệu hóa."));
+        selectedQuestion.setText(selected == null ? "Chọn một câu hỏi trong bảng để xem/sao chép nội dung."
+            : String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
+                selected.content(), selected.optionA(), selected.optionB(), selected.optionC(), selected.optionD(), selected.correctOption()));
+        if (copySelected != null) copySelected.setDisable(selected == null);
         cancelEdit.setDisable(busy || editTarget == null);
         questionProgress.setVisible(busy);
         questionProgress.setManaged(busy);
+    }
+
+    @FXML
+    private void copySelected() {
+        QuestionDto selected = questionTable.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
+        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+        String formatted = String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
+            selected.content(), selected.optionA(), selected.optionB(), selected.optionC(), selected.optionD(), selected.correctOption());
+        content.putString(formatted);
+        javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
+        show(questionNotice, "Đã sao chép nội dung câu hỏi và các đáp án vào clipboard!", false);
     }
 
     private void fillForm(QuestionDto q) {

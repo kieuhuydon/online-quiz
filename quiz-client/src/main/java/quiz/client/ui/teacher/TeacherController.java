@@ -9,6 +9,8 @@ import javafx.fxml.FXML;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.CheckBoxTableCell;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -20,6 +22,7 @@ import quiz.client.ui.SceneNavigator;
 import quiz.client.ui.ScreenController;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.*;
+import quiz.common.enums.AntiCheatEventType;
 import quiz.common.enums.AntiCheatPolicyType;
 import quiz.common.enums.Difficulty;
 import quiz.common.enums.QuizStatus;
@@ -839,9 +842,10 @@ public final class TeacherController extends ScreenController {
         colContent.setPrefWidth(280);
         colContent.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().getQuestion().content()));
         colContent.setCellFactory(col -> new TableCell<>() {
-            private final Label lbl = new Label();
+            private final TextField txt = new TextField();
             {
-                lbl.setWrapText(true);
+                txt.setEditable(false);
+                txt.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 0; -fx-text-fill: #1e293b;");
             }
             @Override
             protected void updateItem(String item, boolean empty) {
@@ -849,8 +853,8 @@ public final class TeacherController extends ScreenController {
                 if (empty || item == null) {
                     setGraphic(null);
                 } else {
-                    lbl.setText(item);
-                    setGraphic(lbl);
+                    txt.setText(item);
+                    setGraphic(txt);
                 }
             }
         });
@@ -859,7 +863,24 @@ public final class TeacherController extends ScreenController {
         colOptions.setPrefWidth(220);
         colOptions.setCellValueFactory(r -> {
             QuestionDto q = r.getValue().getQuestion();
-            return new SimpleStringProperty("Đáp án: " + q.correctOption() + " | A: " + q.optionA() + " | B: " + q.optionB());
+            return new SimpleStringProperty("Đáp án: " + q.correctOption() + " | A: " + q.optionA() + " | B: " + q.optionB() + " | C: " + q.optionC() + " | D: " + q.optionD());
+        });
+        colOptions.setCellFactory(col -> new TableCell<>() {
+            private final TextField txt = new TextField();
+            {
+                txt.setEditable(false);
+                txt.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 0; -fx-text-fill: #475569;");
+            }
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                } else {
+                    txt.setText(item);
+                    setGraphic(txt);
+                }
+            }
         });
 
         TableColumn<DetailQuestionRow, Void> colActions = new TableColumn<>("Thao tác");
@@ -893,6 +914,36 @@ public final class TeacherController extends ScreenController {
                     setGraphic(box);
                 }
             }
+        });
+
+        detailQuestionTable.setRowFactory(tv -> {
+            TableRow<DetailQuestionRow> row = new TableRow<>();
+            ContextMenu cm = new ContextMenu();
+            MenuItem copyContentItem = new MenuItem("📋 Sao chép nội dung câu hỏi");
+            copyContentItem.setOnAction(e -> {
+                if (row.getItem() != null) {
+                    ClipboardContent cc = new ClipboardContent();
+                    cc.putString(row.getItem().getQuestion().content());
+                    Clipboard.getSystemClipboard().setContent(cc);
+                }
+            });
+            MenuItem copyFullItem = new MenuItem("📋 Sao chép toàn bộ câu hỏi và đáp án");
+            copyFullItem.setOnAction(e -> {
+                if (row.getItem() != null) {
+                    QuestionDto q = row.getItem().getQuestion();
+                    ClipboardContent cc = new ClipboardContent();
+                    cc.putString(String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
+                        q.content(), q.optionA(), q.optionB(), q.optionC(), q.optionD(), q.correctOption()));
+                    Clipboard.getSystemClipboard().setContent(cc);
+                }
+            });
+            cm.getItems().addAll(copyContentItem, copyFullItem);
+            row.contextMenuProperty().bind(
+                javafx.beans.binding.Bindings.when(row.emptyProperty())
+                    .then((ContextMenu) null)
+                    .otherwise(cm)
+            );
+            return row;
         });
 
         detailQuestionTable.getColumns().setAll(List.of(colStt, colDiff, colTopic, colContent, colOptions, colActions));
@@ -1384,9 +1435,115 @@ public final class TeacherController extends ScreenController {
         colSubmitted.setPrefWidth(140);
         colSubmitted.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().submittedAt() != null ? DATE_FORMAT.format(r.getValue().submittedAt()) : "—"));
 
-        resultsTable.getColumns().setAll(List.of(colStt, colStudent, colScore, colCorrect, colStatus, colReason, colSubmitted));
+        TableColumn<ResultDto, Void> colAction = new TableColumn<>("Nhật ký");
+        colAction.setPrefWidth(110);
+        colAction.setCellFactory(col -> new TableCell<>() {
+            private final Button btnLog = new Button("Xem log");
+            {
+                btnLog.setOnAction(e -> {
+                    ResultDto row = getTableView().getItems().get(getIndex());
+                    showAttemptAntiCheatLogs(row);
+                });
+            }
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    ResultDto row = getTableView().getItems().get(getIndex());
+                    if (row.submitReason() == SubmitReason.ANTICHEAT) {
+                        btnLog.setStyle("-fx-background-color: #ef4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 11px;");
+                        btnLog.setText("⚠️ Xem vi phạm");
+                    } else {
+                        btnLog.setStyle("-fx-font-size: 11px;");
+                        btnLog.setText("Xem log");
+                    }
+                    setGraphic(btnLog);
+                }
+            }
+        });
+
+        resultsTable.getColumns().setAll(List.of(colStt, colStudent, colScore, colCorrect, colStatus, colReason, colSubmitted, colAction));
         resultsTable.setItems(resultsList);
         resultsTable.setPlaceholder(new Label("Chưa có học sinh nào hoàn thành bài thi cho đề kiểm tra này."));
+
+        // Bôi đỏ sinh viên vi phạm quy chế thi
+        resultsTable.setRowFactory(tv -> new TableRow<>() {
+            @Override
+            protected void updateItem(ResultDto item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setStyle("");
+                } else if (item.submitReason() == SubmitReason.ANTICHEAT) {
+                    setStyle("-fx-background-color: #fee2e2; -fx-text-fill: #991b1b;");
+                } else {
+                    setStyle("");
+                }
+            }
+        });
+    }
+
+    private void showAttemptAntiCheatLogs(ResultDto row) {
+        if (row == null) return;
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Nhật ký chống gian lận (Anti-Cheat Logs)");
+        dialog.setHeaderText("Thí sinh: " + row.studentName() + " | Điểm: " + String.format("%.1f", row.score()) + " | Hình thức: " + row.submitReason());
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+
+        TableView<AntiCheatEventDto> logTable = new TableView<>();
+        logTable.setPrefWidth(720);
+        logTable.setPrefHeight(350);
+
+        TableColumn<AntiCheatEventDto, String> colTime = new TableColumn<>("Thời gian (Server)");
+        colTime.setPrefWidth(140);
+        colTime.setCellValueFactory(e -> new SimpleStringProperty(e.getValue().serverTime() != null ? DATE_FORMAT.format(e.getValue().serverTime()) : "—"));
+
+        TableColumn<AntiCheatEventDto, String> colType = new TableColumn<>("Hành vi phát hiện");
+        colType.setPrefWidth(160);
+        colType.setCellValueFactory(e -> new SimpleStringProperty(switch (e.getValue().eventType()) {
+            case FOCUS_LOST -> "Rời cửa sổ / Alt+Tab";
+            case COPY_ATTEMPT -> "Cố gắng Copy";
+            case PASTE_ATTEMPT -> "Cố gắng Paste";
+            case CUT_ATTEMPT -> "Cố gắng Cut";
+            case CONTEXT_MENU_ATTEMPT -> "Menu chuột phải";
+        }));
+
+        TableColumn<AntiCheatEventDto, String> colDetail = new TableColumn<>("Chi tiết vi phạm");
+        colDetail.setPrefWidth(210);
+        colDetail.setCellValueFactory(e -> new SimpleStringProperty(e.getValue().detail() != null ? e.getValue().detail() : "—"));
+
+        TableColumn<AntiCheatEventDto, String> colCount = new TableColumn<>("Lần thứ");
+        colCount.setPrefWidth(70);
+        colCount.setCellValueFactory(e -> new SimpleStringProperty(String.valueOf(e.getValue().violationCountAfter())));
+
+        TableColumn<AntiCheatEventDto, String> colTaken = new TableColumn<>("Xử lý");
+        colTaken.setPrefWidth(120);
+        colTaken.setCellValueFactory(e -> new SimpleStringProperty(switch (e.getValue().actionTaken()) {
+            case "WARNED" -> "Cảnh báo";
+            case "AUTO_SUBMITTED" -> "Thu hồi bài thi";
+            case "NONE" -> "Ghi nhận";
+            default -> e.getValue().actionTaken();
+        }));
+
+        logTable.getColumns().setAll(List.of(colTime, colType, colDetail, colCount, colTaken));
+        logTable.setPlaceholder(new Label("Đang tải nhật ký vi phạm..."));
+
+        VBox content = new VBox(10, logTable);
+        dialog.getDialogPane().setContent(content);
+
+        fx.observe(api.listAttemptEvents(row.attemptId()), this::isActive,
+            events -> {
+                logTable.getItems().setAll(events);
+                if (events.isEmpty()) {
+                    logTable.setPlaceholder(new Label("Không phát hiện hành vi vi phạm nào trong lượt làm bài này."));
+                }
+            },
+            err -> logTable.setPlaceholder(new Label("Lỗi khi tải nhật ký: " + formatError(err))),
+            () -> {}
+        );
+
+        dialog.showAndWait();
     }
 
     @FXML

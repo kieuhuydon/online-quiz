@@ -4,6 +4,9 @@ echo   Online Quiz - Khoi dong Server (Port 5555)
 echo =============================================
 cd /d "%~dp0"
 
+echo Dang bien dich quiz-server...
+call .\mvnw.cmd compile -pl quiz-server -am
+
 echo Dang khoi dong Server...
 call .\mvnw.cmd exec:java -pl quiz-server
 
