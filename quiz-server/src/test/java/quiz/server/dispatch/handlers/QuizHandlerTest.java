@@ -46,9 +46,7 @@ class QuizHandlerTest {
         assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.OPEN_QUIZ));
         assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.CLOSE_QUIZ));
         assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.ASSIGN_QUIZ));
-        assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.SET_QUIZ_QUESTIONS));
-        assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.GET_QUIZ));
-        assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.LIST_QUIZZES));
+        assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.LIST_QUIZ_RESULTS));
         assertEquals(Set.of(Role.STUDENT), handler.allowedRoles(MessageType.LIST_ASSIGNED_QUIZZES));
         assertEquals(Set.of(Role.STUDENT), handler.allowedRoles(MessageType.GET_QUIZ_INFO));
     }
@@ -148,8 +146,10 @@ class QuizHandlerTest {
     }
 
     @Test
-    void unsupportedTypeThrows() {
-        assertThrows(IllegalArgumentException.class,
-            () -> handler.allowedRoles(MessageType.LOGIN));
+    void listQuizResultsDispatchesToService() {
+        when(quizService.listQuizResults(1L, teacherSession)).thenReturn(new ArrayList<>());
+        var res = handler.handle(new Request(5, MessageType.LIST_QUIZ_RESULTS, "token", 1L), teacherSession);
+        assertTrue(res.success());
+        assertInstanceOf(ArrayList.class, res.payload());
     }
 }

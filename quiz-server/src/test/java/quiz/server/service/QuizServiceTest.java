@@ -317,4 +317,17 @@ class QuizServiceTest {
 
         assertThrows(ForbiddenException.class, () -> service.openQuiz(1, otherTeacherSession));
     }
+
+    @Test
+    void listQuizResultsReturnsResultsForAuthorizedTeacher() {
+        Instant now = Instant.now();
+        Quiz quiz = Quiz.restore(1, "Title", "Desc", "Grammar", 30, 50.0,
+            QuizStatus.OPEN, "123456", AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3, 2, now, now, null);
+        when(quizRepo.findById(1)).thenReturn(Optional.of(quiz));
+        when(quizRepo.findResultsByQuizId(1)).thenReturn(List.of());
+
+        var list = service.listQuizResults(1, teacherSession);
+        assertNotNull(list);
+        verify(quizRepo).findResultsByQuizId(1);
+    }
 }

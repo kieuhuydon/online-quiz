@@ -1,7 +1,12 @@
 package quiz.server.repository.jdbc;
 
+import org.postgresql.util.PSQLException;
+import org.postgresql.util.ServerErrorMessage;
+import quiz.common.dto.ResultDto;
 import quiz.common.enums.AntiCheatPolicyType;
 import quiz.common.enums.QuizStatus;
+import quiz.common.enums.SubmitReason;
+import quiz.common.protocol.ErrorCode;
 import quiz.server.domain.Quiz;
 import quiz.server.exception.QuizException;
 import quiz.server.repository.QuizRepository;
@@ -87,6 +92,17 @@ public final class JdbcQuizRepository implements QuizRepository {
         JOIN class_members cm ON qa.class_id = cm.class_id
         WHERE cm.student_id = ?
         ORDER BY q.id DESC
+        """;
+    private static final String FIND_RESULTS_BY_QUIZ = """
+        SELECT r.attempt_id, a.quiz_id, q.title AS quiz_title, u.full_name AS student_name,
+               r.score, r.correct_count, r.total_questions, r.passed, r.submit_reason,
+               a.submitted_at
+        FROM results r
+        JOIN attempts a ON r.attempt_id = a.id
+        JOIN users u ON a.student_id = u.id
+        JOIN quizzes q ON a.quiz_id = q.id
+        WHERE a.quiz_id = ?
+        ORDER BY r.score DESC, a.submitted_at DESC
         """;
 
     private final DataSource dataSource;
@@ -295,27 +311,58 @@ public final class JdbcQuizRepository implements QuizRepository {
     }
 
     @Override
-    public boolean existsById(long id) {
-        validateId(id);
-        return withConnection(connection -> exists(connection, EXISTS_ID, id));
+    public List<ResultDto> findResultsByQuizId(long quizId) {
+        if (quizId <= 0) return List.of();
+        return withConnection(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(FIND_RESULTS_BY_QUIZ)) {
+                statement.setLong(1, quizId);
+                try (ResultSet results = statement.executeQuery()) {
+                    List<ResultDto> list = new ArrayList<>();
+                    while (results.next()) {
+                        OffsetDateTime submitted = results.getObject("submitted_at", OffsetDateTime.class);
+                        list.add(new ResultDto(
+                            results.getLong("attempt_id"),
+                            results.getLong("quiz_id"),
+                            results.getString("quiz_title"),
+                            results.getString("student_name"),
+                            results.getBigDecimal("score").doubleValue(),
+                            results.getInt("correct_count"),
+                            results.getInt("total_questions"),
+                            results.getBoolean("passed"),
+                            SubmitReason.valueOf(results.getString("submit_reason")),
+                            submitted != null ? submitted.toInstant() : Instant.now()
+                        ));
+                    }
+                    return List.copyOf(list);
+                }
+            }
+        });
     }
 
-    private Optional<Quiz> findOne(Connection connection, String sql,
-                                   StatementBinder binder) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            binder.bind(statement);
-            try (ResultSet rows = statement.executeQuery()) {
-                return rows.next() ? Optional.of(mapQuiz(rows)) : Optional.empty();
-            }
-        }
+    private static Quiz mapRow(ResultSet results) throws SQLException {
+        OffsetDateTime opened = results.getObject("opened_at", OffsetDateTime.class);
+        OffsetDateTime closed = results.getObject("closed_at", OffsetDateTime.class);
+        return Quiz.restore(
+            results.getLong("id"),
+            results.getString("title"),
+            results.getString("description"),
+            results.getString("category"),
+            results.getInt("duration_minutes"),
+            results.getBigDecimal("pass_score").doubleValue(),
+            QuizStatus.valueOf(results.getString("status")),
+            results.getString("pin"),
+            AntiCheatPolicyType.valueOf(results.getString("anticheat_policy")),
+            results.getInt("max_violations"),
+            results.getLong("created_by"),
+            results.getObject("created_at", OffsetDateTime.class).toInstant(),
+            opened == null ? null : opened.toInstant(),
+            closed == null ? null : closed.toInstant()
+        );
     }
 
-    private boolean exists(Connection connection, String sql, long id) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, id);
-            try (ResultSet rows = statement.executeQuery()) {
-                return rows.next();
-            }
+    private RuntimeException translateException(SQLException error) {
+        if (error instanceof PSQLException psql && "23505".equals(psql.getSQLState())) {
+            return new ConflictException("Dữ liệu bài kiểm tra bị trùng lặp", error);
         }
     }
 

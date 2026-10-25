@@ -285,6 +285,10 @@ public final class QuizApi implements AutoCloseable {
         });
     }
 
+    public CompletableFuture<List<ResultDto>> listQuizResults(long quizId) {
+        return protectedCall(MessageType.LIST_QUIZ_RESULTS, quizId, QuizApi::decodeResults);
+    }
+
     // --- Student Quiz Flow ---
     public CompletableFuture<List<QuizInfoDto>> listAssignedQuizzes() {
         return protectedCall(MessageType.LIST_ASSIGNED_QUIZZES, null, QuizApi::decodeQuizInfos);
@@ -519,21 +523,10 @@ public final class QuizApi implements AutoCloseable {
         return dto;
     }
 
-    private static AttemptStateDto decodeAttemptState(Object payload) {
-        if (!(payload instanceof AttemptStateDto dto)) throw new TransportException(PROTOCOL);
-        return dto;
-    }
-
-    private static ResultDto decodeResult(Object payload) {
-        if (!(payload instanceof ResultDto dto)) throw new TransportException(PROTOCOL);
-        return dto;
-    }
-
+    @SuppressWarnings("unchecked")
     private static List<ResultDto> decodeResults(Object payload) {
-        if (!(payload instanceof List<?> items)) throw new TransportException(PROTOCOL);
-        List<ResultDto> results = new ArrayList<>(items.size());
-        for (Object item : items) results.add(decodeResult(item));
-        return List.copyOf(results);
+        if (!(payload instanceof List<?> list)) throw new TransportException(PROTOCOL);
+        return List.copyOf((List<ResultDto>) payload);
     }
 
     /** Disposes the API and its owned connection; application shutdown need not send LOGOUT. */

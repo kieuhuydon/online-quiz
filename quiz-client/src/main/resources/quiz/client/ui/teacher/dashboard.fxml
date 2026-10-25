@@ -47,12 +47,14 @@
                     <!-- Action Toolbar -->
                     <HBox spacing="10" alignment="CENTER_LEFT">
                         <Button fx:id="btnNewQuiz" text="+ Tạo Đề Mới" onAction="#onNewQuizClick" styleClass="primary-button"/>
+                        <Button fx:id="btnAutoGenerateQuiz" text="⚡Tạo Đề Tự Động" onAction="#onAutoGenerateQuizClick" styleClass="primary-button" style="-fx-background-color: #2563eb;"/>
                         <Button fx:id="btnEditQuiz" text="Sửa Đề" onAction="#onEditQuizClick" styleClass="secondary-button"/>
                         <Button fx:id="btnSelectQuestions" text="Chọn Câu Hỏi" onAction="#onSelectQuestionsClick" styleClass="warning-button"/>
                         <Button fx:id="btnOpenQuiz" text="Mở Đề (Sinh PIN)" onAction="#onOpenQuizClick" styleClass="success-button"/>
                         <Button fx:id="btnCloseQuiz" text="Đóng Đề Thi" onAction="#onCloseQuizClick" styleClass="danger-button"/>
                         <Button fx:id="btnAssignQuiz" text="Giao Cho Lớp" onAction="#onAssignQuizClick" styleClass="secondary-button"/>
-                        <Button fx:id="btnViewDetail" text="Xem Chi Tiết" onAction="#onViewDetailClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnViewDetail" text="Chi Tiết &amp; Sửa Đề" onAction="#onViewDetailClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnViewResults" text="Kết Quả" onAction="#onViewResultsClick" styleClass="secondary-button" style="-fx-border-color: #2563eb; -fx-text-fill: #1d4ed8;"/>
                         <Region HBox.hgrow="ALWAYS"/>
                         <ProgressIndicator fx:id="quizProgress" visible="false" prefWidth="22" prefHeight="22"/>
                         <Button fx:id="btnRefreshQuiz" text="Tải lại" onAction="#loadQuizzes" styleClass="secondary-button"/>
@@ -61,7 +63,7 @@
                     <!-- Quizzes Table -->
                     <TableView fx:id="quizTable" prefHeight="220" minHeight="160" VBox.vgrow="ALWAYS" styleClass="account-card"/>
 
-                <!-- SUB-PANEL 1: Form Create/Edit Quiz -->
+                <!-- SUB-PANEL 1: Form Create/Edit Quiz (Manual) -->
                 <VBox fx:id="quizFormPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
                     <Label fx:id="formTitle" text="Tạo Đề Kiểm Tra Mới" styleClass="card-heading"/>
                     <Separator/>
@@ -81,7 +83,10 @@
                         <TextField fx:id="txtQuizCategory" promptText="VD: Grammar / Reading" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
 
                         <Label text="Thời lượng (phút):" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
-                        <TextField fx:id="txtQuizDuration" promptText="30" GridPane.rowIndex="1" GridPane.columnIndex="3"/>
+                        <VBox spacing="3" GridPane.rowIndex="1" GridPane.columnIndex="3">
+                            <TextField fx:id="txtQuizDuration" promptText="30"/>
+                            <Label fx:id="lblDurationError" text="Không được viết chữ, chỉ được nhập số phút!" visible="false" managed="false" styleClass="field-error-text"/>
+                        </VBox>
 
                         <Label text="Điểm đạt (%):" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
                         <TextField fx:id="txtQuizPassScore" promptText="50" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
@@ -101,7 +106,112 @@
                     </HBox>
                 </VBox>
 
-                <!-- SUB-PANEL 2: Select Questions Panel -->
+                <!-- SUB-PANEL 2: Tạo Đề Tự Động (Auto Generate by Difficulty % & Count) -->
+                <VBox fx:id="autoQuizPanel" visible="false" managed="false" styleClass="content-card" spacing="14">
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <VBox spacing="2" HBox.hgrow="ALWAYS">
+                            <Label text="TẠO ĐỀ KIỂM TRA TỰ ĐỘNG" styleClass="card-heading" style="-fx-text-fill: #1d4ed8;"/>
+                            <Label text="Hệ thống tự động bốc ngẫu nhiên câu hỏi từ Ngân hàng câu hỏi theo tỷ lệ Easy / Medium / Hard và số lượng câu hỏi bạn chọn." styleClass="muted"/>
+                        </VBox>
+                        <Button text="Đóng" onAction="#onCancelAutoQuizClick" styleClass="secondary-button"/>
+                    </HBox>
+                    <Separator/>
+                    <Label fx:id="autoQuizError" visible="false" managed="false" styleClass="error-notice" wrapText="true"/>
+
+                    <!-- General Settings -->
+                    <GridPane hgap="16" vgap="12">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="135" prefWidth="135"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                            <ColumnConstraints minWidth="135" prefWidth="135"/>
+                            <ColumnConstraints hgrow="ALWAYS"/>
+                        </columnConstraints>
+
+                        <Label text="Tiêu đề đề thi:" styleClass="field-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                        <TextField fx:id="txtAutoQuizTitle" promptText="VD: Đề thi trắc nghiệm tổng hợp - K24" GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
+
+                        <Label text="Chủ đề câu hỏi:" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                        <TextField fx:id="txtAutoQuizCategory" promptText="Để trống để chọn tất cả chủ đề, hoặc nhập chủ đề..." GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                        <Label text="Thời lượng (phút):" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+                        <VBox spacing="3" GridPane.rowIndex="1" GridPane.columnIndex="3">
+                            <TextField fx:id="txtAutoQuizDuration" promptText="30"/>
+                            <Label fx:id="lblAutoDurationError" text="Không được viết chữ, chỉ được nhập số phút!" visible="false" managed="false" styleClass="field-error-text"/>
+                        </VBox>
+
+                        <Label text="Tổng số câu hỏi:" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                        <TextField fx:id="txtAutoTotalQuestions" promptText="30" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                        <Label text="Điểm đạt (%):" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="2"/>
+                        <TextField fx:id="txtAutoQuizPassScore" promptText="50" GridPane.rowIndex="2" GridPane.columnIndex="3"/>
+
+                        <Label text="Chính sách vi phạm:" styleClass="field-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                        <ComboBox fx:id="cmbAutoQuizPolicy" maxWidth="Infinity" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                        <Label text="Số vi phạm tối đa:" styleClass="field-label" GridPane.rowIndex="3" GridPane.columnIndex="2"/>
+                        <TextField fx:id="txtAutoQuizMaxViolations" promptText="3" GridPane.rowIndex="3" GridPane.columnIndex="3"/>
+                    </GridPane>
+
+                    <!-- Difficulty Sliders Section -->
+                    <VBox spacing="10" style="-fx-background-color: #f8fafc; -fx-padding: 14; -fx-border-color: #e2e8f0; -fx-border-radius: 8; -fx-background-radius: 8;">
+                        <HBox alignment="CENTER_LEFT" spacing="12">
+                            <Label text="THIẾT LẬP TỶ LỆ ĐỘ KHÓ TRÊN THANH CHỈ SỐ:" style="-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #0f172a;"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Label text="Mẫu cấu hình nhanh:" styleClass="muted" style="-fx-font-size: 12px;"/>
+                            <Button text="30 - 30 - 40" onAction="#onPreset1Click" styleClass="preset-chip"/>
+                            <Button text="40 - 40 - 20" onAction="#onPreset2Click" styleClass="preset-chip"/>
+                            <Button text="20 - 50 - 30" onAction="#onPreset3Click" styleClass="preset-chip"/>
+                            <Button text="50 - 30 - 20" onAction="#onPreset4Click" styleClass="preset-chip"/>
+                        </HBox>
+
+                        <!-- Sliders Grid -->
+                        <GridPane hgap="16" vgap="10">
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="200" prefWidth="230"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                                <ColumnConstraints minWidth="120" prefWidth="130"/>
+                            </columnConstraints>
+
+                            <!-- Easy -->
+                            <HBox alignment="CENTER_LEFT" spacing="8" GridPane.rowIndex="0" GridPane.columnIndex="0">
+                                <Label text="DỄ (EASY):" styleClass="badge-easy"/>
+                                <Label fx:id="lblEasyPercent" text="30% (9 câu)" style="-fx-font-weight: bold;"/>
+                            </HBox>
+                            <Slider fx:id="sliderEasy" min="0" max="100" value="30" blockIncrement="5" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                            <Label fx:id="lblEasyCount" text="9 câu" style="-fx-font-weight: bold; -fx-text-fill: #15803d;" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
+
+                            <!-- Medium -->
+                            <HBox alignment="CENTER_LEFT" spacing="8" GridPane.rowIndex="1" GridPane.columnIndex="0">
+                                <Label text="TRUNG BÌNH (MEDIUM):" styleClass="badge-medium"/>
+                                <Label fx:id="lblMediumPercent" text="30% (9 câu)" style="-fx-font-weight: bold;"/>
+                            </HBox>
+                            <Slider fx:id="sliderMedium" min="0" max="100" value="30" blockIncrement="5" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                            <Label fx:id="lblMediumCount" text="9 câu" style="-fx-font-weight: bold; -fx-text-fill: #b45309;" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+
+                            <!-- Hard -->
+                            <HBox alignment="CENTER_LEFT" spacing="8" GridPane.rowIndex="2" GridPane.columnIndex="0">
+                                <Label text="KHÓ (HARD):" styleClass="badge-hard"/>
+                                <Label fx:id="lblHardPercent" text="40% (12 câu)" style="-fx-font-weight: bold;"/>
+                            </HBox>
+                            <Slider fx:id="sliderHard" min="0" max="100" value="40" blockIncrement="5" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+                            <Label fx:id="lblHardCount" text="12 câu" style="-fx-font-weight: bold; -fx-text-fill: #b91c1c;" GridPane.rowIndex="2" GridPane.columnIndex="2"/>
+                        </GridPane>
+
+                        <!-- Summary and Validation message -->
+                        <HBox alignment="CENTER_LEFT" spacing="12" style="-fx-padding: 6 0 0 0;">
+                            <Label fx:id="lblAutoDistributionSummary" text="Phân bổ: 9 Dễ (30%) + 9 Trung bình (30%) + 12 Khó (40%) = 30 câu hỏi (Tổng: 100%)" style="-fx-font-weight: bold; -fx-text-fill: #0f766e;"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Label fx:id="lblAutoPercentageError" visible="false" managed="false" text="Tổng tỷ lệ phần trăm phải bằng 100%" styleClass="field-error-text"/>
+                        </HBox>
+                    </VBox>
+
+                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                        <Button text="Hủy Bỏ" onAction="#onCancelAutoQuizClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnConfirmAutoGenerate" text="Tạo Đề Tự Động &amp; Mở Review Chỉnh Sửa" onAction="#onConfirmAutoGenerateClick" styleClass="primary-button" style="-fx-background-color: #2563eb;"/>
+                    </HBox>
+                </VBox>
+
+                <!-- SUB-PANEL 3: Select Questions Panel (Ngân hàng câu hỏi) -->
                 <VBox fx:id="questionSelectionPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
                     <HBox alignment="CENTER_LEFT" spacing="10">
                         <VBox spacing="2" HBox.hgrow="ALWAYS">
@@ -115,32 +225,119 @@
                     <TableView fx:id="questionTable" prefHeight="240" styleClass="account-card"/>
                 </VBox>
 
-                <!-- SUB-PANEL 3: Assign Quiz to Class Panel -->
-                <VBox fx:id="assignPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
-                    <Label fx:id="assignQuizTitle" text="Giao Đề Kiểm Tra Cho Lớp Học" styleClass="card-heading"/>
+                <!-- SUB-PANEL 4: Assign Quiz to Multiple Classes Panel -->
+                <VBox fx:id="assignPanel" visible="false" managed="false" styleClass="content-card" spacing="14">
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <VBox spacing="2" HBox.hgrow="ALWAYS">
+                            <Label fx:id="assignQuizTitle" text="Giao Đề Kiểm Tra Cho Nhiều Lớp Học" styleClass="card-heading"/>
+                            <Label text="Tích chọn một hoặc nhiều lớp học để giao đề thi đồng thời trong 1 lần thực hiện." styleClass="muted"/>
+                        </VBox>
+                        <Button fx:id="btnCancelAssign" text="Đóng" onAction="#onCancelAssignClick" styleClass="secondary-button"/>
+                    </HBox>
                     <Separator/>
-                    <HBox spacing="12" alignment="CENTER_LEFT">
-                        <Label text="Chọn Lớp Học:" styleClass="field-label"/>
-                        <ComboBox fx:id="cmbAssignClass" prefWidth="280"/>
-                        <Button fx:id="btnConfirmAssign" text="Xác Nhận Giao Bài" onAction="#onConfirmAssignClick" styleClass="primary-button"/>
-                        <Button fx:id="btnCancelAssign" text="Hủy" onAction="#onCancelAssignClick" styleClass="secondary-button"/>
+
+                    <HBox alignment="CENTER_LEFT" spacing="16">
+                        <CheckBox fx:id="chkSelectAllClasses" text="Chọn tất cả các lớp" onAction="#onSelectAllClassesClick" style="-fx-font-weight: bold;"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="lblSelectedClassesCount" text="Đã chọn: 0 lớp" style="-fx-font-weight: bold; -fx-text-fill: #1d4ed8;"/>
+                    </HBox>
+
+                    <!-- Table of classes with checkboxes -->
+                    <TableView fx:id="assignClassTable" prefHeight="220" styleClass="account-card"/>
+
+                    <HBox spacing="10" alignment="CENTER_RIGHT">
+                        <Button text="Hủy" onAction="#onCancelAssignClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnConfirmAssign" text="✅ Xác Nhận Giao Cho Các Lớp Đã Chọn" onAction="#onConfirmAssignClick" styleClass="primary-button"/>
                     </HBox>
                 </VBox>
 
-                <!-- SUB-PANEL 4: Quiz Details Panel -->
-                <VBox fx:id="quizDetailPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
-                    <HBox alignment="CENTER_LEFT">
-                        <VBox spacing="2" HBox.hgrow="ALWAYS">
-                            <Label fx:id="detailQuizTitle" text="Chi tiết đề thi" styleClass="card-heading"/>
+                <!-- SUB-PANEL 5: Review & Edit Details Panel (Xem chi tiết & Chỉnh sửa đề) -->
+                <VBox fx:id="quizDetailPanel" visible="false" managed="false" styleClass="content-card" spacing="14">
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <VBox spacing="3" HBox.hgrow="ALWAYS">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label fx:id="detailQuizTitle" text="Chi tiết đề thi" styleClass="card-heading"/>
+                                <Label fx:id="detailStatusBadge" text="DRAFT" styleClass="badge"/>
+                            </HBox>
                             <Label fx:id="detailQuizInfo" text="" styleClass="muted"/>
-                            <Label fx:id="detailQuestionsCount" text="" style="-fx-font-weight: bold;"/>
-                            <Label fx:id="detailAssignedClasses" text="" style="-fx-text-fill: #059669; -fx-font-weight: bold;"/>
+                            <HBox alignment="CENTER_LEFT" spacing="16">
+                                <Label fx:id="detailQuestionsCount" text="" style="-fx-font-weight: bold;"/>
+                                <Label fx:id="detailDifficultyBreakdown" text="" style="-fx-font-size: 12px; -fx-text-fill: #475569;"/>
+                                <Label fx:id="detailAssignedClasses" text="" style="-fx-text-fill: #059669; -fx-font-weight: bold;"/>
+                            </HBox>
                         </VBox>
-                        <Button fx:id="btnCloseDetail" text="Đóng chi tiết" onAction="#onCloseDetailClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnCloseDetail" text="Đóng" onAction="#onCloseDetailClick" styleClass="secondary-button"/>
                     </HBox>
                     <Separator/>
-                    <Label text="Danh sách câu hỏi trong đề:" styleClass="section-heading"/>
-                    <ListView fx:id="listQuizQuestions" prefHeight="160"/>
+
+                    <!-- Detail Toolbar: Add question from bank, save changes -->
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Button fx:id="btnDetailAddQuestion" text="+ Thêm Câu Hỏi Từ Ngân Hàng" onAction="#onDetailAddQuestionClick" styleClass="primary-button" style="-fx-background-color: #0d9488;"/>
+                        <Button fx:id="btnDetailSaveQuestions" text="Lưu Thay Đổi Đề Thi" onAction="#onDetailSaveQuestionsClick" styleClass="primary-button"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="detailNotice" visible="false" managed="false" text="" style="-fx-font-weight: bold;"/>
+                    </HBox>
+
+                    <!-- Questions Table with Delete & Replace actions -->
+                    <TableView fx:id="detailQuestionTable" prefHeight="250" styleClass="account-card"/>
+
+                    <!-- Question Bank Picker Panel (for Adding or Replacing Question) -->
+                    <VBox fx:id="questionPickerPanel" visible="false" managed="false" spacing="10" style="-fx-background-color: #f1f5f9; -fx-padding: 14; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8;">
+                        <HBox alignment="CENTER_LEFT" spacing="12">
+                            <Label fx:id="lblPickerTitle" text="Chọn câu hỏi từ ngân hàng để thay thế / thêm:" style="-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #1e293b;"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <TextField fx:id="txtPickerSearch" promptText="Tìm kiếm nội dung câu hỏi..." prefWidth="240"/>
+                            <ComboBox fx:id="cmbPickerDifficulty" prefWidth="130" promptText="Độ khó"/>
+                            <Button text="Đóng bộ chọn" onAction="#onCancelPickerClick" styleClass="secondary-button"/>
+                        </HBox>
+                        <TableView fx:id="pickerTable" prefHeight="180" styleClass="account-card"/>
+                        <HBox alignment="CENTER_RIGHT" spacing="10">
+                            <Button text="Hủy" onAction="#onCancelPickerClick" styleClass="secondary-button"/>
+                            <Button fx:id="btnConfirmPicker" text="Xác Nhận Chọn Câu Hỏi Này" onAction="#onConfirmPickerClick" styleClass="primary-button"/>
+                        </HBox>
+                    </VBox>
+                </VBox>
+
+                <!-- SUB-PANEL 6: Kết Quả Thi Của Học Sinh (Exam Results) -->
+                <VBox fx:id="quizResultsPanel" visible="false" managed="false" styleClass="content-card" spacing="14">
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <VBox spacing="2" HBox.hgrow="ALWAYS">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label fx:id="lblResultsQuizTitle" text="BẢNG KẾT QUẢ THI CỦA HỌC SINH" styleClass="card-heading" style="-fx-text-fill: #1e3a8a;"/>
+                                <Label fx:id="lblResultsStatusBadge" text="" styleClass="badge"/>
+                            </HBox>
+                            <Label fx:id="lblResultsQuizInfo" text="" styleClass="muted"/>
+                        </VBox>
+                        <Button text="Tải Lại" onAction="#onRefreshResultsClick" styleClass="secondary-button"/>
+                        <Button text="Đóng" onAction="#onCloseResultsClick" styleClass="secondary-button"/>
+                    </HBox>
+                    <Separator/>
+
+                    <!-- Results Summary Stat Cards -->
+                    <HBox spacing="14">
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+                            <Label text="SỐ LƯỢNG BÀI THI" styleClass="stat-label"/>
+                            <Label fx:id="lblResultsTotalSubmissions" text="0 bài" styleClass="stat-value"/>
+                        </VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+                            <Label text="ĐIỂM TRUNG BÌNH" styleClass="stat-label"/>
+                            <Label fx:id="lblResultsAverageScore" text="0.0" styleClass="stat-value" style="-fx-text-fill: #2563eb;"/>
+                        </VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+                            <Label text="TỶ LỆ ĐẠT (PASS)" styleClass="stat-label"/>
+                            <Label fx:id="lblResultsPassRate" text="0%" styleClass="stat-value" style="-fx-text-fill: #059669;"/>
+                        </VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+                            <Label text="ĐIỂM CAO NHẤT" styleClass="stat-label"/>
+                            <Label fx:id="lblResultsHighestScore" text="0.0" styleClass="stat-value" style="-fx-text-fill: #d97706;"/>
+                        </VBox>
+                    </HBox>
+
+                    <!-- Results Notification -->
+                    <Label fx:id="resultsNotice" visible="false" managed="false" styleClass="notice" wrapText="true"/>
+
+                    <!-- Results Table -->
+                    <TableView fx:id="resultsTable" prefHeight="260" styleClass="account-card"/>
                 </VBox>
             </VBox>
         </ScrollPane>

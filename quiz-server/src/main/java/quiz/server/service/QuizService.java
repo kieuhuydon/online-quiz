@@ -5,7 +5,7 @@ import quiz.common.dto.QuestionDto;
 import quiz.common.dto.QuizDetailDto;
 import quiz.common.dto.QuizDto;
 import quiz.common.dto.QuizInfoDto;
-import quiz.common.dto.QuizQuestionsDto;
+import quiz.common.dto.ResultDto;
 import quiz.common.dto.UpdateQuizDto;
 import quiz.common.enums.AntiCheatPolicyType;
 import quiz.common.enums.QuizStatus;
@@ -322,6 +322,14 @@ public final class QuizService {
             .orElseThrow(() -> new NotFoundException("Đề kiểm tra không tồn tại"));
         int count = quizzes.countQuestions(quizId);
         return toInfoDto(quiz, count);
+    }
+
+    public ArrayList<ResultDto> listQuizResults(long quizId, UserSession session) {
+        Objects.requireNonNull(session, "UserSession cannot be null");
+        Quiz quiz = quizRepository.findById(quizId)
+            .orElseThrow(() -> new NotFoundException("Đề kiểm tra không tồn tại"));
+        checkTeacherPermission(quiz, session, "xem kết quả");
+        return new ArrayList<>(quizRepository.findResultsByQuizId(quizId));
     }
 
     private void checkTeacherPermission(Quiz quiz, UserSession session, String action) {
