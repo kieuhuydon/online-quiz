@@ -31,7 +31,7 @@ public final class AttemptService {
         Optional<Attempt> existing=attempts.findByStudentAndQuiz(studentId,quizId);
         if(existing.isPresent()) {
             Attempt a=existing.get();
-            if(a.status()==AttemptStatus.SUBMITTED)throw new ConflictException("Bạn đã hoàn thành bài kiểm tra này");
+            if(a.status()==AttemptStatus.SUBMITTED)throw new ConflictException("Bạn đã nộp bài kiểm tra này trước đó. Mỗi học viên chỉ được làm bài này một lần.");
             return state(a);
         }
         Instant start=clock.instant();

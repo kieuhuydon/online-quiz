@@ -9,14 +9,20 @@ import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import quiz.client.api.QuizApi;
+import quiz.client.api.ApiException;
 import quiz.client.ui.SceneNavigator;
 import quiz.client.ui.ScreenController;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.QuizInfoDto;
+import quiz.common.dto.ClassDto;
+import quiz.common.dto.ResultDto;
+import quiz.common.protocol.ErrorCode;
 import quiz.common.enums.QuizStatus;
 
 import java.util.List;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Controller cho Học viên xem các bài kiểm tra được giao (FR-S02) và thông tin bài kiểm tra (FR-S04).
@@ -28,7 +34,7 @@ public final class StudentController extends ScreenController {
 
     @FXML private TableView<QuizInfoDto> assignedQuizTable;
     @FXML private Label studentWelcome;
-    @FXML private Label assignedCountLabel;
+    @FXML private Label studentClassLabel;
     @FXML private Label studentNotice;
     @FXML private ProgressIndicator studentProgress;
     @FXML private Button btnRefresh;
@@ -47,6 +53,8 @@ public final class StudentController extends ScreenController {
     @FXML private Button btnStartExam;
 
     private final ObservableList<QuizInfoDto> quizList = FXCollections.observableArrayList();
+    private final Set<Long> completedQuizIds = new HashSet<>();
+    private boolean historyLoaded;
 
     public StudentController(QuizApi api, SceneNavigator navigator, FxAsync fx) {
         this.api = Objects.requireNonNull(api);
@@ -84,6 +92,24 @@ public final class StudentController extends ScreenController {
     @Override
     protected void onMount() {
         loadAssignedQuizzes();
+        fx.observe(api.listMyHistory(), this::isActive,
+            results -> {
+                completedQuizIds.clear();
+                results.stream().map(ResultDto::quizId).forEach(completedQuizIds::add);
+                historyLoaded = true;
+                QuizInfoDto selected = assignedQuizTable.getSelectionModel().getSelectedItem();
+                if (selected != null) showQuizInfo(selected);
+            },
+            err -> {
+                historyLoaded = true;
+                QuizInfoDto selected = assignedQuizTable.getSelectionModel().getSelectedItem();
+                if (selected != null) showQuizInfo(selected);
+            },
+            () -> { historyLoaded = true; });
+        fx.observe(api.listMyClasses(), this::isActive,
+            classes -> studentClassLabel.setText("Lớp: " + (classes.isEmpty() ? "chưa được xếp lớp" : String.join(", ", classes.stream().map(ClassDto::name).toList()))),
+            err -> studentClassLabel.setText("Không tải được thông tin lớp học"),
+            () -> {});
     }
 
     private void configureTable() {
@@ -148,7 +174,6 @@ public final class StudentController extends ScreenController {
         fx.observe(api.listAssignedQuizzes(), this::isActive,
             quizzes -> {
                 quizList.setAll(quizzes);
-                assignedCountLabel.setText("Bạn có " + quizzes.size() + " bài kiểm tra được giao");
                 studentProgress.setVisible(false);
                 btnRefresh.setDisable(false);
             },
@@ -171,7 +196,16 @@ public final class StudentController extends ScreenController {
         infoPassScore.setText(String.format("%.0f%%", sel.passScore()));
         infoQuestionCount.setText(sel.questionCount() + " câu hỏi");
         infoStatus.setText(sel.status() == QuizStatus.OPEN ? "Đang mở thi" : (sel.status() == QuizStatus.CLOSED ? "Đã đóng" : "Chưa mở"));
-        btnStartExam.setDisable(sel.status() != QuizStatus.OPEN);
+        boolean alreadySubmitted = completedQuizIds.contains(sel.id());
+        btnStartExam.setDisable(!historyLoaded || sel.status() != QuizStatus.OPEN || alreadySubmitted);
+        if (alreadySubmitted) {
+            showNotice("Bạn đã hoàn thành bài kiểm tra này trước đó nên không thể làm lại.", true);
+        } else if (!historyLoaded) {
+            showNotice("Đang kiểm tra lịch sử làm bài…", false);
+        } else if (studentNotice.getText() != null && studentNotice.getText().startsWith("Bạn đã hoàn thành bài kiểm tra này")) {
+            studentNotice.setVisible(false);
+            studentNotice.setManaged(false);
+        }
         infoDescription.setText(sel.description() != null && !sel.description().isBlank() ? sel.description() : "Không có mô tả chi tiết.");
         quizInfoPanel.setVisible(true);
         quizInfoPanel.setManaged(true);
@@ -194,6 +228,10 @@ public final class StudentController extends ScreenController {
     private void onStartExamClick() {
         QuizInfoDto selected = assignedQuizTable.getSelectionModel().getSelectedItem();
         if (selected == null || selected.status() != QuizStatus.OPEN) return;
+        if (completedQuizIds.contains(selected.id())) {
+            showNotice("Bạn đã hoàn thành bài kiểm tra này trước đó nên không thể làm lại.", true);
+            return;
+        }
         String pin = null;
         if (selected.pinRequired()) {
             TextInputDialog dialog = new TextInputDialog();
@@ -207,7 +245,13 @@ public final class StudentController extends ScreenController {
         btnStartExam.setDisable(true);
         fx.observe(api.startAttempt(selected.id(), code), this::isActive,
             navigator::showExam,
-            err -> { showNotice("Không thể bắt đầu bài thi: " + err.getMessage(), true); btnStartExam.setDisable(false); },
+            err -> {
+                String message = err instanceof ApiException apiError && apiError.errorCode() == ErrorCode.CONFLICT
+                    ? "Bài thi hiện không thể bắt đầu. Có thể bạn đã hoàn thành bài này hoặc đề thi đã đóng."
+                    : "Không thể bắt đầu bài thi. Vui lòng kiểm tra mã PIN hoặc thử lại sau.";
+                showNotice(message, true);
+                btnStartExam.setDisable(false);
+            },
             () -> btnStartExam.setDisable(false));
     }
 

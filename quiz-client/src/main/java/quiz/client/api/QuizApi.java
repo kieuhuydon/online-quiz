@@ -236,6 +236,10 @@ public final class QuizApi implements AutoCloseable {
         return protectedCall(MessageType.LIST_CLASSES, null, QuizApi::decodeClasses);
     }
 
+    public CompletableFuture<List<ClassDto>> listMyClasses() {
+        return protectedCall(MessageType.LIST_MY_CLASSES, null, QuizApi::decodeClasses);
+    }
+
     public CompletableFuture<Void> addClassMember(long classId, long studentId) {
         return protectedCall(MessageType.ADD_CLASS_MEMBER, new AddClassMemberDto(classId, studentId), payload -> {
             requireNull(payload);

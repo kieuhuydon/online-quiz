@@ -14,7 +14,7 @@
         <VBox spacing="4" HBox.hgrow="ALWAYS">
             <Label text="KHÔNG GIAN HỌC VIÊN" styleClass="eyebrow"/>
             <Label fx:id="studentWelcome" text="Không gian học tập" styleClass="page-heading"/>
-            <Label fx:id="assignedCountLabel" text="Danh sách các bài kiểm tra được giao cho lớp của bạn." styleClass="muted"/>
+            <Label fx:id="studentClassLabel" text="Lớp: đang tải…" styleClass="muted"/>
         </VBox>
         <ProgressIndicator fx:id="studentProgress" visible="false" prefWidth="24" prefHeight="24"/>
         <Button fx:id="btnRefresh" text="Tải lại danh sách" onAction="#loadAssignedQuizzes" styleClass="secondary-button"/>
