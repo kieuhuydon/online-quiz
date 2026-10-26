@@ -40,7 +40,8 @@ public final class QuizHandler implements CommandHandler {
             MessageType.ASSIGN_QUIZ,
             MessageType.LIST_ASSIGNED_QUIZZES,
             MessageType.GET_QUIZ_INFO,
-            MessageType.LIST_QUIZ_RESULTS
+            MessageType.LIST_QUIZ_RESULTS,
+            MessageType.GET_CLASS_QUIZ_RESULTS
         );
     }
 
@@ -48,7 +49,8 @@ public final class QuizHandler implements CommandHandler {
     public Set<Role> allowedRoles(MessageType type) {
         return switch (type) {
             case CREATE_QUIZ, UPDATE_QUIZ, GET_QUIZ, LIST_QUIZZES,
-                 SET_QUIZ_QUESTIONS, OPEN_QUIZ, CLOSE_QUIZ, ASSIGN_QUIZ, LIST_QUIZ_RESULTS -> Set.of(Role.TEACHER, Role.ADMIN);
+                 SET_QUIZ_QUESTIONS, OPEN_QUIZ, CLOSE_QUIZ, ASSIGN_QUIZ, LIST_QUIZ_RESULTS,
+                 GET_CLASS_QUIZ_RESULTS -> Set.of(Role.TEACHER, Role.ADMIN);
             case LIST_ASSIGNED_QUIZZES, GET_QUIZ_INFO -> Set.of(Role.STUDENT);
             default -> throw new IllegalArgumentException("Unsupported quiz command");
         };
@@ -61,6 +63,10 @@ public final class QuizHandler implements CommandHandler {
             case CREATE_QUIZ -> {
                 CreateQuizDto dto = HandlerPayload.required(request, CreateQuizDto.class);
                 yield Response.success(request.requestId(), quizService.createQuiz(dto, authSession));
+            }
+            case GET_CLASS_QUIZ_RESULTS -> {
+                Long classId = HandlerPayload.required(request, Long.class);
+                yield Response.success(request.requestId(), quizService.getClassQuizResults(classId, authSession));
             }
             case UPDATE_QUIZ -> {
                 UpdateQuizDto dto = HandlerPayload.required(request, UpdateQuizDto.class);

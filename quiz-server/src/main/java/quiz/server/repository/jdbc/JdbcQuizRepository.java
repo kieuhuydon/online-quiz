@@ -104,6 +104,26 @@ public final class JdbcQuizRepository implements QuizRepository {
         WHERE a.quiz_id = ?
         ORDER BY r.score DESC, a.submitted_at DESC
         """;
+    private static final String FIND_ASSIGNED_FOR_CLASS = """
+        SELECT q.id, q.title, q.description, q.category, q.duration_minutes, q.pass_score,
+               q.status, q.pin, q.anticheat_policy, q.max_violations, q.created_by,
+               q.created_at, q.opened_at, q.closed_at
+        FROM quizzes q JOIN quiz_assignments qa ON qa.quiz_id = q.id
+        WHERE qa.class_id = ? ORDER BY q.id DESC
+        """;
+    private static final String FIND_RESULTS_BY_QUIZ_AND_CLASS = """
+        SELECT r.attempt_id, a.quiz_id, q.title AS quiz_title, u.full_name AS student_name,
+               r.score, r.correct_count, r.total_questions, r.passed, r.submit_reason,
+               a.submitted_at
+        FROM results r
+        JOIN attempts a ON r.attempt_id = a.id
+        JOIN users u ON a.student_id = u.id
+        JOIN quizzes q ON a.quiz_id = q.id
+        JOIN quiz_assignments qa ON qa.quiz_id = q.id AND qa.class_id = ?
+        JOIN class_members cm ON cm.class_id = qa.class_id AND cm.student_id = a.student_id
+        WHERE a.quiz_id = ?
+        ORDER BY r.score DESC, a.submitted_at DESC
+        """;
 
     private final DataSource dataSource;
 
@@ -332,6 +352,46 @@ public final class JdbcQuizRepository implements QuizRepository {
                             SubmitReason.valueOf(results.getString("submit_reason")),
                             submitted != null ? submitted.toInstant() : Instant.now()
                         ));
+                    }
+                    return List.copyOf(list);
+                }
+            }
+        });
+    }
+
+    @Override
+    public List<Quiz> findAssignedQuizzesForClass(long classId) {
+        validateId(classId);
+        return withConnection(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(FIND_ASSIGNED_FOR_CLASS)) {
+                statement.setLong(1, classId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    List<Quiz> list = new ArrayList<>();
+                    while (rows.next()) list.add(mapQuiz(rows));
+                    return List.copyOf(list);
+                }
+            }
+        });
+    }
+
+    @Override
+    public List<ResultDto> findResultsByQuizAndClass(long quizId, long classId) {
+        validateId(quizId);
+        validateId(classId);
+        return withConnection(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(FIND_RESULTS_BY_QUIZ_AND_CLASS)) {
+                statement.setLong(1, classId);
+                statement.setLong(2, quizId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    List<ResultDto> list = new ArrayList<>();
+                    while (rows.next()) {
+                        OffsetDateTime submitted = rows.getObject("submitted_at", OffsetDateTime.class);
+                        list.add(new ResultDto(rows.getLong("attempt_id"), rows.getLong("quiz_id"),
+                            rows.getString("quiz_title"), rows.getString("student_name"),
+                            rows.getBigDecimal("score").doubleValue(), rows.getInt("correct_count"),
+                            rows.getInt("total_questions"), rows.getBoolean("passed"),
+                            SubmitReason.valueOf(rows.getString("submit_reason")),
+                            submitted == null ? Instant.now() : submitted.toInstant()));
                     }
                     return List.copyOf(list);
                 }
