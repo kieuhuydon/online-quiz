@@ -41,7 +41,10 @@ public final class ClassHandler implements CommandHandler {
         if (!supportedTypes().contains(type)) {
             throw new IllegalArgumentException("Unsupported class command");
         }
-        return Set.of(Role.TEACHER, Role.ADMIN);
+        return switch (type) {
+            case CREATE_CLASS, ADD_CLASS_MEMBER, REMOVE_CLASS_MEMBER -> Set.of(Role.ADMIN);
+            default -> Set.of(Role.TEACHER, Role.ADMIN);
+        };
     }
 
     @Override

@@ -74,7 +74,7 @@ Trung tâm đào tạo (bối cảnh: trung tâm tiếng Anh) cần tạo ngân 
 | UI client | JavaFX 21 (FXML + Controller) |
 | Protocol | **Serialized DTO** (`Request`/`Response` qua `ObjectOutputStream`), có `ObjectInputFilter` whitelist |
 | Quiz PIN | **Có trong MVP** (luồng học viên cần PIN; PIN sinh khi giáo viên mở bài) |
-| Quản lý lớp | Mức tối thiểu: tạo lớp, thêm/xóa học viên, giao bài cho lớp |
+| Quản lý lớp | Admin tạo lớp, chọn/gán giáo viên phụ trách và thêm/xóa học viên. Giáo viên chỉ xem lớp được gán, danh sách học viên và giao bài cho lớp mình phụ trách. |
 | Tài khoản | Admin cấp sẵn, **không** tự đăng ký |
 | Cấp/khóa tài khoản | API quản trị chỉ tạo TEACHER/STUDENT; không tạo ADMIN hoặc khóa tài khoản ADMIN |
 | Chuẩn hóa thông tin user | Bỏ khoảng trắng đầu/cuối username, fullName, email; giữ hoa/thường; email trống thành null; unique theo schema hiện tại |
@@ -286,7 +286,8 @@ public record Response(long requestId,          // trùng requestId của Reques
 | `LOGIN` | (chưa login) | LoginHandler | Xác thực, trả token + role |
 | `LOGOUT` | mọi role | LoginHandler | Hủy session |
 | `CREATE_ACCOUNT`, `LIST_ACCOUNTS`, `SET_ACCOUNT_ACTIVE` | ADMIN | AccountHandler | FR-AD01 |
-| `CREATE_CLASS`, `LIST_CLASSES`, `ADD_CLASS_MEMBER`, `REMOVE_CLASS_MEMBER`, `LIST_CLASS_MEMBERS` | TEACHER, ADMIN | ClassHandler | FR-A07 |
+| `CREATE_CLASS`, `ADD_CLASS_MEMBER`, `REMOVE_CLASS_MEMBER` | ADMIN | ClassHandler | FR-A07; tạo lớp phải chọn giáo viên đang hoạt động, chỉ thêm học viên role STUDENT |
+| `LIST_CLASSES`, `LIST_CLASS_MEMBERS` | TEACHER, ADMIN | ClassHandler | Admin xem toàn bộ; Teacher chỉ xem lớp được gán, kiểm tra quyền sở hữu ở server |
 | `CREATE_QUESTION`, `UPDATE_QUESTION`, `GET_QUESTION`, `LIST_QUESTIONS`, `DEACTIVATE_QUESTION` | TEACHER, ADMIN | QuestionHandler | FR-A02/A03, BR-05 |
 | `CREATE_QUIZ`, `UPDATE_QUIZ`, `GET_QUIZ`, `LIST_QUIZZES`, `SET_QUIZ_QUESTIONS` | TEACHER, ADMIN | QuizHandler | FR-A04/A05/A06 (chỉ sửa khi DRAFT) |
 | `OPEN_QUIZ` (sinh PIN), `CLOSE_QUIZ`, `ASSIGN_QUIZ` | TEACHER, ADMIN | QuizHandler | FR-A08/A09 |
@@ -475,7 +476,7 @@ public interface CommandHandler {
 |---|---|---|
 | `AuthService` | login, kiểm tra `active`, so khớp BCrypt | Sai user/mật khẩu cùng một thông báo `INVALID_CREDENTIALS` |
 | `AccountService` | tạo tài khoản, bật/tắt | Chỉ ADMIN; validate username/role |
-| `ClassService` | lớp + thành viên | Chỉ học viên (role STUDENT) mới thêm được |
+| `ClassService` | lớp + thành viên | Admin tạo lớp/gán giáo viên/thêm/xóa học viên; teacher chỉ đọc lớp phụ trách. Kiểm tra actor trong service; giáo viên phụ trách phải là TEACHER đang hoạt động; học viên thêm vào phải là STUDENT đang hoạt động. |
 | `QuestionService` | CRUD câu hỏi, lọc theo topic/độ khó | Không xóa cứng nếu đã dùng trong quiz → `active=false` (BR-05) |
 | `QuizService` | CRUD quiz, chọn câu hỏi, `open`/`close`/`assign`, sinh PIN | Chỉ sửa khi `DRAFT`; mở được khi có ≥ 1 câu hỏi; chuyển trạng thái đúng `DRAFT→OPEN→CLOSED` |
 | `AttemptService` | `start`, `saveAnswer`, `submit`, `expire`, `getState` | Xem 9.4 |
@@ -1098,7 +1099,7 @@ Baseline: hệ thống thi trắc nghiệm client/server cơ bản (1 thread/1 c
 |---|---|---|---|---|
 | **Việt** | **Authentication + User + Database & UI tương ứng** | FR-A01, FR-S02, FR-AD01, NFR-04, NFR-05 | • Khởi tạo Database Schema (`schema.sql`) & dữ liệu mẫu (`seed.sql`) cho cả nhóm.<br>• Xây dựng `quiz-common` (protocol: `Request`, `Response`, `MessageType`, `ErrorCode`, `MessageCodec`, enums, DTOs cơ bản).<br>• Phía Server: DataSource HikariCP, `TransactionManager`, BCrypt `PasswordHasher`, `TokenGenerator`, Exception hierarchy, `UserSession`, `SessionRegistry`, `AuthService`, `AccountService`, `AuthGuard`, `RequestDispatcher`, `LoginHandler`, `AccountHandler`.<br>• Phía Client: Socket TCP client nền tảng (`ServerConnection`, `QuizApi`), `ClientSession`, `SceneNavigator`, UI Đăng nhập & UI Admin cấp/quản lý tài khoản. | **1 (Làm đầu tiên - Nền tảng)** |
 | **Võ** | **Question Bank & UI tương ứng** | FR-A02, FR-A03, FR-A05, FR-T05 | • Quản lý ngân hàng câu hỏi (Tạo, xem, sửa).<br>• Phân loại topic/category, gán độ khó (Easy/Medium/Hard).<br>• Chọn câu hỏi đưa vào bài test.<br>• Phía Server: `QuestionRepository`, `QuestionService`, `QuestionHandler`.<br>• Phía Client: UI quản lý câu hỏi cho Teacher. | **2 (Sau Việt)** |
-| **Bắc** | **Quiz & Assignment & UI tương ứng** | FR-A04, FR-A05, FR-A06, FR-A07, FR-A08, FR-A09, FR-S02, FR-S04 | • Tạo, sửa, mở/đóng Quiz (`DRAFT` ➔ `OPEN` ➔ `CLOSED`), sinh mã PIN.<br>• Thiết lập thời lượng (`duration_minutes`), chọn câu hỏi vào Quiz.<br>• Quản lý lớp & giao Quiz cho lớp.<br>• Phía Server: `ClassRepository`, `QuizRepository`, `ClassService`, `QuizService`, `ClassHandler`, `QuizHandler`.<br>• Phía Client: UI tạo Quiz, quản lý lớp, giao bài kiểm tra. | **3 (Sau Võ)** |
+| **Bắc** | **Quiz & Assignment & UI tương ứng** | FR-A04, FR-A05, FR-A06, FR-A07, FR-A08, FR-A09, FR-S02, FR-S04 | • Tạo, sửa, mở/đóng Quiz (`DRAFT` ➔ `OPEN` ➔ `CLOSED`), sinh mã PIN.<br>• Thiết lập thời lượng (`duration_minutes`), chọn câu hỏi vào Quiz.<br>• Quản lý lớp trên giao diện Admin: tạo lớp, chọn giáo viên phụ trách, thêm/xóa học viên; giáo viên chỉ xem lớp được gán và giao Quiz cho lớp.<br>• Phía Server: `ClassRepository`, `QuizRepository`, `ClassService`, `QuizService`, `ClassHandler`, `QuizHandler`.<br>• Phía Client: UI Teacher tạo Quiz/giao bài/xem lớp được gán; UI Admin quản lý lớp và học viên. | **3 (Sau Võ)** |
 | **Đôn** | **Student Exam & UI tương ứng** | FR-S02, FR-S03, FR-S04, FR-S05, FR-S06, FR-S07, FR-S08, FR-S09, FR-S10, FR-S11, FR-S12, FR-T04, NFR-03 | • Học viên xem quiz được giao, nhập PIN tham gia thi.<br>• Server tạo Attempt, quản lý thời gian đếm ngược chính xác.<br>• Chọn câu trả lời, lưu đáp án từng câu, nộp bài thủ công / tự động hết giờ.<br>• Server chấm điểm tự động (`GradingService`), chống nộp trùng final submit.<br>• Xem kết quả, xem lịch sử làm bài.<br>• Phía Server: `AttemptService`, `GradingService`, `ResultService`, `AttemptTimeoutScheduler`.<br>• Phía Client: UI làm bài thi (timer, chuyển câu, nộp), UI kết quả & lịch sử. | **4 (Sau Bắc)** |
 | **Nam** | **Anti-Cheat & Monitoring & UI tương ứng** | FR-S13, FR-S14, FR-T09, BR-12, BR-13, NFR-09 | • Phía Client: Monitor hành vi (rời cửa sổ thi / mất focus, phím tắt Copy/Paste/Cut, chuột phải context menu).<br>• Báo cáo vi phạm về Server (`REPORT_ANTICHEAT_EVENT`).<br>• Phía Server: Lưu log vi phạm theo Attempt, đếm vi phạm, kiểm tra policy (`WARN_THEN_AUTO_SUBMIT` / `LOG_ONLY`).<br>• Cảnh báo học viên (`PUSH_ANTICHEAT_WARNING`) hoặc tự động nộp bài khi đạt ngưỡng vi phạm.<br>• UI giám sát sự kiện vi phạm cho giáo viên. | **5 (Sau Đôn)** |
 
@@ -1109,7 +1110,7 @@ Baseline: hệ thống thi trắc nghiệm client/server cơ bản (1 thread/1 c
 | M1 – Nền tảng | Parent pom, 4 module build được; `common` (Request/Response/MessageType/ErrorCode/MessageCodec); `schema.sql`; `QuizServer` + `ClientHandler` + `RequestDispatcher` (echo/ping); client kết nối được | `mvn clean verify` xanh; test codec; client gửi `LOGIN` giả và nhận response |
 | M2 – Auth & Câu hỏi | Auth, `SessionRegistry`, `AuthGuard`, DB pool + `TransactionManager`, CRUD câu hỏi, Account (Admin) | Test unit + integration đạt; sai quyền bị chặn |
 | M3 – Quiz & Attempt | Quiz, lớp, giao bài, PIN, `start/saveAnswer/submit`, `GradingService`, `AttemptTimeoutScheduler`, Result/History/Statistics | Concurrency test nộp trùng đạt; hết giờ tự nộp |
-| M4 – Client UI | Login, teacher (question/quiz/assignment/result), student (dashboard/exam/result), admin account; timer | Chạy trọn luồng 12.1 và 12.2 trên UI |
+| M4 – Client UI | Login, teacher (question/quiz/assignment/result, xem lớp được gán), student (dashboard/exam/result), admin account và quản lý lớp/thành viên/gán giáo viên; timer | Chạy trọn luồng 12.1 và 12.2 trên UI |
 | M5 – Anti-Cheat & hoàn thiện | Monitor + service + policy, push cảnh báo/force-submit, xem sự kiện (teacher), reconnect | Test AC đạt; reconnect hoạt động |
 | M6 – Đánh giá & nộp | Benchmark, bảng test thật, refactor, README/report, Compilatio | Checklist mục 22 hoàn tất |
 
@@ -1169,3 +1170,33 @@ project/
 - [ ] Đã kiểm tra Compilatio, similarity ≤ 20%
 - [ ] Không dùng code không rõ nguồn; mọi thành viên giải thích được code của mình
 - [ ] Đã nộp qua LMS (không dùng Drive/USB)
+
+
+## Cập nhật quản lý lớp theo quyền Admin
+
+Bản tích hợp dựa trên `origin/develop` tại `3111fea`.
+Admin đăng nhập → menu **Lớp học**: tạo lớp, chọn giáo viên đang hoạt động,
+thêm học viên đang hoạt động bằng danh sách tài khoản và xóa học viên khỏi lớp.
+Giáo viên chỉ có tab **Lớp được phân công**, không có form tạo lớp hoặc nút sửa
+thành viên. `ClassHandler` chỉ cho ADMIN gửi các lệnh ghi; `ClassService` kiểm tra
+lại tài khoản hiện hành, role và active, kể cả khi được gọi trực tiếp. Teacher chỉ
+xem lớp mình phụ trách và danh sách học viên của các lớp đó.
+
+`CreateClassDto(name, description, teacherId)` truyền giáo viên được chọn;
+không lấy userId của Admin làm teacher_id. Hai đầu phải chạy cùng bản build.
+Schema và lớp cũ được giữ nguyên; không cần migration database.
+
+
+### Bố cục sidebar và thêm nhiều học viên
+
+Sidebar Admin dùng hai nút Quản lí tài khoản / Quản lí lớp học, tô sáng nút hiện tại;
+đã bỏ ô chỉ hiển thị tên mục được chọn. Trang lớp học hiển thị danh sách lớp trước,
+tiếp theo là thành viên và bảng checkbox học viên có thể thêm. Phần tạo lớp nằm
+trong khung thu gọn phía dưới. Có Chọn tất cả, Bỏ chọn và số lượng đang chọn.
+
+Một lần nhấn Thêm học viên đã chọn xử lý lần lượt bằng API hiện có. Học viên đã
+trong lớp được loại khỏi bảng lựa chọn. Nếu phát sinh trùng do thay đổi đồng thời,
+thông báo tách số đã thêm và số đã có trong lớp. Lỗi từng tài khoản giữ lại lựa chọn
+cùng trạng thái trong bảng; lỗi kết nối hoặc máy chủ dừng các yêu cầu tiếp theo,
+không tự thử lại, báo số chưa xác nhận/chưa xử lý và yêu cầu tải lại trước khi thử.
+Đây là thao tác có thể thành công một phần, không phải một transaction cho cả nhóm.

@@ -182,6 +182,9 @@ public final class SceneNavigator implements AutoCloseable {
     }
 
     private ScreenController createController(Class<?> type) {
+        if (type == quiz.client.ui.admin.classes.AdminClassController.class) {
+            return new quiz.client.ui.admin.classes.AdminClassController(api, fx);
+        }
         if (type == LoginController.class) {
             return new LoginController(api, this, fx);
         }

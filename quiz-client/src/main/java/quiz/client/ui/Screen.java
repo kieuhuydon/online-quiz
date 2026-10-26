@@ -6,6 +6,7 @@ import quiz.common.enums.Role;
 public enum Screen {
     LOGIN("/quiz/client/ui/login/login.fxml", "Đăng nhập", null),
     ADMIN_ACCOUNTS("/quiz/client/ui/admin/account/account.fxml", "Quản lý tài khoản", Role.ADMIN),
+    ADMIN_CLASSES("/quiz/client/ui/admin/classes/classes.fxml", "Quản lý lớp học", Role.ADMIN),
     TEACHER_QUESTIONS("/quiz/client/ui/teacher/question/question.fxml", "Ngân hàng câu hỏi", Role.TEACHER),
 
     ADMIN_CREATE_ACCOUNT("/quiz/client/ui/admin/account/create-account.fxml", "Tạo tài khoản", Role.ADMIN),

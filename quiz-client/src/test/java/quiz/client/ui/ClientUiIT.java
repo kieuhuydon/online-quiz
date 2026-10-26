@@ -37,6 +37,112 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Real JavaFX/FXML + loopback client API. Requires desktop; no DB and no production fake sessions. */
 @Timeout(20)
 class ClientUiIT {
+    @Test @SuppressWarnings("unchecked") void adminClassPageCreatesWithTeacherAndManagesMembers() throws Exception {
+        var peer = login(Role.ADMIN);
+        fx(() -> {
+            assertNull(stage.getScene().lookup("#activeSection"));
+            assertEquals("Quản lí tài khoản", button("adminAccounts").getText());
+            assertEquals("Quản lí lớp học", button("adminClasses").getText());
+            button("adminClasses").fire();
+            assertTrue(button("adminClasses").getPseudoClassStates().contains(javafx.css.PseudoClass.getPseudoClass("current")));
+            assertFalse(button("adminAccounts").getPseudoClassStates().contains(javafx.css.PseudoClass.getPseudoClass("current")));
+            ((javafx.scene.control.TitledPane) stage.getScene().lookup("#createPane")).setExpanded(true);
+            return null;
+        });
+        var teacher = account(2, Role.TEACHER, true);
+        var student = account(3, Role.STUDENT, true);
+        for (int i = 0; i < 2; i++) {
+            var request = peer.read();
+            peer.success(request, request.type() == MessageType.LIST_ACCOUNTS
+                ? new java.util.ArrayList<>(List.of(teacher, student, account(4, Role.STUDENT, true), account(5, Role.STUDENT, true)))
+                : new java.util.ArrayList<quiz.common.dto.ClassDto>());
+        }
+        awaitClassControl("createClass");
+        fx(() -> {
+            assertEquals(Screen.ADMIN_CLASSES, navigator.currentScreen().orElseThrow());
+            text("className").setText("ENG-ADMIN");
+            ((javafx.scene.control.ComboBox<AccountDto>) stage.getScene().lookup("#teacher")).setValue(teacher);
+            button("createClass").fire(); return null;
+        });
+        var request = peer.read();
+        assertEquals(new quiz.common.dto.CreateClassDto("ENG-ADMIN", "", 2), request.payload());
+        var classroom = new quiz.common.dto.ClassDto(10, "ENG-ADMIN", null, 2, "Teacher", Instant.now());
+        peer.success(request, classroom);
+        peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        awaitClassControl("selectAllStudents");
+        fx(() -> {
+            button("selectAllStudents").fire();
+            assertEquals("Đã chọn 3 học viên", label("selectedCount").getText());
+            button("addMember").fire(); button("addMember").fire();
+            assertTrue(button("selectAllStudents").isDisabled());
+            return null;
+        });
+        request = peer.read(); assertEquals(new quiz.common.dto.AddClassMemberDto(10, 3), request.payload());
+        peer.success(request, null);
+        request = peer.read(); assertEquals(new quiz.common.dto.AddClassMemberDto(10, 4), request.payload());
+        peer.send(Response.error(request.requestId(), ErrorCode.VALIDATION_ERROR, "hidden details"));
+        request = peer.read(); assertEquals(new quiz.common.dto.AddClassMemberDto(10, 5), request.payload());
+        peer.send(Response.error(request.requestId(), ErrorCode.CONFLICT, "already enrolled"));
+        peer.success(peer.read(), new java.util.ArrayList<>(List.of(
+            new quiz.common.dto.ClassMemberDto(10, 3, "student3", "Student 3", Instant.now()),
+            new quiz.common.dto.ClassMemberDto(10, 5, "student5", "Student 5", Instant.now()))));
+        awaitClassControl("selectAllStudents");
+        fx(() -> {
+            assertTrue(label("notice").getText().contains("1/3"));
+            assertTrue(label("notice").getText().contains("1 học viên đã có"));
+            var candidates = (TableView<AccountDto>) stage.getScene().lookup("#students");
+            assertEquals(List.of(4L), candidates.getItems().stream().map(AccountDto::id).toList());
+            assertEquals("Đã chọn 1 học viên", label("selectedCount").getText());
+            button("clearStudents").fire(); assertTrue(button("addMember").isDisabled());
+            ((TableView<?>) stage.getScene().lookup("#members")).getSelectionModel().select(0);
+            ((javafx.scene.control.TitledPane) stage.getScene().lookup("#createPane")).setExpanded(false);
+            var root = stage.getScene().getRoot(); root.applyCss(); root.layout();
+            assertTrue(stage.getScene().lookup("#classes").localToScene(0, 0).getY()
+                < stage.getScene().lookup("#createPane").localToScene(0, 0).getY());
+            saveSnapshot("admin-classes");
+            var scroll = (javafx.scene.control.ScrollPane) stage.getScene().lookup("#pageScroll");
+            scroll.setVvalue(1); root.layout(); saveSnapshot("admin-classes-multi-select");
+            button("removeMember").fire(); return null;
+        });
+        request = peer.read(); assertEquals(MessageType.REMOVE_CLASS_MEMBER, request.type());
+        peer.success(request, null); peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+    }
+
+    private void awaitClassControl(String id) throws Exception {
+        long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(4);
+        while (fx(() -> button(id).isDisabled()) && System.nanoTime() < until) Thread.sleep(10);
+        assertFalse(fx(() -> button(id).isDisabled()));
+    }
+
+    @Test void bulkEnrollmentStopsAfterServerFailureAndKeepsUnprocessedStudentsSelected() throws Exception {
+        var peer = login(Role.ADMIN);
+        fx(() -> { button("adminClasses").fire(); return null; });
+        var classroom = new quiz.common.dto.ClassDto(10, "Class", null, 2, "Teacher", Instant.now());
+        for (int i = 0; i < 2; i++) {
+            var request = peer.read();
+            peer.success(request, request.type() == MessageType.LIST_ACCOUNTS
+                ? new java.util.ArrayList<>(List.of(account(3, Role.STUDENT, true), account(4, Role.STUDENT, true)))
+                : new java.util.ArrayList<>(List.of(classroom)));
+        }
+        awaitClassControl("refresh");
+        fx(() -> { ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().select(0); return null; });
+        peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        awaitClassControl("selectAllStudents");
+        fx(() -> { button("selectAllStudents").fire(); button("addMember").fire(); return null; });
+        var request = peer.read();
+        assertEquals(new quiz.common.dto.AddClassMemberDto(10, 3), request.payload());
+        peer.send(Response.error(request.requestId(), ErrorCode.SERVER_BUSY, "busy"));
+        var reload = peer.read();
+        assertEquals(MessageType.LIST_CLASS_MEMBERS, reload.type(), "Do not send further additions or retry on failure");
+        peer.success(reload, new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        awaitClassControl("selectAllStudents");
+        fx(() -> {
+            assertTrue(label("notice").getText().contains("0/2"));
+            assertTrue(label("notice").getText().contains("2 học viên chưa xác nhận"));
+            assertEquals("Đã chọn 2 học viên", label("selectedCount").getText());
+            return null;
+        });
+    }
     private SocketFixture server;
     private ServerConnection connection;
     private QuizApi api;
