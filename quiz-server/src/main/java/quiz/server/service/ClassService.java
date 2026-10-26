@@ -77,6 +77,23 @@ public final class ClassService {
         return dtos;
     }
 
+    public ArrayList<ClassDto> listStudentClasses(UserSession session) {
+        if (session == null || session.role() != Role.STUDENT) {
+            throw new ForbiddenException("Chỉ học viên mới có thể xem lớp của mình");
+        }
+        Map<Long, User> teachers = userRepository.findAll().stream()
+            .collect(Collectors.toMap(User::id, u -> u, (a, b) -> a));
+        ArrayList<ClassDto> result = new ArrayList<>();
+        for (Long id : classRepository.findClassIdsForStudent(session.userId())) {
+            classRepository.findById(id).ifPresent(c -> {
+                User teacher = teachers.get(c.teacherId());
+                result.add(new ClassDto(c.id(), c.name(), c.description(), c.teacherId(),
+                    teacher == null ? "Giáo viên" : teacher.fullName(), c.createdAt()));
+            });
+        }
+        return result;
+    }
+
     public void addClassMember(long classId, long studentId, UserSession session) {
         requireAdmin(session);
         Classroom classroom = classRepository.findById(classId)

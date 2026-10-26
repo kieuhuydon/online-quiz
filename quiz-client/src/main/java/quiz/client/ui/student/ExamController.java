@@ -296,6 +296,7 @@ public final class ExamController extends ScreenController {
         });
         previous.setDisable(index == 0);
         next.setDisable(index >= attempt.questions().size() - 1);
+        refreshReview();
     }
 
     @FXML
@@ -309,7 +310,7 @@ public final class ExamController extends ScreenController {
         refreshReview();
         saveStatus.setText("Đang lưu…");
         fx.observe(api.saveAnswer(attempt.attemptId(), questionId, option), this::isActive,
-            v -> saveStatus.setText("Đã lưu"),
+            v -> saveStatus.setText(""),
             e -> saveStatus.setText("Chưa lưu được — hãy thử chọn lại"),
             () -> {});
     }
@@ -336,13 +337,15 @@ public final class ExamController extends ScreenController {
             final int n = i;
             StudentQuestionDto q = attempt.questions().get(i);
             Button b = new Button(Integer.toString(i + 1));
-            b.setPrefSize(38, 34);
-            b.setStyle(answers.containsKey(q.id()) ? "-fx-background-color: #b7e4c7;" : "-fx-background-color: #e5e7eb;");
+            b.setPrefSize(72, 44);
+            String background = answers.containsKey(q.id()) ? "#b7e4c7" : "#e5e7eb";
+            String border = n == index ? "-fx-border-color: #2563eb; -fx-border-width: 2;" : "-fx-border-color: transparent;";
+            b.setStyle("-fx-background-color: " + background + "; " + border + " -fx-background-radius: 6; -fx-border-radius: 6;");
             b.setOnAction(e -> {
                 index = n;
                 render();
             });
-            reviewGrid.add(b, i % 8, i / 8);
+            reviewGrid.add(b, i % 3, i / 3);
         }
     }
 

@@ -32,7 +32,8 @@ public final class ClassHandler implements CommandHandler {
             MessageType.LIST_CLASSES,
             MessageType.ADD_CLASS_MEMBER,
             MessageType.REMOVE_CLASS_MEMBER,
-            MessageType.LIST_CLASS_MEMBERS
+            MessageType.LIST_CLASS_MEMBERS,
+            MessageType.LIST_MY_CLASSES
         );
     }
 
@@ -43,6 +44,7 @@ public final class ClassHandler implements CommandHandler {
         }
         return switch (type) {
             case CREATE_CLASS, ADD_CLASS_MEMBER, REMOVE_CLASS_MEMBER -> Set.of(Role.ADMIN);
+            case LIST_MY_CLASSES -> Set.of(Role.STUDENT);
             default -> Set.of(Role.TEACHER, Role.ADMIN);
         };
     }
@@ -58,6 +60,10 @@ public final class ClassHandler implements CommandHandler {
             case LIST_CLASSES -> {
                 HandlerPayload.absent(request);
                 yield Response.success(request.requestId(), classService.listClasses(authSession));
+            }
+            case LIST_MY_CLASSES -> {
+                HandlerPayload.absent(request);
+                yield Response.success(request.requestId(), classService.listStudentClasses(authSession));
             }
             case ADD_CLASS_MEMBER -> {
                 AddClassMemberDto dto = HandlerPayload.required(request, AddClassMemberDto.class);

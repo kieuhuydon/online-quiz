@@ -20,6 +20,7 @@ public enum MessageType {
     ADD_CLASS_MEMBER,
     REMOVE_CLASS_MEMBER,
     LIST_CLASS_MEMBERS,
+    LIST_MY_CLASSES,
 
     // 4. Question Bank (TEACHER, ADMIN)
     CREATE_QUESTION,
@@ -53,6 +54,7 @@ public enum MessageType {
     GET_MY_RESULT,          // STUDENT
     LIST_MY_HISTORY,        // STUDENT
     LIST_QUIZ_RESULTS,      // TEACHER, ADMIN
+    GET_CLASS_QUIZ_RESULTS, // TEACHER
     GET_QUIZ_STATISTICS,    // TEACHER, ADMIN
     LIST_ATTEMPT_EVENTS,    // TEACHER, ADMIN
 

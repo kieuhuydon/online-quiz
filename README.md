@@ -275,7 +275,7 @@ public record Response(long requestId,          // trùng requestId của Reques
 `Role {STUDENT, TEACHER, ADMIN}` · `QuizStatus {DRAFT, OPEN, CLOSED}` · `AttemptStatus {IN_PROGRESS, SUBMITTED}` · `Difficulty {EASY, MEDIUM, HARD}` · `SubmitReason {MANUAL, TIMEOUT, ANTICHEAT}` · `AntiCheatPolicyType {LOG_ONLY, WARN_THEN_AUTO_SUBMIT}` · `AntiCheatEventType {FOCUS_LOST, COPY_ATTEMPT, PASTE_ATTEMPT, CUT_ATTEMPT, CONTEXT_MENU_ATTEMPT}`
 
 ### 6.5. DTO (record, `Serializable`) – gợi ý tối thiểu
-`LoginRequestDto, LoginResultDto(token, userId, fullName, role)`, `AccountDto, CreateAccountDto`, `ClassDto, ClassMemberDto`, `QuestionDto` (đầy đủ, **cho giáo viên**, có `correctOption`), `StudentQuestionDto` (**không** có `correctOption`), `QuizDto, QuizSummaryDto, QuizInfoDto, QuizQuestionsDto`, `AssignQuizDto`, `StartAttemptRequestDto(quizId, pin)`, `AttemptStateDto(attemptId, quizId, remainingSeconds, questions, savedAnswers)`, `SaveAnswerDto(attemptId, questionId, selectedOption)`, `SubmitAttemptDto(attemptId, finalAnswers)`, `ResultDto(attemptId, quizTitle, score, correct, total, passed, submitReason, submittedAt)`, `ResultFilterDto(quizId, keyword, sortBy, ascending)`, `QuizStatisticsDto(avg, passRate, max, min, count)`, `AntiCheatEventDto, ReportAntiCheatDto(attemptId, type, detail, clientTime)`, `AntiCheatWarningDto(violationCount, maxViolations, message)`.
+`LoginRequestDto, LoginResultDto(token, userId, fullName, role)`, `AccountDto, CreateAccountDto`, `ClassDto, ClassMemberDto`, `QuestionDto` (đầy đủ, **cho giáo viên**, có `correctOption`), `StudentQuestionDto` (**không** có `correctOption`), `QuizDto, QuizSummaryDto, QuizInfoDto, QuizQuestionsDto`, `AssignQuizDto`, `StartAttemptRequestDto(quizId, pin)`, `AttemptStateDto(attemptId, quizId, remainingSeconds, questions, savedAnswers)`, `SaveAnswerDto(attemptId, questionId, selectedOption)`, `SubmitAttemptDto(attemptId, finalAnswers)`, `ResultDto(attemptId, quizTitle, score, correct, total, passed, submitReason, submittedAt)`, `ClassQuizResultsDto(quizzes, results)` (giáo viên xem kết quả theo lớp phụ trách), `ResultFilterDto(quizId, keyword, sortBy, ascending)`, `QuizStatisticsDto(avg, passRate, max, min, count)`, `AntiCheatEventDto, ReportAntiCheatDto(attemptId, type, detail, clientTime)`, `AntiCheatWarningDto(violationCount, maxViolations, message)`.
 
 ---
 
@@ -295,6 +295,7 @@ public record Response(long requestId,          // trùng requestId của Reques
 | `START_ATTEMPT`, `SAVE_ANSWER`, `SUBMIT_ATTEMPT`, `GET_ATTEMPT_STATE` | STUDENT | AttemptHandler | FR-S05..S10, reconnect |
 | `GET_MY_RESULT`, `LIST_MY_HISTORY` | STUDENT | ResultHandler | FR-S11/S12 |
 | `LIST_QUIZ_RESULTS`, `GET_QUIZ_STATISTICS`, `LIST_ATTEMPT_EVENTS` | TEACHER, ADMIN | ResultHandler | FR-A10/A11, UC-08 |
+| `GET_CLASS_QUIZ_RESULTS` | TEACHER, ADMIN | QuizHandler | Returns quizzes and submitted results for one class; server verifies class ownership and scopes results to enrolled students |
 | `REPORT_ANTICHEAT_EVENT` | STUDENT | AntiCheatHandler | FR-S13/S14, FR-T09 |
 | **PUSH** `PUSH_ANTICHEAT_WARNING`, `PUSH_FORCE_SUBMITTED` | server → student | (AntiCheatService / Scheduler) | Cảnh báo; Attempt bị tự nộp |
 
@@ -478,7 +479,7 @@ public interface CommandHandler {
 | `AccountService` | tạo tài khoản, bật/tắt | Chỉ ADMIN; validate username/role |
 | `ClassService` | lớp + thành viên | Admin tạo lớp/gán giáo viên/thêm/xóa học viên; teacher chỉ đọc lớp phụ trách. Kiểm tra actor trong service; giáo viên phụ trách phải là TEACHER đang hoạt động; học viên thêm vào phải là STUDENT đang hoạt động. |
 | `QuestionService` | CRUD câu hỏi, lọc theo topic/độ khó | Không xóa cứng nếu đã dùng trong quiz → `active=false` (BR-05) |
-| `QuizService` | CRUD quiz, chọn câu hỏi, `open`/`close`/`assign`, sinh PIN | Chỉ sửa khi `DRAFT`; mở được khi có ≥ 1 câu hỏi; chuyển trạng thái đúng `DRAFT→OPEN→CLOSED` |
+| `QuizService` | CRUD quiz, chọn câu hỏi, `open`/`close`/`assign`, sinh PIN, kết quả theo lớp | Chỉ sửa khi `DRAFT`; mở được khi có ≥ 1 câu hỏi; chuyển trạng thái đúng `DRAFT→OPEN→CLOSED`; giáo viên chỉ xem kết quả lớp mình phụ trách |
 | `AttemptService` | `start`, `saveAnswer`, `submit`, `expire`, `getState` | Xem 9.4 |
 | `GradingService` | chấm điểm thuần (hàm, không I/O) | Dễ unit test; chấm theo đáp án lưu ở DB |
 | `ResultService` | lịch sử, danh sách kết quả (tìm/sắp xếp), thống kê | Học viên chỉ xem kết quả của mình (UC-07) |

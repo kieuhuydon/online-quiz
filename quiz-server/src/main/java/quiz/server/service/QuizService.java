@@ -1,6 +1,7 @@
 package quiz.server.service;
 
 import quiz.common.dto.CreateQuizDto;
+import quiz.common.dto.ClassQuizResultsDto;
 import quiz.common.dto.QuestionDto;
 import quiz.common.dto.QuizDetailDto;
 import quiz.common.dto.QuizDto;
@@ -331,6 +332,26 @@ public final class QuizService {
             .orElseThrow(() -> new NotFoundException("Đề kiểm tra không tồn tại"));
         checkTeacherPermission(quiz, session, "xem kết quả");
         return new ArrayList<>(quizzes.findResultsByQuizId(quizId));
+    }
+
+    public ClassQuizResultsDto getClassQuizResults(long classId, UserSession session) {
+        Objects.requireNonNull(session, "UserSession cannot be null");
+        ServiceValidation.positiveId(classId);
+        if (session.role() != Role.TEACHER && session.role() != Role.ADMIN) {
+            throw new ForbiddenException("Chỉ Giáo viên và Quản trị viên được xem kết quả lớp");
+        }
+        var classroom = classes == null ? null : classes.findById(classId)
+            .orElseThrow(() -> new NotFoundException("Lớp học không tồn tại"));
+        if (session.role() != Role.ADMIN && classroom.teacherId() != session.userId()) {
+            throw new ForbiddenException("Bạn không phụ trách lớp học này");
+        }
+        List<Quiz> assigned = quizzes.findAssignedQuizzesForClass(classId);
+        List<QuizDto> quizDtos = assigned.stream().map(QuizService::toDto).toList();
+        List<ResultDto> results = new ArrayList<>();
+        for (Quiz quiz : assigned) {
+            results.addAll(quizzes.findResultsByQuizAndClass(quiz.id(), classId));
+        }
+        return new ClassQuizResultsDto(quizDtos, results);
     }
 
     private void checkTeacherPermission(Quiz quiz, UserSession session, String action) {
