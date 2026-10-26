@@ -166,11 +166,12 @@ class AccountServiceTest {
     @Test
     void reportsDuplicatePrechecksAndDatabaseRaceAsConflict() throws SQLException {
         when(users.existsByUsername("newuser")).thenReturn(true);
-        assertThrows(ConflictException.class, () -> accounts.createAccount(dto(), 1));
+        assertEquals(quiz.common.protocol.ErrorCode.USERNAME_ALREADY_EXISTS,
+            assertThrows(ConflictException.class, () -> accounts.createAccount(dto(), 1)).getErrorCode());
         when(users.existsByUsername("newuser")).thenReturn(false);
         when(users.existsByEmail("user@example.com")).thenReturn(true);
-        assertThrows(ConflictException.class,
-            () -> accounts.createAccount(dto(ServiceTestUsers.PASSWORD, "user@example.com", Role.STUDENT), 1));
+        assertEquals(quiz.common.protocol.ErrorCode.EMAIL_ALREADY_EXISTS, assertThrows(ConflictException.class,
+            () -> accounts.createAccount(dto(ServiceTestUsers.PASSWORD, "user@example.com", Role.STUDENT), 1)).getErrorCode());
         ConflictException concurrent = new ConflictException("Username is already in use");
         when(users.save(eq(connection), any(User.class))).thenThrow(concurrent);
         assertSame(concurrent, assertThrows(ConflictException.class, () -> accounts.createAccount(dto(), 1)));

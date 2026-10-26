@@ -24,11 +24,10 @@
                 <PasswordField fx:id="password" id="passwordInput" promptText="Nhập mật khẩu" onAction="#submit"/>
             </VBox>
             <Button fx:id="loginButton" id="loginButton" text="Đăng nhập" onAction="#submit" defaultButton="true" styleClass="primary-button,authentication-submit" maxWidth="Infinity"/>
-            <Button id="exitButton" text="Thoát ứng dụng" onAction="#exit" styleClass="secondary-button" maxWidth="Infinity"/>
         </VBox>
-        <HBox spacing="10" alignment="CENTER_LEFT" styleClass="authentication-status">
+        <HBox fx:id="statusBar" spacing="10" alignment="CENTER_LEFT" styleClass="authentication-status" visible="false" managed="false">
             <ProgressIndicator fx:id="progress" id="loginProgress" prefWidth="18" prefHeight="18" maxWidth="18" maxHeight="18" visible="false" managed="false"/>
-            <Label fx:id="connectionStatus" id="connectionStatus" text="Sẵn sàng đăng nhập" styleClass="muted" wrapText="true"/>
+            <Label fx:id="connectionStatus" id="connectionStatus" styleClass="muted" wrapText="true"/>
         </HBox>
     </VBox>
     </StackPane>

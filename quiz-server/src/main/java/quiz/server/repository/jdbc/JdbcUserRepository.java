@@ -197,10 +197,10 @@ public final class JdbcUserRepository implements UserRepository {
         if (error instanceof PSQLException postgres && "23505".equals(error.getSQLState())) {
             ServerErrorMessage detail = postgres.getServerErrorMessage();
             if (detail != null && "users_username_key".equals(detail.getConstraint())) {
-                throw new ConflictException("Username is already in use", error);
+                throw new ConflictException(ErrorCode.USERNAME_ALREADY_EXISTS, "Username is already in use", error);
             }
             if (detail != null && "users_email_key".equals(detail.getConstraint())) {
-                throw new ConflictException("Email is already in use", error);
+                throw new ConflictException(ErrorCode.EMAIL_ALREADY_EXISTS, "Email is already in use", error);
             }
         }
         return error;

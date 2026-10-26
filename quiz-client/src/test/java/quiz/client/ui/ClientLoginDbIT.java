@@ -122,10 +122,10 @@ class ClientLoginDbIT {
     void adminFormCreatesLocksAndUnlocksWithRealSessionRevocation(Role role) throws Exception {
         User admin = fixture(Role.ADMIN);
         submit(admin.username(), PASSWORD);
-        await(() -> navigator.currentScreen().orElse(null) == Screen.ADMIN_ACCOUNTS && !button("createAccount").isDisabled());
+        await(() -> accountListReady());
         String username = "account_" + UUID.randomUUID().toString().replace("-", ""); fixtures.add(username);
         fx(() -> { fillAccount(username, role); button("createAccount").fire(); return null; });
-        await(() -> !button("createAccount").isDisabled() && account(username) != null);
+        await(() -> accountListReady() && account(username) != null);
         AccountDto created = fx(() -> account(username));
         assertEquals(admin.id(), created.createdBy()); assertEquals(role, created.role()); assertTrue(created.active()); assertNull(created.email());
         try (Connection connection = dataSource.getConnection(); PreparedStatement query = connection.prepareStatement("SELECT password_hash FROM users WHERE id = ?")) {
@@ -137,22 +137,24 @@ class ClientLoginDbIT {
         }
         // Real unique constraint is surfaced safely; no second account and no password retained.
         fx(() -> { fillAccount(username, role); button("createAccount").fire(); return null; });
-        await(() -> !button("createAccount").isDisabled() && ((Label) stage.getScene().lookup("#accountNotice")).getText().contains("đã tồn tại"));
+        await(() -> !button("createAccount").isDisabled() && ((Label) stage.getScene().lookup("#formError")).getText().contains("đã tồn tại"));
         fx(() -> { assertEquals("", ((PasswordField) stage.getScene().lookup("#accountPassword")).getText()); return null; });
+        fx(() -> { button("backToAccounts").fire(); return null; });
+        await(() -> accountListReady());
         QuizApi target = new QuizApi(new ServerConnection(new ClientConfig("127.0.0.1", server.getPort(), 1000, 1000, 3000, 16, 1000)));
         try {
             target.connect().get(3, TimeUnit.SECONDS); target.login(username, PASSWORD).get(3, TimeUnit.SECONDS);
             fx(() -> {
                 table().getSelectionModel().select(account(username)); button("toggleAccount").fire(); button("confirmLock").fire(); return null;
             });
-            await(() -> !button("createAccount").isDisabled() && !account(username).active());
+            await(() -> accountListReady() && !account(username).active());
             Throwable expired = assertThrows(ExecutionException.class, () -> target.listAccounts().get(3, TimeUnit.SECONDS)).getCause();
             assertEquals(ErrorCode.UNAUTHENTICATED, assertInstanceOf(ApiException.class, expired).errorCode());
             target.connect().get(3, TimeUnit.SECONDS);
             Throwable disabled = assertThrows(ExecutionException.class, () -> target.login(username, PASSWORD).get(3, TimeUnit.SECONDS)).getCause();
             assertEquals(ErrorCode.ACCOUNT_DISABLED, assertInstanceOf(ApiException.class, disabled).errorCode());
             fx(() -> { button("toggleAccount").fire(); return null; });
-            await(() -> !button("createAccount").isDisabled() && account(username).active());
+            await(() -> accountListReady() && account(username).active());
             assertTrue(target.session().current().isEmpty(), "Unlock must not restore a revoked token");
             target.login(username, PASSWORD).get(3, TimeUnit.SECONDS);
             assertEquals(role, target.session().current().orElseThrow().role());
@@ -170,6 +172,9 @@ class ClientLoginDbIT {
     private AccountDto account(String username) { return table().getItems().stream().filter(row -> row.username().equals(username)).findFirst().orElse(null); }
     private Button button(String id) { stage.getScene().getRoot().applyCss(); return (Button) stage.getScene().lookup("#" + id); }
     @SuppressWarnings("unchecked") private void fillAccount(String username, Role role) {
+        if (navigator.currentScreen().orElseThrow() == Screen.ADMIN_ACCOUNTS) {
+            button("createAccount").fire(); stage.getScene().getRoot().applyCss();
+        }
         ((TextField) stage.getScene().lookup("#accountUsername")).setText("  " + username + "  ");
         ((TextField) stage.getScene().lookup("#accountFullName")).setText("  Tài khoản UI " + role + "  ");
         ((TextField) stage.getScene().lookup("#accountEmail")).setText(" ");
@@ -193,6 +198,12 @@ class ClientLoginDbIT {
             ((PasswordField) stage.getScene().lookup("#passwordInput")).setText(password);
             loginButton().fire(); return null;
         });
+    }
+
+    private boolean accountListReady() {
+        if (navigator.currentScreen().orElse(null) != Screen.ADMIN_ACCOUNTS) return false;
+        stage.getScene().getRoot().applyCss();
+        return !stage.getScene().lookup("#accountProgress").isVisible();
     }
 
     private Button loginButton() { return (Button) stage.getScene().lookup("#loginButton"); }

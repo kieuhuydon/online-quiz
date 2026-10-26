@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.admin.classes.AdminClassController" spacing="16" minWidth="0">
+    <HBox alignment="CENTER_LEFT" spacing="12">
+        <Label text="Quản lí lớp học" styleClass="page-heading" HBox.hgrow="ALWAYS"/>
+        <Button fx:id="refresh" text="Tải lại" onAction="#reload" styleClass="secondary-button"/>
+    </HBox>
+    <Label fx:id="notice" styleClass="notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
+    <VBox styleClass="account-card" spacing="12">
+        <Label text="Danh sách lớp học" styleClass="card-heading"/>
+        <TableView fx:id="classes" minHeight="320" prefHeight="360"/>
+    </VBox>
+    <VBox styleClass="account-card" spacing="12">
+        <HBox spacing="12" alignment="CENTER_LEFT">
+            <Label fx:id="memberTitle" text="Học viên trong lớp" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
+            <Button fx:id="removeMember" text="Xóa khỏi lớp" onAction="#remove" styleClass="danger-button"/>
+        </HBox>
+        <TableView fx:id="members" minHeight="280" prefHeight="320"/>
+        <Label text="Chọn học viên để thêm vào lớp" styleClass="section-heading"/>
+        <Label text="Đánh dấu các học viên cần thêm; có thể chọn nhiều người cùng lúc." styleClass="muted" wrapText="true"/>
+        <FlowPane hgap="10" vgap="8" alignment="CENTER_LEFT">
+            <Button fx:id="selectAllStudents" text="Chọn tất cả" onAction="#selectAll" styleClass="secondary-button"/>
+            <Button fx:id="clearStudents" text="Bỏ chọn" onAction="#clearSelection" styleClass="secondary-button"/>
+            <Label fx:id="selectedCount" text="Đã chọn 0 học viên" styleClass="muted"/>
+        </FlowPane>
+        <TableView fx:id="students" minHeight="320" prefHeight="360" editable="true"/>
+        <Button fx:id="addMember" text="Thêm học viên đã chọn" onAction="#add" styleClass="primary-button"/>
+    </VBox>
+    <TitledPane fx:id="createPane" text="Tạo lớp và chọn giáo viên phụ trách" expanded="false" animated="false">
+        <VBox styleClass="account-card" spacing="10">
+            <TextField fx:id="className" promptText="Tên lớp (tối đa 100 ký tự)"/>
+            <TextField fx:id="description" promptText="Mô tả (tối đa 255 ký tự)"/>
+            <ComboBox fx:id="teacher" promptText="Chọn giáo viên phụ trách" maxWidth="Infinity"/>
+            <Button fx:id="createClass" text="Tạo lớp học" onAction="#create" styleClass="primary-button"/>
+        </VBox>
+    </TitledPane>
+</VBox>

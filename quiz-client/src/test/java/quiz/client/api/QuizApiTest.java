@@ -17,6 +17,51 @@ import static quiz.client.support.SocketFixture.*;
 
 @Timeout(15)
 class QuizApiTest {
+    @Test void heartbeatRunsOnlyInAuthenticatedSessionAndStopsOnLogout() throws Exception {
+        try (var server = new SocketFixture()) {
+            var base = server.config();
+            var config = new quiz.client.config.ClientConfig(base.host(), base.port(), 1000, 1000, 1000, 16, 1000, 80);
+            try (var api = new QuizApi(new ServerConnection(config))) {
+                api.connect().get(3, TimeUnit.SECONDS);
+                var peer = server.take();
+                login(api, peer, Role.ADMIN);
+                Request beat = peer.read();
+                assertEquals(MessageType.HEARTBEAT, beat.type());
+                assertEquals(TOKEN, beat.token());
+                assertNull(beat.payload());
+                // A delayed heartbeat cannot cause an unbounded queue of further heartbeats.
+                Thread.sleep(250);
+                var logout = api.logout();
+                Request request = peer.read();
+                assertEquals(MessageType.LOGOUT, request.type());
+                peer.success(beat, null);
+                peer.success(request, null);
+                logout.get(3, TimeUnit.SECONDS);
+                assertTrue(api.session().current().isEmpty());
+                peer.socket.setSoTimeout(250);
+                assertThrows(java.net.SocketTimeoutException.class, peer::read);
+            }
+        }
+    }
+
+    @Test void rejectedHeartbeatClearsSessionAndNotifiesOnce() throws Exception {
+        try (var server = new SocketFixture()) {
+            var base = server.config();
+            var config = new quiz.client.config.ClientConfig(base.host(), base.port(), 1000, 1000, 1000, 16, 1000, 80);
+            try (var api = new QuizApi(new ServerConnection(config))) {
+                api.connect().get(3, TimeUnit.SECONDS);
+                var peer = server.take();
+                login(api, peer, Role.STUDENT);
+                var events = new LinkedBlockingQueue<QuizApi.SessionLost>();
+                api.addSessionLostListener(events::add);
+                var beat = peer.read();
+                peer.send(Response.error(beat.requestId(), ErrorCode.UNAUTHENTICATED, "revoked"));
+                assertNotNull(events.poll(3, TimeUnit.SECONDS));
+                assertTrue(api.session().current().isEmpty());
+                assertTrue(events.isEmpty());
+            }
+        }
+    }
     private static final String TOKEN = "secret-fixture-token";
     private static final AccountDto ACCOUNT = new AccountDto(8, "student", "Student", null, Role.STUDENT, true, 1L, Instant.EPOCH);
 

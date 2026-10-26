@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.admin.account.CreateAccountController" spacing="18" minWidth="0" alignment="TOP_LEFT">
+    <HBox spacing="12" alignment="CENTER_LEFT">
+        <Label text="Tạo tài khoản" styleClass="page-heading" wrapText="true"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button fx:id="backToAccounts" text="Quay lại danh sách" onAction="#back" styleClass="secondary-button"/>
+    </HBox>
+    <VBox spacing="8" styleClass="account-card" maxWidth="620" minWidth="0">
+        <Label text="Các trường có dấu * là bắt buộc." styleClass="muted" wrapText="true"/>
+        <Label text="Tên đăng nhập *" styleClass="field-label" labelFor="$accountUsername"/>
+        <TextField fx:id="accountUsername" promptText="Tối đa 50 ký tự"/>
+        <Label fx:id="usernameError" styleClass="field-error" visible="false" managed="false" wrapText="true"/>
+        <Label text="Họ và tên *" styleClass="field-label" labelFor="$accountFullName"/>
+        <TextField fx:id="accountFullName" promptText="Tối đa 100 ký tự"/>
+        <Label fx:id="fullNameError" styleClass="field-error" visible="false" managed="false" wrapText="true"/>
+        <Label text="Email" styleClass="field-label" labelFor="$accountEmail"/>
+        <TextField fx:id="accountEmail" promptText="Có thể để trống"/>
+        <Label fx:id="emailError" styleClass="field-error" visible="false" managed="false" wrapText="true"/>
+        <Label text="Vai trò *" styleClass="field-label" labelFor="$accountRole"/>
+        <ComboBox fx:id="accountRole" maxWidth="Infinity"/>
+        <Label fx:id="roleError" styleClass="field-error" visible="false" managed="false" wrapText="true"/>
+        <Label text="Mật khẩu *" styleClass="field-label" labelFor="$accountPassword"/>
+        <PasswordField fx:id="accountPassword" promptText="Ít nhất 8 ký tự" onAction="#create"/>
+        <Label fx:id="passwordError" styleClass="field-error" visible="false" managed="false" wrapText="true"/>
+        <Label fx:id="formError" styleClass="notice,error-notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
+        <HBox spacing="12" alignment="CENTER_LEFT">
+            <Button fx:id="createAccount" text="Tạo tài khoản" onAction="#create" styleClass="primary-button" defaultButton="true"/>
+            <ProgressIndicator fx:id="createProgress" prefWidth="20" prefHeight="20" maxWidth="20" maxHeight="20" visible="false" managed="false"/>
+        </HBox>
+    </VBox>
+</VBox>

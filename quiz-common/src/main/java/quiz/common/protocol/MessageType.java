@@ -7,13 +7,14 @@ public enum MessageType {
     // 1. Authentication & Session
     LOGIN,
     LOGOUT,
+    HEARTBEAT,
 
     // 2. Account Management (ADMIN)
     CREATE_ACCOUNT,
     LIST_ACCOUNTS,
     SET_ACCOUNT_ACTIVE,
 
-    // 3. Class Management (TEACHER, ADMIN)
+    // 3. Class Management: writes ADMIN; teacher reads only assigned classes.
     CREATE_CLASS,
     LIST_CLASSES,
     ADD_CLASS_MEMBER,

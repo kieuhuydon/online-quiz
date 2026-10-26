@@ -129,14 +129,6 @@
     -fx-font-size: 12px;
 }
 
-.nav-active {
-    -fx-background-color: #31577e;
-    -fx-text-fill: #ffffff;
-    -fx-padding: 12 16;
-    -fx-background-radius: 6;
-    -fx-font-weight: bold;
-}
-
 .user-name {
     -fx-text-fill: #ffffff;
     -fx-font-weight: bold;
@@ -154,6 +146,23 @@
 
 .logout-button:hover {
     -fx-background-color: #365977;
+}
+
+.sidebar-navigation-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #c9dbec;
+    -fx-alignment: CENTER_LEFT;
+    -fx-font-size: 13px;
+    -fx-padding: 12 14;
+}
+
+.sidebar-navigation-button:hover {
+    -fx-background-color: #29435f;
+}
+
+.sidebar-navigation-button:current {
+    -fx-background-color: #31577e;
+    -fx-text-fill: white;
 }
 
 .topbar {
@@ -326,6 +335,16 @@
 .danger-button {
     -fx-background-color: #b3261e;
     -fx-text-fill: white;
+}
+
+.text-field:invalid, .combo-box:invalid {
+    -fx-border-color: #b3261e;
+    -fx-border-width: 2;
+}
+
+.field-error {
+    -fx-text-fill: #b3261e;
+    -fx-font-size: 12px;
 }
 
 .account-card .table-row-cell:filled:selected .table-cell {
@@ -530,5 +549,3 @@
     -fx-font-weight: bold;
     -fx-background-radius: 4;
 }
-
-

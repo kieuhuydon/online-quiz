@@ -21,6 +21,18 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class LoginHandlerTest {
+    @Test void heartbeatRequiresIdentityAndEmptyPayload() {
+        var auth = mock(AuthService.class);
+        var handler = new LoginHandler(auth);
+        var identity = new UserSession(1, Role.STUDENT, "student");
+        assertTrue(handler.allowedRoles(MessageType.HEARTBEAT).containsAll(java.util.Set.of(Role.values())));
+        assertTrue(handler.handle(new Request(1, MessageType.HEARTBEAT, "token", null), identity).success());
+        assertEquals(ErrorCode.UNAUTHENTICATED, assertThrows(QuizException.class,
+            () -> handler.handle(new Request(2, MessageType.HEARTBEAT, "token", null), null)).getErrorCode());
+        assertEquals(ErrorCode.INVALID_REQUEST, assertThrows(QuizException.class,
+            () -> handler.handle(new Request(3, MessageType.HEARTBEAT, "token", "extra"), identity)).getErrorCode());
+        verifyNoInteractions(auth);
+    }
     private AuthService auth;
     private LoginHandler handler;
     private final UserSession session = new UserSession(7, Role.ADMIN, "User7");

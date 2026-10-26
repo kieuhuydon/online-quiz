@@ -74,13 +74,15 @@ Trung tâm đào tạo (bối cảnh: trung tâm tiếng Anh) cần tạo ngân 
 | UI client | JavaFX 21 (FXML + Controller) |
 | Protocol | **Serialized DTO** (`Request`/`Response` qua `ObjectOutputStream`), có `ObjectInputFilter` whitelist |
 | Quiz PIN | **Có trong MVP** (luồng học viên cần PIN; PIN sinh khi giáo viên mở bài) |
-| Quản lý lớp | Mức tối thiểu: tạo lớp, thêm/xóa học viên, giao bài cho lớp |
+| Quản lý lớp | Admin tạo lớp, chọn/gán giáo viên phụ trách và thêm/xóa học viên. Giáo viên chỉ xem lớp được gán, danh sách học viên và giao bài cho lớp mình phụ trách. |
 | Tài khoản | Admin cấp sẵn, **không** tự đăng ký |
 | Cấp/khóa tài khoản | API quản trị chỉ tạo TEACHER/STUDENT; không tạo ADMIN hoặc khóa tài khoản ADMIN |
 | Chuẩn hóa thông tin user | Bỏ khoảng trắng đầu/cuối username, fullName, email; giữ hoa/thường; email trống thành null; unique theo schema hiện tại |
 | Chính sách mật khẩu | Không trim; tạo mới tối thiểu 8 ký tự, không toàn khoảng trắng, tối đa 72 byte UTF-8; login không áp dụng ngưỡng tối thiểu của tạo mới |
 | Phiên đăng nhập | Một phiên hiện hành/user; login trên socket mới thay phiên cũ; LOGIN trên socket đã đăng nhập trả CONFLICT |
 | Logout/khóa user | Logout hủy đúng token của socket và giữ socket để login lại; khóa user sau commit thu hồi phiên, mở khóa yêu cầu login lại |
+| Duy trì kết nối | Client đã đăng nhập gửi `HEARTBEAT` có token mỗi `heartbeat.interval.ms` (mặc định 60000 ms); dừng khi logout/mất phiên/đóng app. Chu kỳ phải nhỏ hơn timeout đọc server, có dự phòng độ trễ. Không tự gửi lại thao tác ghi. |
+| UI tài khoản Admin | Danh sách dùng hết vùng nội dung; tạo tài khoản ở route riêng, thành công quay lại danh sách và chọn tài khoản mới. Lỗi trùng trả `USERNAME_ALREADY_EXISTS` / `EMAIL_ALREADY_EXISTS`, không suy luận từ message server. |
 | Trạng thái Quiz | `DRAFT → OPEN → CLOSED` (không quay lại) |
 | Số lần làm | Mỗi học viên **1 Attempt / 1 Quiz** (`UNIQUE(quiz_id, student_id)`) |
 | Điểm đạt | Mặc định **50%**, cấu hình theo từng quiz (`pass_score`) |
@@ -267,7 +269,7 @@ public record Response(long requestId,          // trùng requestId của Reques
 - Wire format này thay thế format writeObject trực tiếp trước đây; hai đầu phải dùng cùng phiên bản quiz-common. Test bao gồm frame sai, whitelist, giới hạn tài nguyên và nhiều message liên tiếp.
 
 ### 6.3. ErrorCode
-`INVALID_REQUEST, VALIDATION_ERROR, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, INVALID_CREDENTIALS, ACCOUNT_DISABLED, QUIZ_NOT_OPEN, QUIZ_CLOSED, WRONG_PIN, NOT_ASSIGNED, ATTEMPT_ALREADY_SUBMITTED, ATTEMPT_EXPIRED, ATTEMPT_NOT_FOUND, QUESTION_IN_USE, SERVER_BUSY, DATABASE_ERROR, INTERNAL_ERROR`
+`INVALID_REQUEST, VALIDATION_ERROR, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, USERNAME_ALREADY_EXISTS, EMAIL_ALREADY_EXISTS, INVALID_CREDENTIALS, ACCOUNT_DISABLED, QUIZ_NOT_OPEN, QUIZ_CLOSED, WRONG_PIN, NOT_ASSIGNED, ATTEMPT_ALREADY_SUBMITTED, ATTEMPT_EXPIRED, ATTEMPT_NOT_FOUND, QUESTION_IN_USE, SERVER_BUSY, DATABASE_ERROR, INTERNAL_ERROR`
 
 ### 6.4. Enums
 `Role {STUDENT, TEACHER, ADMIN}` · `QuizStatus {DRAFT, OPEN, CLOSED}` · `AttemptStatus {IN_PROGRESS, SUBMITTED}` · `Difficulty {EASY, MEDIUM, HARD}` · `SubmitReason {MANUAL, TIMEOUT, ANTICHEAT}` · `AntiCheatPolicyType {LOG_ONLY, WARN_THEN_AUTO_SUBMIT}` · `AntiCheatEventType {FOCUS_LOST, COPY_ATTEMPT, PASTE_ATTEMPT, CUT_ATTEMPT, CONTEXT_MENU_ATTEMPT}`
@@ -284,7 +286,8 @@ public record Response(long requestId,          // trùng requestId của Reques
 | `LOGIN` | (chưa login) | LoginHandler | Xác thực, trả token + role |
 | `LOGOUT` | mọi role | LoginHandler | Hủy session |
 | `CREATE_ACCOUNT`, `LIST_ACCOUNTS`, `SET_ACCOUNT_ACTIVE` | ADMIN | AccountHandler | FR-AD01 |
-| `CREATE_CLASS`, `LIST_CLASSES`, `ADD_CLASS_MEMBER`, `REMOVE_CLASS_MEMBER`, `LIST_CLASS_MEMBERS` | TEACHER, ADMIN | ClassHandler | FR-A07 |
+| `CREATE_CLASS`, `ADD_CLASS_MEMBER`, `REMOVE_CLASS_MEMBER` | ADMIN | ClassHandler | FR-A07; tạo lớp phải chọn giáo viên đang hoạt động, chỉ thêm học viên role STUDENT |
+| `LIST_CLASSES`, `LIST_CLASS_MEMBERS` | TEACHER, ADMIN | ClassHandler | Admin xem toàn bộ; Teacher chỉ xem lớp được gán, kiểm tra quyền sở hữu ở server |
 | `CREATE_QUESTION`, `UPDATE_QUESTION`, `GET_QUESTION`, `LIST_QUESTIONS`, `DEACTIVATE_QUESTION` | TEACHER, ADMIN | QuestionHandler | FR-A02/A03, BR-05 |
 | `CREATE_QUIZ`, `UPDATE_QUIZ`, `GET_QUIZ`, `LIST_QUIZZES`, `SET_QUIZ_QUESTIONS` | TEACHER, ADMIN | QuizHandler | FR-A04/A05/A06 (chỉ sửa khi DRAFT) |
 | `OPEN_QUIZ` (sinh PIN), `CLOSE_QUIZ`, `ASSIGN_QUIZ` | TEACHER, ADMIN | QuizHandler | FR-A08/A09 |
@@ -463,7 +466,7 @@ public interface CommandHandler {
 
 **UserRepository (task 4.1.2):** interface trả `Optional<User>` khi tìm theo username/ID, `boolean` khi kiểm tra tồn tại username/email, `User` đã được DB cấp ID/timestamp khi `save`, `List<User>` theo ID tăng dần khi `findAll`, và `boolean` khi `updateActiveStatus`. `save` chỉ INSERT user mới (ID 0, chưa có timestamp); không upsert user đã lưu. Email null không trùng. Cập nhật đúng trạng thái hiện tại vẫn trả true nếu ID tồn tại, ID không có trả false. Có overload nhận `Connection` cho `findById`, `save`, `updateActiveStatus` để dùng trong transaction của service: không mở connection thứ hai, không đóng connection caller, không đổi autoCommit/commit/rollback. API thông thường quản lý connection riêng. Repository không thực thi phân quyền; service kiểm tra actor. Lỗi tham số trả `IllegalArgumentException`; lỗi unique username/email trả `ConflictException`, lỗi DB khác trả `QuizException(DATABASE_ERROR)` với thông báo chung và cause. JDBC implementation thuộc task 4.1.3.
 
-**JdbcUserRepository (task 4.1.3 đã triển khai):** inject `DataSource`, dùng `PreparedStatement` và `INSERT ... RETURNING`, map `TIMESTAMPTZ` qua `OffsetDateTime` về `Instant`, giữ nullable email/createdBy. SQLSTATE `23505` cùng tên constraint `users_username_key`/`users_email_key` của schema hiện tại được chuyển thành CONFLICT; lỗi unique khác (kể cả users_pkey), FK, kết nối/query/mapping trả DATABASE_ERROR. Không parse thông báo SQL hoặc đưa chi tiết DB vào thông báo lỗi. Statement/ResultSet được đóng, connection do caller cung cấp và transaction của nó được giữ nguyên. Kiểm chứng task 4.1.4 ngày 10/10/2026: `mvnw.cmd -B -ntp -Pdb-it clean verify` thành công, 149 unit/mock test + 14 PostgreSQL integration test, 0 failures/errors/skipped. Đã kiểm tra UNIQUE, FK, Unicode, timestamp theo timezone, ownership connection, commit/rollback và hai INSERT trùng đồng thời. Xem mục 15.5 để cấu hình DB test.
+**JdbcUserRepository (task 4.1.3 đã triển khai):** inject `DataSource`, dùng `PreparedStatement` và `INSERT ... RETURNING`, map `TIMESTAMPTZ` qua `OffsetDateTime` về `Instant`, giữ nullable email/createdBy. SQLSTATE `23505` cùng tên constraint `users_username_key`/`users_email_key` của schema hiện tại được chuyển thành `USERNAME_ALREADY_EXISTS`/`EMAIL_ALREADY_EXISTS`; lỗi unique khác (kể cả users_pkey), FK, kết nối/query/mapping trả DATABASE_ERROR. Không parse thông báo SQL hoặc đưa chi tiết DB vào thông báo lỗi. Statement/ResultSet được đóng, connection do caller cung cấp và transaction của nó được giữ nguyên. Kiểm chứng task 4.1.4 ngày 10/10/2026: `mvnw.cmd -B -ntp -Pdb-it clean verify` thành công, 149 unit/mock test + 14 PostgreSQL integration test, 0 failures/errors/skipped. Đã kiểm tra UNIQUE, FK, Unicode, timestamp theo timezone, ownership connection, commit/rollback và hai INSERT trùng đồng thời. Xem mục 15.5 để cấu hình DB test.
 
 **Contract services task 4.2:** `AuthService.login(username, password)` trả `AuthResult(token, User)` nội bộ, không Serializable và không lộ token/hash qua toString; handler sau này map sang LoginResultDto. `authenticate(token)` kiểm tra phiên hiện hành và đọc lại user active/role từ DB; `logout(token)` nội bộ idempotent và chỉ xóa đúng token. `AccountService.createAccount(dto, adminId)`, `listAccounts(adminId)`, `setAccountActive(userId, active, adminId)` đều tự kiểm tra actor trong DB; actor thiếu/inactive trả UNAUTHENTICATED, sai role trả FORBIDDEN. Create/set kiểm tra lại actor trong transaction ghi, không SQL/socket trong service. Mật khẩu tạo mới tối thiểu 8 Unicode code point và tối đa 72 byte UTF-8; login không áp dụng ngưỡng 8. Email chỉ kiểm tra định dạng cơ bản local@domain.suffix, không xác minh mailbox. `SessionCoordinator` dùng số khóa cố định theo userId; cùng một instance dùng chung cho Auth/Account để login, xác thực, logout và khóa user phối hợp. BCrypt ở ngoài critical section/transaction ghi; khóa target giữ qua commit và thu hồi phiên. Bind/cleanup socket sẽ triển khai ở task 4.4.
 
@@ -473,7 +476,7 @@ public interface CommandHandler {
 |---|---|---|
 | `AuthService` | login, kiểm tra `active`, so khớp BCrypt | Sai user/mật khẩu cùng một thông báo `INVALID_CREDENTIALS` |
 | `AccountService` | tạo tài khoản, bật/tắt | Chỉ ADMIN; validate username/role |
-| `ClassService` | lớp + thành viên | Chỉ học viên (role STUDENT) mới thêm được |
+| `ClassService` | lớp + thành viên | Admin tạo lớp/gán giáo viên/thêm/xóa học viên; teacher chỉ đọc lớp phụ trách. Kiểm tra actor trong service; giáo viên phụ trách phải là TEACHER đang hoạt động; học viên thêm vào phải là STUDENT đang hoạt động. |
 | `QuestionService` | CRUD câu hỏi, lọc theo topic/độ khó | Không xóa cứng nếu đã dùng trong quiz → `active=false` (BR-05) |
 | `QuizService` | CRUD quiz, chọn câu hỏi, `open`/`close`/`assign`, sinh PIN | Chỉ sửa khi `DRAFT`; mở được khi có ≥ 1 câu hỏi; chuyển trạng thái đúng `DRAFT→OPEN→CLOSED` |
 | `AttemptService` | `start`, `saveAnswer`, `submit`, `expire`, `getState` | Xem 9.4 |
@@ -835,7 +838,8 @@ Tài khoản mẫu: xem mục 15.4 và `database/seed.sql`.
 | ACCOUNT_DISABLED | LOGIN với mật khẩu đúng nhưng tài khoản bị khóa; không lưu phiên |
 | UNAUTHENTICATED | Token thiếu, bị thu hồi, khác socket hoặc account không còn active: xóa phiên local, đóng socket và reconnect trước LOGIN |
 | FORBIDDEN | Sai role, tạo ADMIN hoặc đổi trạng thái ADMIN: báo không có quyền, không tự sửa role local |
-| CONFLICT | Username/email trùng, hoặc LOGIN trên socket còn binding; với trùng tài khoản sửa form, với LOGIN hãy LOGOUT hợp lệ hoặc reconnect |
+| USERNAME_ALREADY_EXISTS / EMAIL_ALREADY_EXISTS | Trùng tên đăng nhập / email; đánh dấu đúng trường để người dùng sửa. |
+| CONFLICT | LOGIN trên socket còn binding hoặc xung đột nghiệp vụ khác; LOGOUT hợp lệ hoặc reconnect khi lỗi LOGIN. |
 | VALIDATION_ERROR / NOT_FOUND | Giá trị form/ID không hợp lệ hoặc target không còn tồn tại; sửa form/tải lại danh sách |
 | INVALID_REQUEST | DTO sai loại, payload thừa hoặc envelope/lệnh không hỗ trợ ở dispatcher; kiểm tra code gửi request |
 | SERVER_BUSY | Giữ phiên nếu còn kết nối; hiển thị bận và cho thử lại. Không tự động retry thao tác ghi khi không biết kết quả trước đó |
@@ -1095,7 +1099,7 @@ Baseline: hệ thống thi trắc nghiệm client/server cơ bản (1 thread/1 c
 |---|---|---|---|---|
 | **Việt** | **Authentication + User + Database & UI tương ứng** | FR-A01, FR-S02, FR-AD01, NFR-04, NFR-05 | • Khởi tạo Database Schema (`schema.sql`) & dữ liệu mẫu (`seed.sql`) cho cả nhóm.<br>• Xây dựng `quiz-common` (protocol: `Request`, `Response`, `MessageType`, `ErrorCode`, `MessageCodec`, enums, DTOs cơ bản).<br>• Phía Server: DataSource HikariCP, `TransactionManager`, BCrypt `PasswordHasher`, `TokenGenerator`, Exception hierarchy, `UserSession`, `SessionRegistry`, `AuthService`, `AccountService`, `AuthGuard`, `RequestDispatcher`, `LoginHandler`, `AccountHandler`.<br>• Phía Client: Socket TCP client nền tảng (`ServerConnection`, `QuizApi`), `ClientSession`, `SceneNavigator`, UI Đăng nhập & UI Admin cấp/quản lý tài khoản. | **1 (Làm đầu tiên - Nền tảng)** |
 | **Võ** | **Question Bank & UI tương ứng** | FR-A02, FR-A03, FR-A05, FR-T05 | • Quản lý ngân hàng câu hỏi (Tạo, xem, sửa).<br>• Phân loại topic/category, gán độ khó (Easy/Medium/Hard).<br>• Chọn câu hỏi đưa vào bài test.<br>• Phía Server: `QuestionRepository`, `QuestionService`, `QuestionHandler`.<br>• Phía Client: UI quản lý câu hỏi cho Teacher. | **2 (Sau Việt)** |
-| **Bắc** | **Quiz & Assignment & UI tương ứng** | FR-A04, FR-A05, FR-A06, FR-A07, FR-A08, FR-A09, FR-S02, FR-S04 | • Tạo, sửa, mở/đóng Quiz (`DRAFT` ➔ `OPEN` ➔ `CLOSED`), sinh mã PIN.<br>• Thiết lập thời lượng (`duration_minutes`), chọn câu hỏi vào Quiz.<br>• Quản lý lớp & giao Quiz cho lớp.<br>• Phía Server: `ClassRepository`, `QuizRepository`, `ClassService`, `QuizService`, `ClassHandler`, `QuizHandler`.<br>• Phía Client: UI tạo Quiz, quản lý lớp, giao bài kiểm tra. | **3 (Sau Võ)** |
+| **Bắc** | **Quiz & Assignment & UI tương ứng** | FR-A04, FR-A05, FR-A06, FR-A07, FR-A08, FR-A09, FR-S02, FR-S04 | • Tạo, sửa, mở/đóng Quiz (`DRAFT` ➔ `OPEN` ➔ `CLOSED`), sinh mã PIN.<br>• Thiết lập thời lượng (`duration_minutes`), chọn câu hỏi vào Quiz.<br>• Quản lý lớp trên giao diện Admin: tạo lớp, chọn giáo viên phụ trách, thêm/xóa học viên; giáo viên chỉ xem lớp được gán và giao Quiz cho lớp.<br>• Phía Server: `ClassRepository`, `QuizRepository`, `ClassService`, `QuizService`, `ClassHandler`, `QuizHandler`.<br>• Phía Client: UI Teacher tạo Quiz/giao bài/xem lớp được gán; UI Admin quản lý lớp và học viên. | **3 (Sau Võ)** |
 | **Đôn** | **Student Exam & UI tương ứng** | FR-S02, FR-S03, FR-S04, FR-S05, FR-S06, FR-S07, FR-S08, FR-S09, FR-S10, FR-S11, FR-S12, FR-T04, NFR-03 | • Học viên xem quiz được giao, nhập PIN tham gia thi.<br>• Server tạo Attempt, quản lý thời gian đếm ngược chính xác.<br>• Chọn câu trả lời, lưu đáp án từng câu, nộp bài thủ công / tự động hết giờ.<br>• Server chấm điểm tự động (`GradingService`), chống nộp trùng final submit.<br>• Xem kết quả, xem lịch sử làm bài.<br>• Phía Server: `AttemptService`, `GradingService`, `ResultService`, `AttemptTimeoutScheduler`.<br>• Phía Client: UI làm bài thi (timer, chuyển câu, nộp), UI kết quả & lịch sử. | **4 (Sau Bắc)** |
 | **Nam** | **Anti-Cheat & Monitoring & UI tương ứng** | FR-S13, FR-S14, FR-T09, BR-12, BR-13, NFR-09 | • Phía Client: Monitor hành vi (rời cửa sổ thi / mất focus, phím tắt Copy/Paste/Cut, chuột phải context menu).<br>• Báo cáo vi phạm về Server (`REPORT_ANTICHEAT_EVENT`).<br>• Phía Server: Lưu log vi phạm theo Attempt, đếm vi phạm, kiểm tra policy (`WARN_THEN_AUTO_SUBMIT` / `LOG_ONLY`).<br>• Cảnh báo học viên (`PUSH_ANTICHEAT_WARNING`) hoặc tự động nộp bài khi đạt ngưỡng vi phạm.<br>• UI giám sát sự kiện vi phạm cho giáo viên. | **5 (Sau Đôn)** |
 
@@ -1106,7 +1110,7 @@ Baseline: hệ thống thi trắc nghiệm client/server cơ bản (1 thread/1 c
 | M1 – Nền tảng | Parent pom, 4 module build được; `common` (Request/Response/MessageType/ErrorCode/MessageCodec); `schema.sql`; `QuizServer` + `ClientHandler` + `RequestDispatcher` (echo/ping); client kết nối được | `mvn clean verify` xanh; test codec; client gửi `LOGIN` giả và nhận response |
 | M2 – Auth & Câu hỏi | Auth, `SessionRegistry`, `AuthGuard`, DB pool + `TransactionManager`, CRUD câu hỏi, Account (Admin) | Test unit + integration đạt; sai quyền bị chặn |
 | M3 – Quiz & Attempt | Quiz, lớp, giao bài, PIN, `start/saveAnswer/submit`, `GradingService`, `AttemptTimeoutScheduler`, Result/History/Statistics | Concurrency test nộp trùng đạt; hết giờ tự nộp |
-| M4 – Client UI | Login, teacher (question/quiz/assignment/result), student (dashboard/exam/result), admin account; timer | Chạy trọn luồng 12.1 và 12.2 trên UI |
+| M4 – Client UI | Login, teacher (question/quiz/assignment/result, xem lớp được gán), student (dashboard/exam/result), admin account và quản lý lớp/thành viên/gán giáo viên; timer | Chạy trọn luồng 12.1 và 12.2 trên UI |
 | M5 – Anti-Cheat & hoàn thiện | Monitor + service + policy, push cảnh báo/force-submit, xem sự kiện (teacher), reconnect | Test AC đạt; reconnect hoạt động |
 | M6 – Đánh giá & nộp | Benchmark, bảng test thật, refactor, README/report, Compilatio | Checklist mục 22 hoàn tất |
 
@@ -1166,3 +1170,33 @@ project/
 - [ ] Đã kiểm tra Compilatio, similarity ≤ 20%
 - [ ] Không dùng code không rõ nguồn; mọi thành viên giải thích được code của mình
 - [ ] Đã nộp qua LMS (không dùng Drive/USB)
+
+
+## Cập nhật quản lý lớp theo quyền Admin
+
+Bản tích hợp dựa trên `origin/develop` tại `3111fea`.
+Admin đăng nhập → menu **Lớp học**: tạo lớp, chọn giáo viên đang hoạt động,
+thêm học viên đang hoạt động bằng danh sách tài khoản và xóa học viên khỏi lớp.
+Giáo viên chỉ có tab **Lớp được phân công**, không có form tạo lớp hoặc nút sửa
+thành viên. `ClassHandler` chỉ cho ADMIN gửi các lệnh ghi; `ClassService` kiểm tra
+lại tài khoản hiện hành, role và active, kể cả khi được gọi trực tiếp. Teacher chỉ
+xem lớp mình phụ trách và danh sách học viên của các lớp đó.
+
+`CreateClassDto(name, description, teacherId)` truyền giáo viên được chọn;
+không lấy userId của Admin làm teacher_id. Hai đầu phải chạy cùng bản build.
+Schema và lớp cũ được giữ nguyên; không cần migration database.
+
+
+### Bố cục sidebar và thêm nhiều học viên
+
+Sidebar Admin dùng hai nút Quản lí tài khoản / Quản lí lớp học, tô sáng nút hiện tại;
+đã bỏ ô chỉ hiển thị tên mục được chọn. Trang lớp học hiển thị danh sách lớp trước,
+tiếp theo là thành viên và bảng checkbox học viên có thể thêm. Phần tạo lớp nằm
+trong khung thu gọn phía dưới. Có Chọn tất cả, Bỏ chọn và số lượng đang chọn.
+
+Một lần nhấn Thêm học viên đã chọn xử lý lần lượt bằng API hiện có. Học viên đã
+trong lớp được loại khỏi bảng lựa chọn. Nếu phát sinh trùng do thay đổi đồng thời,
+thông báo tách số đã thêm và số đã có trong lớp. Lỗi từng tài khoản giữ lại lựa chọn
+cùng trạng thái trong bảng; lỗi kết nối hoặc máy chủ dừng các yêu cầu tiếp theo,
+không tự thử lại, báo số chưa xác nhận/chưa xử lý và yêu cầu tải lại trước khi thử.
+Đây là thao tác có thể thành công một phần, không phải một transaction cho cả nhóm.

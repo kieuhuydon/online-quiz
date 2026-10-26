@@ -148,7 +148,7 @@ class RequestDispatcherIT {
             new SetAccountActiveDto(Long.MAX_VALUE, false)).errorCode());
         CreateAccountDto dto = new CreateAccountDto(nextUsername(), PASSWORD, "Duplicate Fixture", null, Role.STUDENT);
         assertTrue(exchange(MessageType.CREATE_ACCOUNT, token, dto).success());
-        assertEquals(ErrorCode.CONFLICT, exchange(MessageType.CREATE_ACCOUNT, token, dto).errorCode());
+        assertEquals(ErrorCode.USERNAME_ALREADY_EXISTS, exchange(MessageType.CREATE_ACCOUNT, token, dto).errorCode());
         Response wrongPassword = exchange(MessageType.LOGIN, null, new LoginRequestDto(admin.username(), "incorrect"));
         Response missingUser = exchange(MessageType.LOGIN, null, new LoginRequestDto(nextUsername(), PASSWORD));
         assertEquals(ErrorCode.INVALID_CREDENTIALS, wrongPassword.errorCode());

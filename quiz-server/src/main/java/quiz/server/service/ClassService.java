@@ -33,31 +33,38 @@ public final class ClassService {
     }
 
     public ClassDto createClass(CreateClassDto dto, UserSession session) {
-        Objects.requireNonNull(session, "UserSession cannot be null");
+        requireAdmin(session);
         if (dto == null || dto.name() == null || dto.name().strip().isBlank()) {
             throw new ValidationException("Tên lớp học không được để trống");
         }
+        if (dto.name().strip().length() > Classroom.MAX_NAME_LENGTH
+            || dto.description() != null && dto.description().strip().length() > Classroom.MAX_DESCRIPTION_LENGTH
+            || dto.teacherId() <= 0) throw new ValidationException("Thông tin lớp học không hợp lệ");
+        User teacher = userRepository.findById(dto.teacherId())
+            .orElseThrow(() -> new NotFoundException("Giáo viên không tồn tại"));
+        if (teacher.role() != Role.TEACHER || !teacher.active())
+            throw new ValidationException("Chọn tài khoản giáo viên đang hoạt động");
         if (classRepository.findByName(dto.name().strip()).isPresent()) {
             throw new ConflictException("Tên lớp học đã tồn tại");
         }
         Classroom created = classRepository.save(Classroom.createNew(
             dto.name().strip(),
             dto.description() == null ? null : dto.description().strip(),
-            session.userId()
+            dto.teacherId()
         ));
-        User teacher = userRepository.findById(session.userId()).orElse(null);
-        String teacherName = teacher != null ? teacher.fullName() : session.username();
+        String teacherName = teacher.fullName();
         return new ClassDto(created.id(), created.name(), created.description(), created.teacherId(), teacherName, created.createdAt());
     }
 
     public ArrayList<ClassDto> listClasses(UserSession session) {
-        Objects.requireNonNull(session, "UserSession cannot be null");
+        requireReader(session);
         List<Classroom> classrooms = classRepository.findAll();
         Map<Long, String> teacherNames = userRepository.findAll().stream()
             .collect(Collectors.toMap(User::id, User::fullName, (a, b) -> a));
 
         ArrayList<ClassDto> dtos = new ArrayList<>(classrooms.size());
         for (Classroom c : classrooms) {
+            if (session.role() != Role.ADMIN && c.teacherId() != session.userId()) continue;
             dtos.add(new ClassDto(
                 c.id(),
                 c.name(),
@@ -71,17 +78,14 @@ public final class ClassService {
     }
 
     public void addClassMember(long classId, long studentId, UserSession session) {
-        Objects.requireNonNull(session, "UserSession cannot be null");
+        requireAdmin(session);
         Classroom classroom = classRepository.findById(classId)
             .orElseThrow(() -> new NotFoundException("Lớp học không tồn tại"));
 
-        if (session.role() != Role.ADMIN && classroom.teacherId() != session.userId()) {
-            throw new ForbiddenException("Chỉ giáo viên quản lý lớp hoặc quản trị viên mới có quyền thêm học viên");
-        }
 
         User student = userRepository.findById(studentId)
             .orElseThrow(() -> new NotFoundException("Học viên không tồn tại"));
-        if (student.role() != Role.STUDENT) {
+        if (student.role() != Role.STUDENT || !student.active()) {
             throw new ValidationException("Chỉ có thể thêm tài khoản có vai trò STUDENT vào lớp");
         }
         if (classRepository.isMember(classId, studentId)) {
@@ -91,19 +95,33 @@ public final class ClassService {
     }
 
     public void removeClassMember(long classId, long studentId, UserSession session) {
-        Objects.requireNonNull(session, "UserSession cannot be null");
+        requireAdmin(session);
         Classroom classroom = classRepository.findById(classId)
             .orElseThrow(() -> new NotFoundException("Lớp học không tồn tại"));
 
-        if (session.role() != Role.ADMIN && classroom.teacherId() != session.userId()) {
-            throw new ForbiddenException("Chỉ giáo viên quản lý lớp hoặc quản trị viên mới có quyền xóa học viên");
-        }
         classRepository.removeMember(classId, studentId);
     }
 
     public ArrayList<ClassMemberDto> listClassMembers(long classId, UserSession session) {
-        Objects.requireNonNull(session, "UserSession cannot be null");
-        classRepository.findById(classId).orElseThrow(() -> new NotFoundException("Lớp học không tồn tại"));
+        requireReader(session);
+        Classroom classroom = classRepository.findById(classId).orElseThrow(() -> new NotFoundException("Lớp học không tồn tại"));
+        if (session.role() != Role.ADMIN && classroom.teacherId() != session.userId())
+            throw new ForbiddenException("Bạn không phụ trách lớp học này");
         return new ArrayList<>(classRepository.findMembers(classId));
+    }
+
+    private void requireReader(UserSession session) {
+        if (session == null) throw new quiz.server.exception.UnauthorizedException("Vui lòng đăng nhập");
+        User actor = userRepository.findById(session.userId())
+            .orElseThrow(() -> new quiz.server.exception.UnauthorizedException("Tài khoản không tồn tại"));
+        if (!actor.active() || actor.role() != session.role())
+            throw new quiz.server.exception.UnauthorizedException("Quyền đăng nhập đã thay đổi");
+        if (actor.role() != Role.ADMIN && actor.role() != Role.TEACHER)
+            throw new ForbiddenException("Không có quyền quản lý lớp");
+    }
+
+    private void requireAdmin(UserSession session) {
+        requireReader(session);
+        if (session.role() != Role.ADMIN) throw new ForbiddenException("Chỉ Admin được thay đổi lớp và học viên");
     }
 }

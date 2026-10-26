@@ -220,7 +220,7 @@ class JdbcUserRepositoryTest {
         ConflictException error = assertThrows(ConflictException.class,
             () -> repository.save(connection, newUser()));
 
-        assertEquals(ErrorCode.CONFLICT, error.getErrorCode());
+        assertEquals("Email".equals(field) ? ErrorCode.EMAIL_ALREADY_EXISTS : ErrorCode.USERNAME_ALREADY_EXISTS, error.getErrorCode());
         assertSame(cause, error.getCause());
         assertEquals(field + " is already in use", error.getMessage());
         assertFalse(error.getMessage().contains("private"));

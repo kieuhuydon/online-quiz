@@ -13,9 +13,10 @@ public final class WorkspaceController extends ScreenController {
     @FXML private Label fullName;
     @FXML private Label username;
     @FXML private Label pageTitle;
-    @FXML private Label activeSection;
+    @FXML private javafx.scene.control.Button adminAccounts, adminClasses;
     @FXML private Label notice;
     @FXML private StackPane content;
+    @FXML private javafx.scene.layout.VBox adminNavigation;
 
     public WorkspaceController(SceneNavigator navigator) {
         this.navigator = navigator;
@@ -26,7 +27,11 @@ public final class WorkspaceController extends ScreenController {
         fullName.setText(session.fullName());
         username.setText("@" + session.username());
         pageTitle.setText(route.title());
-        activeSection.setText(route == Screen.ADMIN_ACCOUNTS ? "Tài khoản" : "Tổng quan");
+        var current = javafx.css.PseudoClass.getPseudoClass("current");
+        adminAccounts.pseudoClassStateChanged(current, route == Screen.ADMIN_ACCOUNTS || route == Screen.ADMIN_CREATE_ACCOUNT);
+        adminClasses.pseudoClassStateChanged(current, route == Screen.ADMIN_CLASSES);
+        adminNavigation.setVisible(session.role() == quiz.common.enums.Role.ADMIN);
+        adminNavigation.setManaged(session.role() == quiz.common.enums.Role.ADMIN);
         notice.setText(message);
         notice.setVisible(!message.isBlank());
         notice.setManaged(!message.isBlank());
@@ -39,4 +44,7 @@ public final class WorkspaceController extends ScreenController {
             navigator.logout();
         }
     }
+
+    @FXML private void accounts() { if (isActive()) navigator.show(Screen.ADMIN_ACCOUNTS); }
+    @FXML private void classes() { if (isActive()) navigator.show(Screen.ADMIN_CLASSES); }
 }
