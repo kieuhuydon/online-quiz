@@ -169,6 +169,16 @@ public final class TeacherController extends ScreenController {
     @FXML private ProgressIndicator classProgress;
     @FXML private Button btnRefreshClasses;
 
+    // Class scoped results workspace
+    @FXML private ComboBox<ClassDto> resultsClassCombo;
+    @FXML private ComboBox<QuizDto> resultsQuizCombo;
+    @FXML private Label classResultsNotice;
+    @FXML private Label classResultsCount;
+    @FXML private Label classResultsAverage;
+    @FXML private Label classResultsPassRate;
+    @FXML private Label classResultsHighest;
+    @FXML private TableView<ResultDto> classResultsTable;
+
     // Observable Lists & State
     private final ObservableList<QuizDto> quizList = FXCollections.observableArrayList();
     private final ObservableList<ClassDto> classList = FXCollections.observableArrayList();
@@ -178,6 +188,8 @@ public final class TeacherController extends ScreenController {
     private final ObservableList<DetailQuestionRow> detailQuestionRows = FXCollections.observableArrayList();
     private final ObservableList<QuestionDto> pickerQuestionRows = FXCollections.observableArrayList();
     private final ObservableList<ResultDto> resultsList = FXCollections.observableArrayList();
+    private final ObservableList<ResultDto> classResultsList = FXCollections.observableArrayList();
+    private List<ResultDto> allClassResults = List.of();
 
     private List<QuestionDto> allBankQuestions = new ArrayList<>();
     private DetailQuestionRow questionToReplace = null;
@@ -201,6 +213,7 @@ public final class TeacherController extends ScreenController {
         configureDetailQuestionTable();
         configurePickerTable();
         configureResultsTable();
+        configureClassResultsWorkspace();
 
         // 1. Format Chính sách vi phạm (cmbQuizPolicy & cmbAutoQuizPolicy)
         javafx.util.StringConverter<AntiCheatPolicyType> policyConverter = new javafx.util.StringConverter<>() {
@@ -1476,6 +1489,103 @@ public final class TeacherController extends ScreenController {
                 }
             }
         });
+    }
+
+    private void configureClassResultsWorkspace() {
+        resultsClassCombo.setItems(classList);
+        resultsClassCombo.setConverter(new javafx.util.StringConverter<>() {
+            @Override public String toString(ClassDto value) { return value == null ? "" : value.name(); }
+            @Override public ClassDto fromString(String value) { return null; }
+        });
+        resultsQuizCombo.setConverter(new javafx.util.StringConverter<>() {
+            @Override public String toString(QuizDto value) { return value == null ? "" : value.title(); }
+            @Override public QuizDto fromString(String value) { return null; }
+        });
+        resultsClassCombo.valueProperty().addListener((obs, oldValue, selected) -> loadResultsForClass(selected));
+        resultsQuizCombo.valueProperty().addListener((obs, oldValue, selected) -> showSelectedClassQuizResults(selected));
+
+        TableColumn<ResultDto, String> student = new TableColumn<>("Học viên");
+        student.setPrefWidth(220);
+        student.setCellValueFactory(row -> new SimpleStringProperty(row.getValue().studentName()));
+        TableColumn<ResultDto, String> score = new TableColumn<>("Điểm");
+        score.setPrefWidth(100);
+        score.setCellValueFactory(row -> new SimpleStringProperty(String.format("%.1f / 10", row.getValue().score())));
+        TableColumn<ResultDto, String> correct = new TableColumn<>("Số câu đúng");
+        correct.setPrefWidth(130);
+        correct.setCellValueFactory(row -> new SimpleStringProperty(row.getValue().correctCount() + " / " + row.getValue().totalQuestions()));
+        TableColumn<ResultDto, String> passed = new TableColumn<>("Kết quả");
+        passed.setPrefWidth(120);
+        passed.setCellValueFactory(row -> new SimpleStringProperty(row.getValue().passed() ? "ĐẠT" : "CHƯA ĐẠT"));
+        TableColumn<ResultDto, String> submitted = new TableColumn<>("Thời gian nộp");
+        submitted.setPrefWidth(180);
+        submitted.setCellValueFactory(row -> new SimpleStringProperty(row.getValue().submittedAt() == null ? "—" : DATE_FORMAT.format(row.getValue().submittedAt())));
+        classResultsTable.getColumns().setAll(List.of(student, score, correct, passed, submitted));
+        classResultsTable.setItems(classResultsList);
+        classResultsTable.setPlaceholder(new Label("Chọn lớp và bài kiểm tra để xem kết quả."));
+    }
+
+    private void loadResultsForClass(ClassDto selected) {
+        resultsQuizCombo.getItems().clear();
+        resultsQuizCombo.setValue(null);
+        classResultsList.clear();
+        allClassResults = List.of();
+        resetClassResultStats();
+        if (selected == null) return;
+        classResultsNotice.setVisible(false);
+        classResultsNotice.setManaged(false);
+        fx.observe(api.getClassQuizResults(selected.id()), this::isActive,
+            payload -> {
+                resultsQuizCombo.getItems().setAll(payload.quizzes());
+                allClassResults = payload.results();
+                if (!payload.quizzes().isEmpty()) resultsQuizCombo.getSelectionModel().selectFirst();
+                else showClassResultsNotice("Lớp này chưa được giao bài kiểm tra nào.", false);
+            },
+            error -> showClassResultsNotice("Không thể tải kết quả lớp: " + formatError(error), true),
+            () -> { });
+    }
+
+    private void showSelectedClassQuizResults(QuizDto quiz) {
+        if (quiz == null) {
+            classResultsList.clear();
+            resetClassResultStats();
+            return;
+        }
+        List<ResultDto> selected = allClassResults.stream().filter(result -> result.quizId() == quiz.id()).toList();
+        classResultsList.setAll(selected);
+        int count = selected.size();
+        classResultsCount.setText(String.valueOf(count));
+        if (count == 0) {
+            classResultsAverage.setText("—");
+            classResultsPassRate.setText("—");
+            classResultsHighest.setText("—");
+            return;
+        }
+        double average = selected.stream().mapToDouble(ResultDto::score).average().orElse(0);
+        long passed = selected.stream().filter(ResultDto::passed).count();
+        double highest = selected.stream().mapToDouble(ResultDto::score).max().orElse(0);
+        classResultsAverage.setText(String.format("%.1f / 10", average));
+        classResultsPassRate.setText(String.format("%.0f%%", passed * 100.0 / count));
+        classResultsHighest.setText(String.format("%.1f / 10", highest));
+    }
+
+    private void resetClassResultStats() {
+        classResultsCount.setText("0");
+        classResultsAverage.setText("—");
+        classResultsPassRate.setText("—");
+        classResultsHighest.setText("—");
+    }
+
+    private void showClassResultsNotice(String message, boolean error) {
+        classResultsNotice.setText(message);
+        classResultsNotice.getStyleClass().removeAll("error-notice");
+        if (error) classResultsNotice.getStyleClass().add("error-notice");
+        classResultsNotice.setVisible(true);
+        classResultsNotice.setManaged(true);
+    }
+
+    @FXML
+    private void refreshClassResults() {
+        loadResultsForClass(resultsClassCombo.getValue());
     }
 
     private void showAttemptAntiCheatLogs(ResultDto row) {

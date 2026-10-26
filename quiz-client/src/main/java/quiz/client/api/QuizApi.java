@@ -334,6 +334,14 @@ public final class QuizApi implements AutoCloseable {
         return protectedCall(MessageType.LIST_QUIZ_RESULTS, quizId, QuizApi::decodeResults);
     }
 
+    public CompletableFuture<ClassQuizResultsDto> getClassQuizResults(long classId) {
+        ClientValidation.positiveId(classId);
+        return protectedCall(MessageType.GET_CLASS_QUIZ_RESULTS, classId, payload -> {
+            if (!(payload instanceof ClassQuizResultsDto dto)) throw new TransportException(PROTOCOL);
+            return dto;
+        });
+    }
+
     // --- Student Quiz Flow ---
     public CompletableFuture<List<QuizInfoDto>> listAssignedQuizzes() {
         return protectedCall(MessageType.LIST_ASSIGNED_QUIZZES, null, QuizApi::decodeQuizInfos);

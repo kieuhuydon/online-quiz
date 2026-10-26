@@ -374,5 +374,30 @@
                 </VBox>
             </ScrollPane>
         </Tab>
+        <Tab text="  Kết quả theo lớp  ">
+            <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED" styleClass="content-scroll">
+                <VBox spacing="16" style="-fx-padding: 16 12 16 0;">
+                    <VBox spacing="4">
+                        <Label text="KẾT QUẢ KIỂM TRA THEO LỚP" styleClass="card-heading"/>
+                        <Label text="Chọn lớp và bài kiểm tra để xem điểm của học viên trong lớp." styleClass="muted"/>
+                    </VBox>
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <Label text="Lớp:" styleClass="field-label"/>
+                        <ComboBox fx:id="resultsClassCombo" promptText="Chọn lớp" prefWidth="260"/>
+                        <Label text="Bài kiểm tra:" styleClass="field-label"/>
+                        <ComboBox fx:id="resultsQuizCombo" promptText="Chọn bài kiểm tra" prefWidth="300"/>
+                        <Button text="Tải lại" onAction="#refreshClassResults" styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="classResultsNotice" visible="false" managed="false" styleClass="notice" wrapText="true"/>
+                    <HBox spacing="14">
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4"><Label text="SỐ BÀI ĐÃ NỘP" styleClass="stat-label"/><Label fx:id="classResultsCount" text="0" styleClass="stat-value"/></VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4"><Label text="ĐIỂM TRUNG BÌNH" styleClass="stat-label"/><Label fx:id="classResultsAverage" text="—" styleClass="stat-value"/></VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4"><Label text="TỶ LỆ ĐẠT" styleClass="stat-label"/><Label fx:id="classResultsPassRate" text="—" styleClass="stat-value"/></VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4"><Label text="ĐIỂM CAO NHẤT" styleClass="stat-label"/><Label fx:id="classResultsHighest" text="—" styleClass="stat-value"/></VBox>
+                    </HBox>
+                    <TableView fx:id="classResultsTable" prefHeight="360" VBox.vgrow="ALWAYS" styleClass="account-card"/>
+                </VBox>
+            </ScrollPane>
+        </Tab>
     </TabPane>
 </VBox>

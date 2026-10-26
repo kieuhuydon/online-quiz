@@ -4,8 +4,9 @@ echo   Online Quiz - Khoi dong Client (JavaFX)
 echo =============================================
 cd /d "%~dp0"
 
-echo Dang bien dich quiz-client...
-call .\mvnw.cmd compile -pl quiz-client -am
+echo Dang bien dich va cap nhat cac module noi bo...
+call .\mvnw.cmd -DskipTests install -pl quiz-client -am
+if errorlevel 1 goto :build_error
 
 echo Dang khoi dong ung dung Client...
 call .\mvnw.cmd javafx:run -pl quiz-client
@@ -20,3 +21,10 @@ if %ERRORLEVEL% NEQ 0 (
     echo ========================================================
     pause
 )
+exit /b %ERRORLEVEL%
+
+:build_error
+echo.
+echo [LOI] Khong the bien dich quiz-client va quiz-common.
+pause
+exit /b 1

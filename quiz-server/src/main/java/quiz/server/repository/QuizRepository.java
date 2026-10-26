@@ -188,4 +188,9 @@ public interface QuizRepository {
      * Finds exam results for a quiz.
      */
     List<quiz.common.dto.ResultDto> findResultsByQuizId(long quizId);
+
+    /** Lists quizzes assigned to a class and results submitted by its members. */
+    List<Quiz> findAssignedQuizzesForClass(long classId);
+
+    List<quiz.common.dto.ResultDto> findResultsByQuizAndClass(long quizId, long classId);
 }
