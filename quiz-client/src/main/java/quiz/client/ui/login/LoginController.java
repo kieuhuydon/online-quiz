@@ -29,6 +29,7 @@ public final class LoginController extends ScreenController {
     @FXML private Button loginButton;
     @FXML private ProgressIndicator progress;
     @FXML private Label connectionStatus;
+    @FXML private javafx.scene.layout.HBox statusBar;
     private CompletableFuture<?> pending;
     private boolean busy;
 
@@ -93,7 +94,7 @@ public final class LoginController extends ScreenController {
             }
         }, this::failed, () -> {
             if (isMounted()) {
-                setBusy(false, "Sẵn sàng đăng nhập");
+                setBusy(false, "");
             }
         });
     }
@@ -103,7 +104,7 @@ public final class LoginController extends ScreenController {
         if (failure instanceof ApiException apiError && apiError.errorCode() == ErrorCode.CONFLICT) {
             api.resetLoginConnection();
         }
-        setBusy(false, "Chưa đăng nhập");
+        setBusy(false, "");
         showError(LoginMessages.message(failure));
         password.requestFocus();
     }
@@ -121,11 +122,8 @@ public final class LoginController extends ScreenController {
         progress.setVisible(busy);
         progress.setManaged(busy);
         connectionStatus.setText(status);
-    }
-
-    @FXML
-    private void exit() {
-        navigator.exit();
+        statusBar.setVisible(busy);
+        statusBar.setManaged(busy);
     }
 
     @Override

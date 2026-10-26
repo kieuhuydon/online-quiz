@@ -21,6 +21,7 @@ import static quiz.client.network.TransportException.Kind.*;
  * on separate virtual threads, never under the state lock or on the socket reader.
  */
 public final class ServerConnection implements AutoCloseable {
+    public int heartbeatIntervalMs() { return config.heartbeatIntervalMs(); }
     public enum State { DISCONNECTED, CONNECTING, CONNECTED, CLOSING, CLOSED }
     private static final Logger log = LoggerFactory.getLogger(ServerConnection.class);
     private final ClientConfig config;

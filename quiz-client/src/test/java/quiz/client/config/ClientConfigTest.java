@@ -16,7 +16,7 @@ class ClientConfigTest {
         assertEquals("localhost", defaults.host()); assertEquals(5555, defaults.port());
         assertEquals(5000, defaults.connectTimeoutMs()); assertEquals(5000, defaults.handshakeTimeoutMs());
         assertEquals(30000, defaults.requestTimeoutMs()); assertEquals(64, defaults.maxPendingRequests());
-        assertEquals(3000, defaults.shutdownTimeoutMs());
+        assertEquals(3000, defaults.shutdownTimeoutMs()); assertEquals(60000, defaults.heartbeatIntervalMs());
         Path file = temporary.resolve("client.properties");
         Files.writeString(file, "server.host= 127.0.0.1 \nserver.port=65535\n");
         var override = ClientConfig.fromArgs("--config", file.toString());
@@ -26,7 +26,7 @@ class ClientConfigTest {
 
     @ParameterizedTest @ValueSource(strings = {"server.host=", "server.port=0", "server.port=65536",
         "server.port=not-a-number", "connect.timeout.ms=0", "handshake.timeout.ms=-1",
-        "request.timeout.ms=2147483648", "max.pending.requests=0", "shutdown.timeout.ms=0"})
+        "request.timeout.ms=2147483648", "max.pending.requests=0", "shutdown.timeout.ms=0", "heartbeat.interval.ms=0", "heartbeat.interval.ms=abc"})
     void invalidPropertyNamesFieldWithoutEchoingValue(String property) throws Exception {
         Path file = temporary.resolve("invalid.properties");
         Files.writeString(file, property);

@@ -163,7 +163,7 @@ class LoginIntegrationIT {
         assertNotEquals(PASSWORD, stored.passwordHash());
         assertTrue(PasswordHasher.checkPassword(PASSWORD, stored.passwordHash()));
         assertTrue(await(administrator.listAccounts()).contains(created));
-        assertError(ErrorCode.CONFLICT, administrator.createAccount(input));
+        assertError(ErrorCode.USERNAME_ALREADY_EXISTS, administrator.createAccount(input));
         assertError(ErrorCode.FORBIDDEN, administrator.setAccountActive(admin.id(), false));
 
         QuizApi member = loginClient(stored);
@@ -235,6 +235,39 @@ class LoginIntegrationIT {
         QuizApi client = connectClient();
         await(client.login(user.username(), PASSWORD));
         return client;
+    }
+
+    @ParameterizedTest @EnumSource(Role.class)
+    void heartbeatKeepsIdleConnectionAliveBeyondServerTimeout(Role role) throws Exception {
+        server.close();
+        DataSourceProvider.close();
+        int port;
+        try (ServerSocket reservation = new ServerSocket(0)) { port = reservation.getLocalPort(); }
+        server = ServerMain.start(new ServerConfig(port, 10, 2, 16, 3,
+            dataSource.getURL(), dataSource.getUser(), dataSource.getPassword(),
+            2, 0, 0, 1000, 2000, 700, 2000));
+        User account = fixture(role);
+        QuizApi client = new QuizApi(new ServerConnection(new ClientConfig("127.0.0.1", port,
+            1000, 1000, 1000, 16, 1000, 80)));
+        clients.add(client);
+        await(client.connect());
+        await(client.login(account.username(), PASSWORD));
+        Thread.sleep(2200); // More than three server idle windows, with no user interaction.
+        assertEquals(account.id(), client.session().current().orElseThrow().userId());
+        await(client.logout());
+        assertTrue(client.session().current().isEmpty());
+    }
+
+    @Test void emailConflictIsDistinctFromUsernameAndDoesNotInsertAccount() throws Exception {
+        QuizApi admin = loginClient(fixture(Role.ADMIN));
+        String first = reserveUsername();
+        String second = reserveUsername();
+        String email = first + "@example.com";
+        await(admin.createAccount(new CreateAccountDto(first, PASSWORD, "First", email, Role.STUDENT)));
+        assertError(ErrorCode.EMAIL_ALREADY_EXISTS,
+            admin.createAccount(new CreateAccountDto(second, PASSWORD, "Second", email, Role.TEACHER)));
+        assertTrue(users.findByUsername(second).isEmpty());
+        assertTrue(admin.session().current().isPresent());
     }
 
     private QuizApi connectClient() throws Exception {

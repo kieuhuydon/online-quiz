@@ -532,3 +532,13 @@
 }
 
 
+
+.text-field:invalid, .combo-box:invalid {
+    -fx-border-color: #b3261e;
+    -fx-border-width: 2;
+}
+
+.field-error {
+    -fx-text-fill: #b3261e;
+    -fx-font-size: 12px;
+}

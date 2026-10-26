@@ -8,7 +8,12 @@ import java.util.Properties;
 
 /** Immutable client configuration; an external file overrides bundled defaults. */
 public record ClientConfig(String host, int port, int connectTimeoutMs, int handshakeTimeoutMs,
-                           int requestTimeoutMs, int maxPendingRequests, int shutdownTimeoutMs) {
+                           int requestTimeoutMs, int maxPendingRequests, int shutdownTimeoutMs, int heartbeatIntervalMs) {
+    public ClientConfig(String host, int port, int connectTimeoutMs, int handshakeTimeoutMs,
+                        int requestTimeoutMs, int maxPendingRequests, int shutdownTimeoutMs) {
+        this(host, port, connectTimeoutMs, handshakeTimeoutMs, requestTimeoutMs, maxPendingRequests,
+            shutdownTimeoutMs, 60000);
+    }
     public ClientConfig {
         if (host == null || host.isBlank()) {
             throw invalid("server.host");
@@ -22,6 +27,7 @@ public record ClientConfig(String host, int port, int connectTimeoutMs, int hand
         positive(requestTimeoutMs, "request.timeout.ms");
         positive(maxPendingRequests, "max.pending.requests");
         positive(shutdownTimeoutMs, "shutdown.timeout.ms");
+        positive(heartbeatIntervalMs, "heartbeat.interval.ms");
     }
 
     public static ClientConfig load() throws IOException {
@@ -59,12 +65,17 @@ public record ClientConfig(String host, int port, int connectTimeoutMs, int hand
         return new ClientConfig(properties.getProperty("server.host"), number(properties, "server.port"),
             number(properties, "connect.timeout.ms"), number(properties, "handshake.timeout.ms"),
             number(properties, "request.timeout.ms"), number(properties, "max.pending.requests"),
-            number(properties, "shutdown.timeout.ms"));
+            number(properties, "shutdown.timeout.ms"),
+            number(properties, "heartbeat.interval.ms", "60000"));
     }
 
     private static int number(Properties properties, String key) {
+        return number(properties, key, "");
+    }
+
+    private static int number(Properties properties, String key, String defaultValue) {
         try {
-            return Integer.parseInt(properties.getProperty(key, "").strip());
+            return Integer.parseInt(properties.getProperty(key, defaultValue).strip());
         } catch (NumberFormatException invalid) {
             throw invalid(key);
         }

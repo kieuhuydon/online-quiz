@@ -7,6 +7,7 @@ public enum MessageType {
     // 1. Authentication & Session
     LOGIN,
     LOGOUT,
+    HEARTBEAT,
 
     // 2. Account Management (ADMIN)
     CREATE_ACCOUNT,

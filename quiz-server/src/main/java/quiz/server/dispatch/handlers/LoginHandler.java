@@ -26,14 +26,14 @@ public final class LoginHandler implements CommandHandler {
 
     @Override
     public Set<MessageType> supportedTypes() {
-        return Set.of(MessageType.LOGIN, MessageType.LOGOUT);
+        return Set.of(MessageType.LOGIN, MessageType.LOGOUT, MessageType.HEARTBEAT);
     }
 
     @Override
     public Set<Role> allowedRoles(MessageType type) {
         return switch (type) {
             case LOGIN -> Set.of();
-            case LOGOUT -> Set.of(Role.ADMIN, Role.TEACHER, Role.STUDENT);
+            case LOGOUT, HEARTBEAT -> Set.of(Role.ADMIN, Role.TEACHER, Role.STUDENT);
             default -> throw new IllegalArgumentException("Unsupported auth command");
         };
     }
@@ -42,6 +42,11 @@ public final class LoginHandler implements CommandHandler {
     public Response handle(Request request, UserSession session) {
         return switch (request.type()) {
             case LOGIN -> login(request, session);
+            case HEARTBEAT -> {
+                HandlerPayload.authenticated(session);
+                HandlerPayload.absent(request);
+                yield Response.success(request.requestId(), null);
+            }
             case LOGOUT -> {
                 HandlerPayload.authenticated(session);
                 HandlerPayload.absent(request);

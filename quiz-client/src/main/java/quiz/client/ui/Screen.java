@@ -7,6 +7,8 @@ public enum Screen {
     LOGIN("/quiz/client/ui/login/login.fxml", "Đăng nhập", null),
     ADMIN_ACCOUNTS("/quiz/client/ui/admin/account/account.fxml", "Quản lý tài khoản", Role.ADMIN),
     TEACHER_QUESTIONS("/quiz/client/ui/teacher/question/question.fxml", "Ngân hàng câu hỏi", Role.TEACHER),
+
+    ADMIN_CREATE_ACCOUNT("/quiz/client/ui/admin/account/create-account.fxml", "Tạo tài khoản", Role.ADMIN),
     TEACHER_DASHBOARD("/quiz/client/ui/teacher/dashboard.fxml", "Không gian giảng dạy", Role.TEACHER),
     STUDENT_DASHBOARD("/quiz/client/ui/student/dashboard.fxml", "Không gian học tập", Role.STUDENT),
     STUDENT_EXAM("/quiz/client/ui/student/exam.fxml", "Đang làm bài", Role.STUDENT),

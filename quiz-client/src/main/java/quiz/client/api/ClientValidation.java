@@ -9,9 +9,12 @@ import quiz.common.enums.Role;
 import quiz.common.protocol.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /** Form validation matching the server contract; the server remains authoritative. */
 public final class ClientValidation {
+    public enum AccountField { USERNAME, FULL_NAME, EMAIL, ROLE, PASSWORD }
     private static final Pattern EMAIL = Pattern.compile("[^\\s@]+@[^\\s@]+\\.[^\\s@]+", Pattern.UNICODE_CHARACTER_CLASS);
     private ClientValidation() { }
 
@@ -53,6 +56,41 @@ public final class ClientValidation {
             text(input.optionA(), 255), text(input.optionB(), 255),
             text(input.optionC(), 255), text(input.optionD(), 255),
             correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty());
+
+    }
+
+    /** Ordered field errors for the creation form; never includes entered values. */
+    public static Map<AccountField, String> accountErrors(CreateAccountDto input) {
+        Map<AccountField, String> errors = new LinkedHashMap<>();
+        checkText(errors, AccountField.USERNAME, input.username(), 50,
+            "Vui lòng nhập tên đăng nhập.", "Tên đăng nhập tối đa 50 ký tự.");
+        checkText(errors, AccountField.FULL_NAME, input.fullName(), 100,
+            "Vui lòng nhập họ và tên.", "Họ và tên tối đa 100 ký tự.");
+        String email = input.email() == null ? "" : input.email().strip();
+        if (email.codePointCount(0, email.length()) > 100) {
+            errors.put(AccountField.EMAIL, "Email tối đa 100 ký tự.");
+        } else if (!email.isEmpty() && !EMAIL.matcher(email).matches()) {
+            errors.put(AccountField.EMAIL, "Email không đúng định dạng.");
+        }
+        if (input.role() != Role.TEACHER && input.role() != Role.STUDENT) {
+            errors.put(AccountField.ROLE, "Vui lòng chọn Giáo viên hoặc Học viên.");
+        }
+        String password = input.password();
+        if (password == null || password.isBlank()) {
+            errors.put(AccountField.PASSWORD, "Vui lòng nhập mật khẩu.");
+        } else if (password.codePointCount(0, password.length()) < 8) {
+            errors.put(AccountField.PASSWORD, "Mật khẩu phải có ít nhất 8 ký tự.");
+        } else if (password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            errors.put(AccountField.PASSWORD, "Mật khẩu vượt giới hạn cho phép; hãy rút ngắn mật khẩu.");
+        }
+        return java.util.Collections.unmodifiableMap(errors);
+    }
+
+    private static void checkText(Map<AccountField, String> errors, AccountField field, String input,
+                                  int limit, String required, String tooLong) {
+        String value = input == null ? "" : input.strip();
+        if (value.isBlank()) errors.put(field, required);
+        else if (value.codePointCount(0, value.length()) > limit) errors.put(field, tooLong);
     }
 
     public static void positiveId(long id) {

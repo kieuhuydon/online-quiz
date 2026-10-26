@@ -26,7 +26,7 @@ public final class WorkspaceController extends ScreenController {
         fullName.setText(session.fullName());
         username.setText("@" + session.username());
         pageTitle.setText(route.title());
-        activeSection.setText(route == Screen.ADMIN_ACCOUNTS ? "Tài khoản" : "Tổng quan");
+        activeSection.setText(route.role() == quiz.common.enums.Role.ADMIN ? "Tài khoản" : "Tổng quan");
         notice.setText(message);
         notice.setVisible(!message.isBlank());
         notice.setManaged(!message.isBlank());
