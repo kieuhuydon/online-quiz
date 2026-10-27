@@ -35,7 +35,8 @@ CREATE TABLE class_members (
     class_id    BIGINT      NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
     student_id  BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (class_id, student_id)
+    PRIMARY KEY (class_id, student_id),
+    CONSTRAINT uq_class_members_student UNIQUE (student_id)
 );
 
 -- 4. Questions (Ngân hàng câu hỏi trắc nghiệm)

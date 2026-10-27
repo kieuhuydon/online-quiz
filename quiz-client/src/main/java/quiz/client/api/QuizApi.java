@@ -262,6 +262,10 @@ public final class QuizApi implements AutoCloseable {
         });
     }
 
+    public CompletableFuture<List<AccountDto>> listUnenrolledStudents() {
+        return protectedCall(MessageType.LIST_UNENROLLED_STUDENTS, null, QuizApi::decodeAccounts);
+    }
+
     public CompletableFuture<List<ClassMemberDto>> listClassMembers(long classId) {
         return protectedCall(MessageType.LIST_CLASS_MEMBERS, classId, QuizApi::decodeClassMembers);
     }

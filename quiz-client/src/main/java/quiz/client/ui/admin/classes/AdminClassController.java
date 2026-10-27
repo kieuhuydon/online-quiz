@@ -42,7 +42,6 @@ public final class AdminClassController extends ScreenController {
     private boolean busy;
     private boolean membersFresh;
     private long memberRevision;
-    private List<AccountDto> studentAccounts = List.of();
     private final Map<Long, BooleanProperty> picked = new LinkedHashMap<>();
     private final Map<Long, String> enrollmentNotes = new LinkedHashMap<>();
 
@@ -93,7 +92,6 @@ public final class AdminClassController extends ScreenController {
         fx.observe(api.listAccounts().thenCombine(api.listClasses(), Data::new), this::isActive, data -> {
             var selected = classes.getSelectionModel().getSelectedItem();
             teacher.getItems().setAll(data.accounts().stream().filter(a -> a.role() == Role.TEACHER && a.active()).toList());
-            studentAccounts = data.accounts().stream().filter(a -> a.role() == Role.STUDENT && a.active()).toList();
             classes.getItems().setAll(data.classes());
             if (selected != null) data.classes().stream().filter(c -> c.id() == selected.id()).findFirst()
                 .ifPresent(c -> classes.getSelectionModel().select(c));
@@ -116,13 +114,15 @@ public final class AdminClassController extends ScreenController {
         memberTitle.setText(selected == null ? "Học viên trong lớp" : "Học viên lớp " + selected.name());
         controls();
         if (selected == null) return;
-        fx.observe(api.listClassMembers(selected.id()), () -> isActive() && version == memberRevision,
-            rows -> {
-                members.getItems().setAll(rows);
-                Set<Long> enrolled = rows.stream().map(ClassMemberDto::studentId).collect(Collectors.toSet());
-                picked.keySet().removeAll(enrolled);
-                students.getItems().setAll(studentAccounts.stream().filter(a -> !enrolled.contains(a.id())).toList());
-                students.setPlaceholder(new Label("Không còn học viên đang hoạt động để thêm vào lớp."));
+        fx.observe(api.listClassMembers(selected.id()).thenCombine(api.listUnenrolledStudents(), MembersData::new),
+            () -> isActive() && version == memberRevision, data -> {
+                members.getItems().setAll(data.members());
+                Set<Long> enrolled = data.members().stream().map(ClassMemberDto::studentId).collect(Collectors.toSet());
+                List<AccountDto> available = data.students().stream()
+                    .filter(a -> a.role() == Role.STUDENT && a.active() && !enrolled.contains(a.id())).toList();
+                picked.keySet().retainAll(available.stream().map(AccountDto::id).collect(Collectors.toSet()));
+                students.getItems().setAll(available);
+                students.setPlaceholder(new Label("Không có học viên đang hoạt động và chưa có lớp."));
                 membersFresh = true;
             }, failure -> message((notice.isVisible() ? notice.getText() + " " : "")
                 + "Chưa tải được danh sách học viên. Hãy tải lại trước khi thêm tiếp.", true), this::controls);
@@ -191,11 +191,10 @@ public final class AdminClassController extends ScreenController {
         enrollmentNotes.clear();
         write(enroll(selected.id(), ids), result -> {
             result.added.forEach(picked::remove);
-            result.existing.forEach(picked::remove);
             enrollmentNotes.putAll(result.notes);
-            int pending = ids.size() - result.added.size() - result.existing.size() - result.rejected;
+            int pending = ids.size() - result.added.size() - result.rejected;
             String summary = "Đã thêm " + result.added.size() + "/" + ids.size() + " học viên.";
-            if (!result.existing.isEmpty()) summary += " " + result.existing.size() + " học viên đã có trong lớp.";
+            if (result.alreadyEnrolled > 0) summary += " " + result.alreadyEnrolled + " học viên đã có lớp, không thêm lại.";
             if (result.rejected > 0) summary += " " + result.rejected + " học viên không thêm được; xem trạng thái trong bảng.";
             if (pending > 0) summary += " " + pending + " học viên chưa xác nhận hoặc chưa xử lý. Tải lại trước khi thử lại.";
             message(summary, result.rejected > 0 || pending > 0);
@@ -216,7 +215,11 @@ public final class AdminClassController extends ScreenController {
                 if (cause == null) result.added.add(id);
                 else if (cause instanceof ApiException error) {
                     switch (error.errorCode()) {
-                        case CONFLICT -> result.existing.add(id);
+                        case STUDENT_ALREADY_ENROLLED, CONFLICT -> {
+                            result.rejected++;
+                            result.alreadyEnrolled++;
+                            result.notes.put(id, "Đã có lớp; xóa khỏi lớp cũ trước khi chuyển lớp");
+                        }
                         case VALIDATION_ERROR, NOT_FOUND -> {
                             result.rejected++;
                             result.notes.put(id, error.errorCode() == quiz.common.protocol.ErrorCode.NOT_FOUND
@@ -255,9 +258,9 @@ public final class AdminClassController extends ScreenController {
 
     private static final class Enrollment {
         final List<Long> added = new ArrayList<>();
-        final List<Long> existing = new ArrayList<>();
         final Map<Long, String> notes = new LinkedHashMap<>();
         int rejected;
+        int alreadyEnrolled;
         boolean stopped;
     }
 
@@ -280,6 +283,7 @@ public final class AdminClassController extends ScreenController {
         String text = "Chưa xác nhận được kết quả. Tải lại dữ liệu trước khi thử lại.";
         if (FxAsync.unwrap(failure) instanceof ApiException error) text = switch (error.errorCode()) {
             case CONFLICT -> "Tên lớp đã tồn tại hoặc học viên đã ở trong lớp.";
+            case STUDENT_ALREADY_ENROLLED -> "Học viên đã có lớp. Xóa khỏi lớp hiện tại trước khi chuyển lớp.";
             case VALIDATION_ERROR -> "Thông tin không hợp lệ; kiểm tra giáo viên và học viên đang hoạt động.";
             case FORBIDDEN -> "Chỉ Admin được thay đổi lớp và học viên.";
             case NOT_FOUND -> "Lớp hoặc tài khoản không còn tồn tại. Hãy tải lại.";
@@ -308,4 +312,5 @@ public final class AdminClassController extends ScreenController {
         removeMember.setDisable(busy || !membersFresh || members.getSelectionModel().getSelectedItem() == null);
     }
     private record Data(List<AccountDto> accounts, List<ClassDto> classes) { }
+    private record MembersData(List<ClassMemberDto> members, List<AccountDto> students) { }
 }

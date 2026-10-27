@@ -21,6 +21,7 @@ public enum MessageType {
     ADD_CLASS_MEMBER,
     REMOVE_CLASS_MEMBER,
     LIST_CLASS_MEMBERS,
+    LIST_UNENROLLED_STUDENTS,
     LIST_MY_CLASSES,
 
     // 4. Question Bank (TEACHER, ADMIN)

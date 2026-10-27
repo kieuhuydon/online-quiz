@@ -8,6 +8,7 @@ import quiz.common.protocol.MessageType;
 import quiz.common.protocol.Request;
 import quiz.common.protocol.Response;
 import quiz.server.dispatch.CommandHandler;
+import quiz.server.dispatch.DtoMapper;
 import quiz.server.exception.QuizException;
 import quiz.server.network.UserSession;
 import quiz.server.service.ClassService;
@@ -34,6 +35,7 @@ public final class ClassHandler implements CommandHandler {
             MessageType.ADD_CLASS_MEMBER,
             MessageType.REMOVE_CLASS_MEMBER,
             MessageType.LIST_CLASS_MEMBERS,
+            MessageType.LIST_UNENROLLED_STUDENTS,
             MessageType.LIST_MY_CLASSES
         );
     }
@@ -44,7 +46,7 @@ public final class ClassHandler implements CommandHandler {
             throw new IllegalArgumentException("Unsupported class command");
         }
         return switch (type) {
-            case CREATE_CLASS, DELETE_CLASS, ADD_CLASS_MEMBER, REMOVE_CLASS_MEMBER -> Set.of(Role.ADMIN);
+            case CREATE_CLASS, DELETE_CLASS, ADD_CLASS_MEMBER, REMOVE_CLASS_MEMBER, LIST_UNENROLLED_STUDENTS -> Set.of(Role.ADMIN);
             case LIST_MY_CLASSES -> Set.of(Role.STUDENT);
             default -> Set.of(Role.TEACHER, Role.ADMIN);
         };
@@ -65,6 +67,10 @@ public final class ClassHandler implements CommandHandler {
             case LIST_CLASSES -> {
                 HandlerPayload.absent(request);
                 yield Response.success(request.requestId(), classService.listClasses(authSession));
+            }
+            case LIST_UNENROLLED_STUDENTS -> {
+                HandlerPayload.absent(request);
+                yield Response.success(request.requestId(), DtoMapper.accounts(classService.listUnenrolledStudents(authSession)));
             }
             case LIST_MY_CLASSES -> {
                 HandlerPayload.absent(request);

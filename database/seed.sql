@@ -61,17 +61,17 @@ VALUES
 ('TOEIC-650', 'TOEIC Intensive 650+ Target', 2);
 
 -- 5. Insert Class Members (Enrollments)
--- Class 1 (ENG-B1-01): student01 -> student25 (id 4 -> 28)
+-- Class 1 (ENG-B1-01): student01 -> student20 (id 4 -> 23)
 INSERT INTO class_members (class_id, student_id)
-SELECT 1, id FROM users WHERE role = 'STUDENT' AND id BETWEEN 4 AND 28;
+SELECT 1, id FROM users WHERE role = 'STUDENT' AND id BETWEEN 4 AND 23;
 
--- Class 2 (ENG-B2-01): student26 -> student50 (id 29 -> 53)
+-- Class 2 (ENG-B2-01): student21 -> student40 (id 24 -> 43)
 INSERT INTO class_members (class_id, student_id)
-SELECT 2, id FROM users WHERE role = 'STUDENT' AND id BETWEEN 29 AND 53;
+SELECT 2, id FROM users WHERE role = 'STUDENT' AND id BETWEEN 24 AND 43;
 
--- Class 3 (TOEIC-650): student01 -> student20 (id 4 -> 23)
+-- Class 3 (TOEIC-650): student41 -> student50 (id 44 -> 53)
 INSERT INTO class_members (class_id, student_id)
-SELECT 3, id FROM users WHERE role = 'STUDENT' AND id BETWEEN 4 AND 23;
+SELECT 3, id FROM users WHERE role = 'STUDENT' AND id BETWEEN 44 AND 53;
 
 -- 6. Insert Questions (>= 30 questions)
 -- Grammar Questions (1-10)

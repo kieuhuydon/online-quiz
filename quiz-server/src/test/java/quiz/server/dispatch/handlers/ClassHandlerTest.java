@@ -36,6 +36,7 @@ class ClassHandlerTest {
         assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(MessageType.DELETE_CLASS));
         assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.LIST_CLASSES));
         assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(MessageType.ADD_CLASS_MEMBER));
+        assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(MessageType.LIST_UNENROLLED_STUDENTS));
     }
 
     @Test
@@ -85,5 +86,23 @@ class ClassHandlerTest {
         assertTrue(res.success());
         assertNull(res.payload());
         verify(classService).addClassMember(10, 5, teacherSession);
+    }
+
+    @Test void candidatesReturnSafeAccountDtosAndRejectPayloads() {
+        var admin = new UserSession(1, Role.ADMIN, "admin");
+        var student = quiz.server.domain.User.restore(5, "student", "private-hash", "Student", null,
+            Role.STUDENT, true, 1L, Instant.now());
+        when(classService.listUnenrolledStudents(admin)).thenReturn(List.of(student));
+        var response = handler.handle(new Request(9, MessageType.LIST_UNENROLLED_STUDENTS, "token", null), admin);
+        assertTrue(response.success());
+        assertEquals(9, response.requestId());
+        var rows = assertInstanceOf(ArrayList.class, response.payload());
+        assertEquals(1, rows.size());
+        assertInstanceOf(quiz.common.dto.AccountDto.class, rows.getFirst());
+        assertFalse(rows.getFirst().toString().contains("private-hash"));
+        var error = assertThrows(quiz.server.exception.QuizException.class, () -> handler.handle(
+            new Request(10, MessageType.LIST_UNENROLLED_STUDENTS, "token", 1L), admin));
+        assertEquals(quiz.common.protocol.ErrorCode.INVALID_REQUEST, error.getErrorCode());
+        verify(classService, times(1)).listUnenrolledStudents(admin);
     }
 }

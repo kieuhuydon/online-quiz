@@ -123,7 +123,7 @@ class ClassServiceTest {
         Classroom classroom = Classroom.restore(10, "ENG-B1-01", "Desc", 2, now);
         when(classRepo.findById(10)).thenReturn(Optional.of(classroom));
         when(userRepo.findById(5)).thenReturn(Optional.of(User.restore(5, "student01", "hash", "Student 01", "s1@quiz.center", Role.STUDENT, true, 1L, now)));
-        when(classRepo.isMember(10, 5)).thenReturn(false);
+        when(classRepo.findClassIdsForStudent(5)).thenReturn(List.of());
 
         service.addClassMember(10, 5, adminSession);
         verify(classRepo).addMember(10, 5);
@@ -146,5 +146,26 @@ class ClassServiceTest {
         when(classRepo.findById(10)).thenReturn(Optional.of(classroom));
 
         assertThrows(ForbiddenException.class, () -> service.addClassMember(10, 5, otherSession));
+    }
+
+    @Test void rejectsStudentsAlreadyInThisOrAnotherClass() {
+        when(classRepo.findById(10)).thenReturn(Optional.of(Classroom.restore(10, "Class", null, 2, Instant.now())));
+        when(userRepo.findById(5)).thenReturn(Optional.of(User.restore(5, "student", "hash", "Student", null,
+            Role.STUDENT, true, 1L, Instant.now())));
+        for (long existing : new long[]{10, 11}) {
+            when(classRepo.findClassIdsForStudent(5)).thenReturn(List.of(existing));
+            var error = assertThrows(ConflictException.class, () -> service.addClassMember(10, 5, adminSession));
+            assertEquals(quiz.common.protocol.ErrorCode.STUDENT_ALREADY_ENROLLED, error.getErrorCode());
+        }
+        verify(classRepo, never()).addMember(anyLong(), anyLong());
+    }
+
+    @Test void candidatesRequireAdminAndUseRepositoryFilter() {
+        var student = User.restore(5, "student", "hash", "Student", null, Role.STUDENT, true, 1L, Instant.now());
+        when(userRepo.findUnenrolledStudents()).thenReturn(List.of(student));
+        assertEquals(List.of(student), service.listUnenrolledStudents(adminSession));
+        assertThrows(ForbiddenException.class, () -> service.listUnenrolledStudents(teacherSession));
+        assertThrows(quiz.server.exception.UnauthorizedException.class, () -> service.listUnenrolledStudents(null));
+        verify(userRepo, times(1)).findUnenrolledStudents();
     }
 }

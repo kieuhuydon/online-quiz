@@ -63,8 +63,9 @@ class ClientUiIT {
             assertEquals(1, ((TableView<?>) stage.getScene().lookup("#classes")).getItems().size());
             return null;
         });
-        var members = peer.read();
-        assertEquals(MessageType.LIST_CLASS_MEMBERS, members.type());
+        var pendingLists = List.of(peer.read(), peer.read());
+        assertEquals(java.util.Set.of(MessageType.LIST_CLASS_MEMBERS, MessageType.LIST_UNENROLLED_STUDENTS),
+            pendingLists.stream().map(Request::type).collect(java.util.stream.Collectors.toSet()));
         var request = peer.read();
         assertEquals(MessageType.DELETE_CLASS, request.type());
         assertEquals(10L, request.payload());
@@ -72,8 +73,11 @@ class ClientUiIT {
         peer.success(request, null);
         awaitClassControl("refresh");
         // A late member response must not repopulate the deleted class.
-        peer.success(members, new java.util.ArrayList<>(List.of(
-            new quiz.common.dto.ClassMemberDto(10, 3, "student", "Student", Instant.now()))));
+        for (var pending : pendingLists) {
+            peer.success(pending, pending.type() == MessageType.LIST_CLASS_MEMBERS
+                ? new java.util.ArrayList<>(List.of(new quiz.common.dto.ClassMemberDto(10, 3, "student", "Student", Instant.now())))
+                : new java.util.ArrayList<>(List.of(account(3, Role.STUDENT, true))));
+        }
         var barrier = api.listClasses();
         peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassDto>());
         barrier.get(3, TimeUnit.SECONDS);
@@ -123,9 +127,7 @@ class ClientUiIT {
             ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().select(0);
             return null;
         });
-        var members = peer.read();
-        assertEquals(MessageType.LIST_CLASS_MEMBERS, members.type());
-        peer.success(members, new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        respondClassLists(peer, List.of(), List.of(account(3, Role.STUDENT, true)));
         awaitClassControl("selectAllStudents");
         return peer;
     }
@@ -147,7 +149,8 @@ class ClientUiIT {
         for (int i = 0; i < 2; i++) {
             var request = peer.read();
             peer.success(request, request.type() == MessageType.LIST_ACCOUNTS
-                ? new java.util.ArrayList<>(List.of(teacher, student, account(4, Role.STUDENT, true), account(5, Role.STUDENT, true)))
+                ? new java.util.ArrayList<>(List.of(teacher, student, account(4, Role.STUDENT, true),
+                    account(5, Role.STUDENT, true), account(6, Role.STUDENT, true)))
                 : new java.util.ArrayList<quiz.common.dto.ClassDto>());
         }
         awaitClassControl("createClass");
@@ -161,7 +164,7 @@ class ClientUiIT {
         assertEquals(new quiz.common.dto.CreateClassDto("ENG-ADMIN", "", 2), request.payload());
         var classroom = new quiz.common.dto.ClassDto(10, "ENG-ADMIN", null, 2, "Teacher", Instant.now());
         peer.success(request, classroom);
-        peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        respondClassLists(peer, List.of(), List.of(student, account(4, Role.STUDENT, true), account(5, Role.STUDENT, true)));
         awaitClassControl("selectAllStudents");
         fx(() -> {
             button("selectAllStudents").fire();
@@ -175,14 +178,15 @@ class ClientUiIT {
         request = peer.read(); assertEquals(new quiz.common.dto.AddClassMemberDto(10, 4), request.payload());
         peer.send(Response.error(request.requestId(), ErrorCode.VALIDATION_ERROR, "hidden details"));
         request = peer.read(); assertEquals(new quiz.common.dto.AddClassMemberDto(10, 5), request.payload());
-        peer.send(Response.error(request.requestId(), ErrorCode.CONFLICT, "already enrolled"));
-        peer.success(peer.read(), new java.util.ArrayList<>(List.of(
-            new quiz.common.dto.ClassMemberDto(10, 3, "student3", "Student 3", Instant.now()),
-            new quiz.common.dto.ClassMemberDto(10, 5, "student5", "Student 5", Instant.now()))));
+        peer.send(Response.error(request.requestId(), ErrorCode.STUDENT_ALREADY_ENROLLED, "already in another class"));
+        respondClassLists(peer, List.of(new quiz.common.dto.ClassMemberDto(10, 3, "student3", "Student 3", Instant.now())),
+            List.of(account(4, Role.STUDENT, true)));
         awaitClassControl("selectAllStudents");
         fx(() -> {
             assertTrue(label("notice").getText().contains("1/3"));
             assertTrue(label("notice").getText().contains("1 học viên đã có"));
+            assertFalse(label("notice").getText().contains("đã có trong lớp"), "A conflict may belong to another class");
+            assertEquals(1, ((TableView<?>) stage.getScene().lookup("#members")).getItems().size());
             var candidates = (TableView<AccountDto>) stage.getScene().lookup("#students");
             assertEquals(List.of(4L), candidates.getItems().stream().map(AccountDto::id).toList());
             assertEquals("Đã chọn 1 học viên", label("selectedCount").getText());
@@ -198,7 +202,31 @@ class ClientUiIT {
             button("removeMember").fire(); return null;
         });
         request = peer.read(); assertEquals(MessageType.REMOVE_CLASS_MEMBER, request.type());
-        peer.success(request, null); peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        peer.success(request, null);
+        respondClassLists(peer, List.of(), List.of(student, account(4, Role.STUDENT, true)));
+        awaitClassControl("selectAllStudents");
+        fx(() -> {
+            assertEquals(2, ((TableView<?>) stage.getScene().lookup("#students")).getItems().size(),
+                "Removing a student makes them available again");
+            return null;
+        });
+    }
+
+    private void respondClassLists(SocketFixture.Peer peer, List<quiz.common.dto.ClassMemberDto> members,
+                                   List<AccountDto> candidates) throws Exception {
+        var seen = java.util.EnumSet.noneOf(MessageType.class);
+        for (int i = 0; i < 2; i++) {
+            var request = peer.read();
+            assertTrue(seen.add(request.type()), "Each class list must be requested once");
+            switch (request.type()) {
+                case LIST_CLASS_MEMBERS -> peer.success(request, new java.util.ArrayList<>(members));
+                case LIST_UNENROLLED_STUDENTS -> {
+                    assertNull(request.payload());
+                    peer.success(request, new java.util.ArrayList<>(candidates));
+                }
+                default -> fail("Unexpected request: " + request.type());
+            }
+        }
     }
 
     private void awaitClassControl(String id) throws Exception {
@@ -219,15 +247,13 @@ class ClientUiIT {
         }
         awaitClassControl("refresh");
         fx(() -> { ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().select(0); return null; });
-        peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        respondClassLists(peer, List.of(), List.of(account(3, Role.STUDENT, true), account(4, Role.STUDENT, true)));
         awaitClassControl("selectAllStudents");
         fx(() -> { button("selectAllStudents").fire(); button("addMember").fire(); return null; });
         var request = peer.read();
         assertEquals(new quiz.common.dto.AddClassMemberDto(10, 3), request.payload());
         peer.send(Response.error(request.requestId(), ErrorCode.SERVER_BUSY, "busy"));
-        var reload = peer.read();
-        assertEquals(MessageType.LIST_CLASS_MEMBERS, reload.type(), "Do not send further additions or retry on failure");
-        peer.success(reload, new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        respondClassLists(peer, List.of(), List.of(account(3, Role.STUDENT, true), account(4, Role.STUDENT, true)));
         awaitClassControl("selectAllStudents");
         fx(() -> {
             assertTrue(label("notice").getText().contains("0/2"));

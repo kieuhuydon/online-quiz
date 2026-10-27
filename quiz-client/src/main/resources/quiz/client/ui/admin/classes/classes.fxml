@@ -28,7 +28,7 @@
         </HBox>
         <TableView fx:id="members" minHeight="280" prefHeight="320"/>
         <Label text="Chọn học viên để thêm vào lớp" styleClass="section-heading"/>
-        <Label text="Đánh dấu các học viên cần thêm; có thể chọn nhiều người cùng lúc." styleClass="muted" wrapText="true"/>
+        <Label text="Chỉ hiển thị học viên đang hoạt động và chưa có lớp. Mỗi học viên thuộc tối đa một lớp; muốn chuyển lớp, hãy xóa khỏi lớp cũ trước." styleClass="muted" wrapText="true" minHeight="-Infinity"/>
         <FlowPane hgap="10" vgap="8" alignment="CENTER_LEFT">
             <Button fx:id="selectAllStudents" text="Chọn tất cả" onAction="#selectAll" styleClass="secondary-button"/>
             <Button fx:id="clearStudents" text="Bỏ chọn" onAction="#clearSelection" styleClass="secondary-button"/>

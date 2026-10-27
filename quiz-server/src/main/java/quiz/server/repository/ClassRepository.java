@@ -49,7 +49,7 @@ public interface ClassRepository {
     /**
      * Adds a student to a class.
      *
-     * @throws ConflictException if student is already in the class
+     * @throws ConflictException with STUDENT_ALREADY_ENROLLED if the student already has any class
      */
     void addMember(long classId, long studentId);
 
