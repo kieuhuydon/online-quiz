@@ -64,7 +64,7 @@
   - `AttemptStatus`: `IN_PROGRESS, SUBMITTED`.
   - `Difficulty`: `EASY, MEDIUM, HARD`.
   - `SubmitReason`: `MANUAL, TIMEOUT, ANTICHEAT`.
-  - `AntiCheatEventType`: `FOCUS_LOST, COPY_ATTEMPT, PASTE_ATTEMPT, CUT_ATTEMPT, CONTEXT_MENU_ATTEMPT`.
+  - `AntiCheatEventType`: `FOCUS_LOST, COPY_ATTEMPT, PASTE_ATTEMPT, CUT_ATTEMPT, CONTEXT_MENU_ATTEMPT, PROHIBITED_PROCESS`.
   - `AntiCheatPolicyType`: `LOG_ONLY, WARN_THEN_AUTO_SUBMIT`.
 * [x] **Task 2.2: Giao thức Envelope (`quiz.common.protocol`)**
   - `MessageType`: 36 loại thông điệp giao tiếp giữa client và server.

@@ -5,14 +5,51 @@ import javafx.scene.control.Label;
 import quiz.client.api.QuizApi;
 import quiz.client.ui.*;
 import quiz.common.dto.ResultDto;
+import quiz.common.enums.SubmitReason;
+
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 public final class ResultController extends ScreenController {
-    private final QuizApi api; private final SceneNavigator navigator; private final ResultDto result;
-    @FXML private Label quizTitle,score,correct,outcome,submitted,reason;
-    public ResultController(QuizApi api,SceneNavigator navigator,ResultDto result){this.api=api;this.navigator=navigator;this.result=result;}
-    @FXML private void initialize(){quizTitle.setText(result.quizTitle());score.setText(String.format("%.2f / 10",result.score()));correct.setText(result.correctCount()+" / "+result.totalQuestions());outcome.setText(result.passed()?"ĐẠT":"CHƯA ĐẠT");submitted.setText(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss").withZone(ZoneId.systemDefault()).format(result.submittedAt()));reason.setText(switch(result.submitReason()){case MANUAL->"Tự nộp";case TIMEOUT->"Hết giờ";case ANTICHEAT->"Vi phạm quy định";});}
-    @FXML private void history(){navigator.show(Screen.STUDENT_HISTORY);}
-    @FXML private void home(){navigator.show(Screen.STUDENT_DASHBOARD);}
+    private final QuizApi api;
+    private final SceneNavigator navigator;
+    private final ResultDto result;
+
+    @FXML private Label quizTitle, score, correct, outcome, submitted, reason;
+
+    public ResultController(QuizApi api, SceneNavigator navigator, ResultDto result) {
+        this.api = api;
+        this.navigator = navigator;
+        this.result = result;
+    }
+
+    @FXML
+    private void initialize() {
+        quizTitle.setText(result.quizTitle());
+        score.setText(String.format("%.2f / 10", result.score()));
+        correct.setText(result.correctCount() + " / " + result.totalQuestions());
+        outcome.setText(result.passed() ? "ĐẠT" : "CHƯA ĐẠT");
+        submitted.setText(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")
+            .withZone(ZoneId.systemDefault())
+            .format(result.submittedAt()));
+
+        if (result.submitReason() == SubmitReason.ANTICHEAT) {
+            reason.setText("Vi phạm quy chế thi (Buộc nộp sớm)");
+            reason.setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
+        } else if (result.submitReason() == SubmitReason.TIMEOUT) {
+            reason.setText("Hết giờ làm bài");
+        } else {
+            reason.setText("Tự nộp bài");
+        }
+    }
+
+    @FXML
+    private void history() {
+        navigator.show(Screen.STUDENT_HISTORY);
+    }
+
+    @FXML
+    private void home() {
+        navigator.show(Screen.STUDENT_DASHBOARD);
+    }
 }

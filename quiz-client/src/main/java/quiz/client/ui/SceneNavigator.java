@@ -79,7 +79,8 @@ public final class SceneNavigator implements AutoCloseable {
     }
 
     public void showExam(quiz.common.dto.AttemptStateDto attempt) { activeAttempt = Objects.requireNonNull(attempt); navigate(Screen.STUDENT_EXAM, ""); }
-    public void showResult(quiz.common.dto.ResultDto result) { activeResult = Objects.requireNonNull(result); navigate(Screen.STUDENT_RESULT, ""); }
+    public void showResult(quiz.common.dto.ResultDto result) { showResult(result, ""); }
+    public void showResult(quiz.common.dto.ResultDto result, String notice) { activeResult = Objects.requireNonNull(result); navigate(Screen.STUDENT_RESULT, notice == null ? "" : notice); }
 
     public void showLogin(String notice) {
         navigate(Screen.LOGIN, notice == null ? "" : notice);

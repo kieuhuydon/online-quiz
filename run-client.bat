@@ -5,7 +5,7 @@ echo =============================================
 cd /d "%~dp0"
 
 echo Dang bien dich quiz-client...
-call .\mvnw.cmd compile -pl quiz-client -am
+call .\mvnw.cmd install -DskipTests -pl quiz-client -am
 
 echo Dang khoi dong ung dung Client...
 call .\mvnw.cmd javafx:run -pl quiz-client

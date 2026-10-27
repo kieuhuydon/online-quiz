@@ -131,7 +131,7 @@ CREATE TABLE anticheat_events (
     id                    BIGSERIAL PRIMARY KEY,
     attempt_id            BIGINT NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
     event_type            VARCHAR(30) NOT NULL CHECK (event_type IN
-        ('FOCUS_LOST', 'COPY_ATTEMPT', 'PASTE_ATTEMPT', 'CUT_ATTEMPT', 'CONTEXT_MENU_ATTEMPT')),
+        ('FOCUS_LOST', 'COPY_ATTEMPT', 'PASTE_ATTEMPT', 'CUT_ATTEMPT', 'CONTEXT_MENU_ATTEMPT', 'PROHIBITED_PROCESS')),
     detail                VARCHAR(255),
     client_time           TIMESTAMPTZ,
     server_time           TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -5,7 +5,7 @@ echo =============================================
 cd /d "%~dp0"
 
 echo Dang bien dich quiz-server...
-call .\mvnw.cmd compile -pl quiz-server -am
+call .\mvnw.cmd install -DskipTests -pl quiz-server -am
 
 echo Dang khoi dong Server...
 call .\mvnw.cmd exec:java -pl quiz-server
