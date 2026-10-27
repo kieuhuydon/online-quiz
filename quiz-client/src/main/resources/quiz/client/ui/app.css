@@ -431,6 +431,15 @@
     -fx-background-color: #b45309;
 }
 
+.danger-button {
+    -fx-background-color: #dc2626;
+    -fx-text-fill: white;
+}
+
+.danger-button:hover {
+    -fx-background-color: #b91c1c;
+}
+
 /* --- Tabs --- */
 .tab-pane .tab-header-area .tab-header-background {
     -fx-background-color: transparent;

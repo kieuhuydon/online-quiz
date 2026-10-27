@@ -17,6 +17,8 @@ public final class WorkspaceController extends ScreenController {
     @FXML private Label notice;
     @FXML private StackPane content;
     @FXML private javafx.scene.layout.VBox adminNavigation;
+    @FXML private javafx.scene.layout.VBox teacherNavigation;
+    @FXML private javafx.scene.control.Button teacherDashboard, teacherQuestions;
 
     public WorkspaceController(SceneNavigator navigator) {
         this.navigator = navigator;
@@ -32,6 +34,12 @@ public final class WorkspaceController extends ScreenController {
         adminClasses.pseudoClassStateChanged(current, route == Screen.ADMIN_CLASSES);
         adminNavigation.setVisible(session.role() == quiz.common.enums.Role.ADMIN);
         adminNavigation.setManaged(session.role() == quiz.common.enums.Role.ADMIN);
+        boolean isTeacher = session.role() == quiz.common.enums.Role.TEACHER
+            || session.role() == quiz.common.enums.Role.ADMIN;
+        teacherNavigation.setVisible(isTeacher);
+        teacherNavigation.setManaged(isTeacher);
+        teacherDashboard.pseudoClassStateChanged(current, route == Screen.TEACHER_DASHBOARD);
+        teacherQuestions.pseudoClassStateChanged(current, route == Screen.TEACHER_QUESTIONS);
         notice.setText(message);
         notice.setVisible(!message.isBlank());
         notice.setManaged(!message.isBlank());
@@ -47,4 +55,6 @@ public final class WorkspaceController extends ScreenController {
 
     @FXML private void accounts() { if (isActive()) navigator.show(Screen.ADMIN_ACCOUNTS); }
     @FXML private void classes() { if (isActive()) navigator.show(Screen.ADMIN_CLASSES); }
+    @FXML private void teacherDashboard() { if (isActive()) navigator.show(Screen.TEACHER_DASHBOARD); }
+    @FXML private void teacherQuestions() { if (isActive()) navigator.show(Screen.TEACHER_QUESTIONS); }
 }

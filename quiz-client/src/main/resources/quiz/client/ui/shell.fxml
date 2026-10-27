@@ -11,6 +11,10 @@
                 <Button fx:id="adminAccounts" text="Quản lí tài khoản" onAction="#accounts" styleClass="sidebar-navigation-button" maxWidth="Infinity"/>
                 <Button fx:id="adminClasses" text="Quản lí lớp học" onAction="#classes" styleClass="sidebar-navigation-button" maxWidth="Infinity"/>
             </VBox>
+            <VBox fx:id="teacherNavigation" spacing="8" visible="false" managed="false">
+                <Button fx:id="teacherDashboard" text="Không gian giảng dạy" onAction="#teacherDashboard" styleClass="sidebar-navigation-button" maxWidth="Infinity"/>
+                <Button fx:id="teacherQuestions" text="Ngân hàng câu hỏi" onAction="#teacherQuestions" styleClass="sidebar-navigation-button" maxWidth="Infinity"/>
+            </VBox>
             <Region VBox.vgrow="ALWAYS"/>
             <Separator/>
             <VBox spacing="6">
