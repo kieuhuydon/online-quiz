@@ -29,7 +29,7 @@
             <VBox spacing="14" prefWidth="320" minWidth="260" styleClass="content-card">
                 <Label text="Danh sách câu hỏi" styleClass="card-heading"/>
                 <ScrollPane fitToWidth="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent; -fx-background: transparent;">
-                    <content><GridPane fx:id="reviewGrid" hgap="8" vgap="8"/></content>
+                    <content><TilePane fx:id="reviewGrid" hgap="8" vgap="8" prefTileWidth="48" prefTileHeight="42" alignment="TOP_LEFT" maxWidth="Infinity"/></content>
                 </ScrollPane>
                 <Separator/>
                 <Button fx:id="submit" text="Nộp bài" onAction="#manualSubmit" styleClass="primary-button" maxWidth="Infinity"/>

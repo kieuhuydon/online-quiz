@@ -47,6 +47,7 @@ public final class TeacherController extends ScreenController {
 
     // --- Tab 1: Quiz Controls ---
     @FXML private ScrollPane quizScrollPane;
+    @FXML private VBox quizOverview;
     @FXML private TableView<QuizDto> quizTable;
     @FXML private Label totalQuizzesCount;
     @FXML private Label openQuizzesCount;
@@ -63,7 +64,6 @@ public final class TeacherController extends ScreenController {
     @FXML private Button btnCloseQuiz;
     @FXML private Button btnAssignQuiz;
     @FXML private Button btnViewDetail;
-    @FXML private Button btnViewResults;
     @FXML private Button btnRefreshQuiz;
 
     // Quiz Form (Manual Create / Edit)
@@ -94,9 +94,9 @@ public final class TeacherController extends ScreenController {
     @FXML private TextField txtAutoQuizPassScore;
     @FXML private ComboBox<AntiCheatPolicyType> cmbAutoQuizPolicy;
     @FXML private TextField txtAutoQuizMaxViolations;
-    @FXML private Slider sliderEasy;
-    @FXML private Slider sliderMedium;
-    @FXML private Slider sliderHard;
+    @FXML private TextField txtEasyPct;
+    @FXML private TextField txtMediumPct;
+    @FXML private TextField txtHardPct;
     @FXML private Label lblEasyPercent;
     @FXML private Label lblMediumPercent;
     @FXML private Label lblHardPercent;
@@ -148,18 +148,6 @@ public final class TeacherController extends ScreenController {
     @FXML private TableView<QuestionDto> pickerTable;
     @FXML private Button btnConfirmPicker;
 
-    // Exam Results Panel (Feature 5)
-    @FXML private VBox quizResultsPanel;
-    @FXML private Label lblResultsQuizTitle;
-    @FXML private Label lblResultsStatusBadge;
-    @FXML private Label lblResultsQuizInfo;
-    @FXML private Label lblResultsTotalSubmissions;
-    @FXML private Label lblResultsAverageScore;
-    @FXML private Label lblResultsPassRate;
-    @FXML private Label lblResultsHighestScore;
-    @FXML private Label resultsNotice;
-    @FXML private TableView<ResultDto> resultsTable;
-
     // --- Tab 2: Class Controls ---
     @FXML private ScrollPane classScrollPane;
     @FXML private TableView<ClassDto> classTable;
@@ -177,6 +165,9 @@ public final class TeacherController extends ScreenController {
     @FXML private Label classResultsAverage;
     @FXML private Label classResultsPassRate;
     @FXML private Label classResultsHighest;
+    @FXML private Label classResultsQuizTitle;
+    @FXML private Label classResultsStatusBadge;
+    @FXML private Label classResultsQuizInfo;
     @FXML private TableView<ResultDto> classResultsTable;
 
     // Observable Lists & State
@@ -187,7 +178,6 @@ public final class TeacherController extends ScreenController {
     private final ObservableList<AssignClassRow> assignClassRows = FXCollections.observableArrayList();
     private final ObservableList<DetailQuestionRow> detailQuestionRows = FXCollections.observableArrayList();
     private final ObservableList<QuestionDto> pickerQuestionRows = FXCollections.observableArrayList();
-    private final ObservableList<ResultDto> resultsList = FXCollections.observableArrayList();
     private final ObservableList<ResultDto> classResultsList = FXCollections.observableArrayList();
     private List<ResultDto> allClassResults = List.of();
 
@@ -205,6 +195,7 @@ public final class TeacherController extends ScreenController {
 
     @FXML
     private void initialize() {
+        btnRefreshClasses.setTooltip(new Tooltip("Tải lại danh sách lớp và học viên"));
         configureQuizTable();
         configureClassTable();
         configureMemberTable();
@@ -212,7 +203,6 @@ public final class TeacherController extends ScreenController {
         configureAssignClassTable();
         configureDetailQuestionTable();
         configurePickerTable();
-        configureResultsTable();
         configureClassResultsWorkspace();
 
         // 1. Format Chính sách vi phạm (cmbQuizPolicy & cmbAutoQuizPolicy)
@@ -239,10 +229,9 @@ public final class TeacherController extends ScreenController {
         setupDurationValidation(txtQuizDuration, lblDurationError);
         setupDurationValidation(txtAutoQuizDuration, lblAutoDurationError);
 
-        // 4. Feature 1: Listeners cho thanh trượt tỷ lệ độ khó tạo đề tự động
-        sliderEasy.valueProperty().addListener((obs, o, n) -> updateAutoDistribution());
-        sliderMedium.valueProperty().addListener((obs, o, n) -> updateAutoDistribution());
-        sliderHard.valueProperty().addListener((obs, o, n) -> updateAutoDistribution());
+        // 4. Feature 1: Listeners cho TextField tỷ lệ độ khó - Hard tự tính = 100 - Easy - Medium
+        txtEasyPct.textProperty().addListener((obs, o, n) -> updateAutoDistribution());
+        txtMediumPct.textProperty().addListener((obs, o, n) -> updateAutoDistribution());
         txtAutoTotalQuestions.textProperty().addListener((obs, o, n) -> updateAutoDistribution());
 
         quizTable.getSelectionModel().selectedItemProperty().addListener((obs, oldV, selected) -> updateQuizButtons(selected));
@@ -388,7 +377,6 @@ public final class TeacherController extends ScreenController {
         btnCloseQuiz.setDisable(!hasSel || selected.status() != QuizStatus.OPEN);
         btnAssignQuiz.setDisable(!hasSel);
         btnViewDetail.setDisable(!hasSel);
-        btnViewResults.setDisable(!hasSel);
     }
 
     @FXML
@@ -433,9 +421,9 @@ public final class TeacherController extends ScreenController {
         txtAutoQuizMaxViolations.setText("3");
         cmbAutoQuizPolicy.setValue(AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT);
 
-        sliderEasy.setValue(30);
-        sliderMedium.setValue(30);
-        sliderHard.setValue(40);
+        txtEasyPct.setText("30");
+        txtMediumPct.setText("30");
+        // Hard tự tính = 40 (100 - 30 - 30), không cần set thủ công
         updateAutoDistribution();
 
         autoQuizError.setVisible(false);
@@ -447,66 +435,110 @@ public final class TeacherController extends ScreenController {
 
     @FXML
     private void onPreset1Click() {
-        sliderEasy.setValue(30);
-        sliderMedium.setValue(30);
-        sliderHard.setValue(40);
-        updateAutoDistribution();
+        txtEasyPct.setText("30");
+        txtMediumPct.setText("30");
+        // Hard = 40 tự tính
     }
 
     @FXML
     private void onPreset2Click() {
-        sliderEasy.setValue(40);
-        sliderMedium.setValue(40);
-        sliderHard.setValue(20);
-        updateAutoDistribution();
+        txtEasyPct.setText("40");
+        txtMediumPct.setText("40");
+        // Hard = 20 tự tính
     }
 
     @FXML
     private void onPreset3Click() {
-        sliderEasy.setValue(20);
-        sliderMedium.setValue(50);
-        sliderHard.setValue(30);
-        updateAutoDistribution();
+        txtEasyPct.setText("20");
+        txtMediumPct.setText("50");
+        // Hard = 30 tự tính
     }
 
     @FXML
     private void onPreset4Click() {
-        sliderEasy.setValue(50);
-        sliderMedium.setValue(30);
-        sliderHard.setValue(20);
-        updateAutoDistribution();
+        txtEasyPct.setText("50");
+        txtMediumPct.setText("30");
+        // Hard = 20 tự tính
     }
 
     private void updateAutoDistribution() {
         int totalQuestions = parsePositiveInt(txtAutoTotalQuestions != null ? txtAutoTotalQuestions.getText() : "30", 30);
-        int easyPct = (int) Math.round(sliderEasy.getValue());
-        int medPct = (int) Math.round(sliderMedium.getValue());
-        int hardPct = (int) Math.round(sliderHard.getValue());
-        int totalPct = easyPct + medPct + hardPct;
 
+        // Đọc Easy và Medium từ TextField; Hard = 100 - Easy - Medium (tự tính)
+        String easyRaw = txtEasyPct != null ? txtEasyPct.getText().trim() : "30";
+        String medRaw  = txtMediumPct != null ? txtMediumPct.getText().trim() : "30";
+
+        boolean easyValid  = easyRaw.matches("\\d+");
+        boolean medValid   = medRaw.matches("\\d+");
+
+        int easyPct = easyValid ? Integer.parseInt(easyRaw) : -1;
+        int medPct  = medValid  ? Integer.parseInt(medRaw)  : -1;
+
+        // Highlight lỗi nhập chữ cho Easy
+        if (txtEasyPct != null) {
+            txtEasyPct.setStyle(easyValid ? "" : "-fx-border-color: #dc2626; -fx-border-width: 1.5px; -fx-border-radius: 6;");
+        }
+        // Highlight lỗi nhập chữ cho Medium
+        if (txtMediumPct != null) {
+            txtMediumPct.setStyle(medValid ? "" : "-fx-border-color: #dc2626; -fx-border-width: 1.5px; -fx-border-radius: 6;");
+        }
+
+        if (!easyValid || !medValid) {
+            // Còn đang gõ hoặc sai định dạng, chưa tính
+            if (lblAutoPercentageError != null) {
+                lblAutoPercentageError.setText("⚠️ Vui lòng nhập số nguyên (0–100) cho Easy và Medium.");
+                lblAutoPercentageError.setVisible(true);
+                lblAutoPercentageError.setManaged(true);
+            }
+            if (lblAutoDistributionSummary != null) {
+                lblAutoDistributionSummary.setStyle("-fx-font-weight: bold; -fx-text-fill: #dc2626;");
+            }
+            return;
+        }
+
+        // Hard tự tính, clamp về [0, 100]
+        int hardPct = Math.max(0, Math.min(100, 100 - easyPct - medPct));
+        int totalPct = easyPct + medPct + hardPct; // luôn = 100 trừ khi Easy+Medium > 100
+
+        // Cập nhật ô Hard (read-only)
+        if (txtHardPct != null) txtHardPct.setText(String.valueOf(hardPct));
+
+        // Tính số câu
         int easyCount = (int) Math.round(totalQuestions * (easyPct / 100.0));
-        int medCount = (int) Math.round(totalQuestions * (medPct / 100.0));
+        int medCount  = (int) Math.round(totalQuestions * (medPct  / 100.0));
         int hardCount = Math.max(0, totalQuestions - easyCount - medCount);
 
-        lblEasyPercent.setText(easyPct + "% (" + easyCount + " câu)");
-        lblMediumPercent.setText(medPct + "% (" + medCount + " câu)");
-        lblHardPercent.setText(hardPct + "% (" + hardCount + " câu)");
+        // Cập nhật labels tỷ lệ %
+        if (lblEasyPercent   != null) lblEasyPercent.setText(easyPct + "%");
+        if (lblMediumPercent != null) lblMediumPercent.setText(medPct + "%");
+        if (lblHardPercent   != null) lblHardPercent.setText(hardPct + "%");
 
-        lblEasyCount.setText(easyCount + " câu");
-        lblMediumCount.setText(medCount + " câu");
-        lblHardCount.setText(hardCount + " câu");
+        // Cập nhật labels số câu
+        if (lblEasyCount   != null) lblEasyCount.setText("→ " + easyCount + " câu");
+        if (lblMediumCount != null) lblMediumCount.setText("→ " + medCount + " câu");
+        if (lblHardCount   != null) lblHardCount.setText("→ " + hardCount + " câu");
 
-        lblAutoDistributionSummary.setText(String.format("Phân bổ: %d Dễ (%d%%) + %d Vừa (%d%%) + %d Khó (%d%%) = %d câu hỏi (Tổng: %d%%)",
-            easyCount, easyPct, medCount, medPct, hardCount, hardPct, totalQuestions, totalPct));
+        // Validation: Easy + Medium không được > 100
+        boolean overLimit = (easyPct + medPct > 100);
 
-        boolean valid100 = (totalPct == 100);
-        lblAutoPercentageError.setVisible(!valid100);
-        lblAutoPercentageError.setManaged(!valid100);
-        if (!valid100) {
-            lblAutoPercentageError.setText("⚠️ Tổng tỷ lệ hiện tại là " + totalPct + "%. Vui lòng điều chỉnh để tổng đúng 100%!");
-            lblAutoDistributionSummary.setStyle("-fx-font-weight: bold; -fx-text-fill: #dc2626;");
-        } else {
+        if (lblAutoPercentageError != null) {
+            lblAutoPercentageError.setVisible(overLimit);
+            lblAutoPercentageError.setManaged(overLimit);
+            if (overLimit) {
+                lblAutoPercentageError.setText("⚠️ Easy + Medium = " + (easyPct + medPct) + "% > 100%. Hãy giảm bớt!");
+            }
+        }
+
+        if (lblAutoDistributionSummary != null) {
+            lblAutoDistributionSummary.setText(String.format(
+                "Phân bổ: %d Dễ (%d%%) + %d Vừa (%d%%) + %d Khó (%d%%) = %d câu hỏi (Tổng: %d%%)",
+                easyCount, easyPct, medCount, medPct, hardCount, hardPct, totalQuestions, easyPct + medPct + hardPct));
+        }
+
+        if (!overLimit) {
             lblAutoDistributionSummary.setStyle("-fx-font-weight: bold; -fx-text-fill: #0f766e;");
+        } else {
+            lblAutoDistributionSummary.setStyle("-fx-font-weight: bold; -fx-text-fill: #dc2626;");
         }
     }
 
@@ -564,13 +596,20 @@ public final class TeacherController extends ScreenController {
             return;
         }
 
-        int easyPct = (int) Math.round(sliderEasy.getValue());
-        int medPct = (int) Math.round(sliderMedium.getValue());
-        int hardPct = (int) Math.round(sliderHard.getValue());
-        if (easyPct + medPct + hardPct != 100) {
-            showAutoQuizError("Tổng phần trăm độ khó phải bằng 100% (Hiện tại: " + (easyPct + medPct + hardPct) + "%)");
+        int easyPct;
+        int medPct;
+        try {
+            easyPct = Integer.parseInt(txtEasyPct.getText().trim());
+            medPct  = Integer.parseInt(txtMediumPct.getText().trim());
+        } catch (Exception e) {
+            showAutoQuizError("Tỷ lệ Easy và Medium phải là số nguyên (0–100).");
             return;
         }
+        if (easyPct < 0 || medPct < 0 || easyPct + medPct > 100) {
+            showAutoQuizError("Easy + Medium = " + (easyPct + medPct) + "% > 100%. Hãy điều chỉnh lại!");
+            return;
+        }
+        int hardPct = 100 - easyPct - medPct;
 
         int easyCount = (int) Math.round(totalQuestions * (easyPct / 100.0));
         int medCount = (int) Math.round(totalQuestions * (medPct / 100.0));
@@ -1015,12 +1054,10 @@ public final class TeacherController extends ScreenController {
         currentDetailQuizId = quizId;
         isDetailQuizDraft = (status == QuizStatus.DRAFT);
 
-        hideAllQuizPanels();
-        quizDetailPanel.setVisible(true);
-        quizDetailPanel.setManaged(true);
+        showQuizPanel(quizDetailPanel);
         questionPickerPanel.setVisible(false);
         questionPickerPanel.setManaged(false);
-        scrollToBottom();
+        scrollToTop();
 
         detailQuizTitle.setText("Chi tiết & Chỉnh sửa đề thi #" + quizId + ": " + quizTitle);
         detailStatusBadge.setText(status == QuizStatus.DRAFT ? "BẢN NHÁP (DRAFT)" : status.name());
@@ -1283,10 +1320,7 @@ public final class TeacherController extends ScreenController {
 
         targetQuizIdForAssign = sel.id();
         assignQuizTitle.setText("Giao đề thi #" + sel.id() + ": " + sel.title() + " cho Nhiều Lớp Học");
-        hideAllQuizPanels();
-        assignPanel.setVisible(true);
-        assignPanel.setManaged(true);
-        scrollToBottom();
+        showQuizPanel(assignPanel);
 
         setQuizLoading(true);
         // Tải chi tiết đề thi để biết các lớp nào đã được giao trước đó
@@ -1369,128 +1403,6 @@ public final class TeacherController extends ScreenController {
     }
 
     // =========================================================================
-    // FEATURE 5: KẾT QUẢ THI CỦA HỌC SINH (EXAM RESULTS)
-    // =========================================================================
-
-    private void configureResultsTable() {
-        TableColumn<ResultDto, String> colStt = new TableColumn<>("#");
-        colStt.setPrefWidth(45);
-        colStt.setCellValueFactory(r -> new SimpleStringProperty(String.valueOf(resultsList.indexOf(r.getValue()) + 1)));
-
-        TableColumn<ResultDto, String> colStudent = new TableColumn<>("Học sinh");
-        colStudent.setPrefWidth(180);
-        colStudent.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().studentName()));
-
-        TableColumn<ResultDto, String> colScore = new TableColumn<>("Điểm số");
-        colScore.setPrefWidth(95);
-        colScore.setCellValueFactory(r -> new SimpleStringProperty(String.format("%.1f / 10", r.getValue().score())));
-        colScore.setCellFactory(col -> new TableCell<>() {
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText(null);
-                    setStyle("");
-                } else {
-                    setText(item);
-                    setStyle("-fx-font-weight: bold; -fx-text-fill: #1d4ed8; -fx-font-size: 13px;");
-                }
-            }
-        });
-
-        TableColumn<ResultDto, String> colCorrect = new TableColumn<>("Số câu đúng");
-        colCorrect.setPrefWidth(120);
-        colCorrect.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().correctCount() + " / " + r.getValue().totalQuestions() + " câu"));
-
-        TableColumn<ResultDto, String> colStatus = new TableColumn<>("Kết quả");
-        colStatus.setPrefWidth(110);
-        colStatus.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().passed() ? "ĐẠT" : "CHƯA ĐẠT"));
-        colStatus.setCellFactory(col -> new TableCell<>() {
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText(null);
-                    setGraphic(null);
-                } else {
-                    Label badge = new Label(item);
-                    badge.getStyleClass().add("badge");
-                    if ("ĐẠT".equals(item)) {
-                        badge.getStyleClass().add("badge-pass");
-                    } else {
-                        badge.getStyleClass().add("badge-fail");
-                    }
-                    setGraphic(badge);
-                    setText(null);
-                }
-            }
-        });
-
-        TableColumn<ResultDto, String> colReason = new TableColumn<>("Hình thức nộp");
-        colReason.setPrefWidth(140);
-        colReason.setCellValueFactory(r -> {
-            SubmitReason reason = r.getValue().submitReason();
-            if (reason == null) return new SimpleStringProperty("—");
-            return new SimpleStringProperty(switch (reason) {
-                case MANUAL -> "Tự nộp bài";
-                case TIMEOUT -> "Hết giờ làm bài";
-                case ANTICHEAT -> "Vi phạm tự nộp";
-            });
-        });
-
-        TableColumn<ResultDto, String> colSubmitted = new TableColumn<>("Thời gian nộp");
-        colSubmitted.setPrefWidth(140);
-        colSubmitted.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().submittedAt() != null ? DATE_FORMAT.format(r.getValue().submittedAt()) : "—"));
-
-        TableColumn<ResultDto, Void> colAction = new TableColumn<>("Nhật ký");
-        colAction.setPrefWidth(110);
-        colAction.setCellFactory(col -> new TableCell<>() {
-            private final Button btnLog = new Button("Xem log");
-            {
-                btnLog.setOnAction(e -> {
-                    ResultDto row = getTableView().getItems().get(getIndex());
-                    showAttemptAntiCheatLogs(row);
-                });
-            }
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    ResultDto row = getTableView().getItems().get(getIndex());
-                    if (row.submitReason() == SubmitReason.ANTICHEAT) {
-                        btnLog.setStyle("-fx-background-color: #ef4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 11px;");
-                        btnLog.setText("⚠️ Xem vi phạm");
-                    } else {
-                        btnLog.setStyle("-fx-font-size: 11px;");
-                        btnLog.setText("Xem log");
-                    }
-                    setGraphic(btnLog);
-                }
-            }
-        });
-
-        resultsTable.getColumns().setAll(List.of(colStt, colStudent, colScore, colCorrect, colStatus, colReason, colSubmitted, colAction));
-        resultsTable.setItems(resultsList);
-        resultsTable.setPlaceholder(new Label("Chưa có học sinh nào hoàn thành bài thi cho đề kiểm tra này."));
-
-        // Bôi đỏ sinh viên vi phạm quy chế thi
-        resultsTable.setRowFactory(tv -> new TableRow<>() {
-            @Override
-            protected void updateItem(ResultDto item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setStyle("");
-                } else if (item.submitReason() == SubmitReason.ANTICHEAT) {
-                    setStyle("-fx-background-color: #fee2e2; -fx-text-fill: #991b1b;");
-                } else {
-                    setStyle("");
-                }
-            }
-        });
-    }
-
     private void configureClassResultsWorkspace() {
         resultsClassCombo.setItems(classList);
         resultsClassCombo.setConverter(new javafx.util.StringConverter<>() {
@@ -1516,12 +1428,41 @@ public final class TeacherController extends ScreenController {
         TableColumn<ResultDto, String> passed = new TableColumn<>("Kết quả");
         passed.setPrefWidth(120);
         passed.setCellValueFactory(row -> new SimpleStringProperty(row.getValue().passed() ? "ĐẠT" : "CHƯA ĐẠT"));
+        TableColumn<ResultDto, String> reason = new TableColumn<>("Hình thức nộp");
+        reason.setPrefWidth(160);
+        reason.setCellValueFactory(row -> new SimpleStringProperty(submitReasonLabel(row.getValue().submitReason())));
         TableColumn<ResultDto, String> submitted = new TableColumn<>("Thời gian nộp");
         submitted.setPrefWidth(180);
         submitted.setCellValueFactory(row -> new SimpleStringProperty(row.getValue().submittedAt() == null ? "—" : DATE_FORMAT.format(row.getValue().submittedAt())));
-        classResultsTable.getColumns().setAll(List.of(student, score, correct, passed, submitted));
+        TableColumn<ResultDto, Void> log = new TableColumn<>("Nhật ký");
+        log.setPrefWidth(140);
+        log.setCellFactory(col -> new TableCell<>() {
+            private final Button button = new Button();
+            {
+                button.setOnAction(event -> showAttemptAntiCheatLogs(getTableView().getItems().get(getIndex())));
+            }
+            @Override protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) { setGraphic(null); return; }
+                ResultDto result = getTableView().getItems().get(getIndex());
+                boolean violation = result.submitReason() == SubmitReason.ANTICHEAT;
+                button.setText(violation ? "⚠️ Xem vi phạm" : "Xem log");
+                button.setStyle(violation
+                    ? "-fx-background-color: #ef4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 11px;"
+                    : "-fx-font-size: 11px;");
+                setGraphic(button);
+            }
+        });
+        classResultsTable.getColumns().setAll(List.of(student, score, correct, passed, reason, submitted, log));
         classResultsTable.setItems(classResultsList);
         classResultsTable.setPlaceholder(new Label("Chọn lớp và bài kiểm tra để xem kết quả."));
+        classResultsTable.setRowFactory(table -> new TableRow<>() {
+            @Override protected void updateItem(ResultDto item, boolean empty) {
+                super.updateItem(item, empty);
+                setStyle(!empty && item != null && item.submitReason() == SubmitReason.ANTICHEAT
+                    ? "-fx-background-color: #fee2e2; -fx-text-fill: #991b1b;" : "");
+            }
+        });
     }
 
     private void loadResultsForClass(ClassDto selected) {
@@ -1530,6 +1471,10 @@ public final class TeacherController extends ScreenController {
         classResultsList.clear();
         allClassResults = List.of();
         resetClassResultStats();
+        classResultsQuizTitle.setText("Chưa chọn bài kiểm tra");
+        classResultsQuizInfo.setText("Chọn lớp và bài kiểm tra để xem thông tin chi tiết.");
+        classResultsStatusBadge.setVisible(false);
+        classResultsStatusBadge.setManaged(false);
         if (selected == null) return;
         classResultsNotice.setVisible(false);
         classResultsNotice.setManaged(false);
@@ -1548,24 +1493,52 @@ public final class TeacherController extends ScreenController {
         if (quiz == null) {
             classResultsList.clear();
             resetClassResultStats();
+            classResultsQuizTitle.setText("Chưa chọn bài kiểm tra");
+            classResultsQuizInfo.setText("Chọn lớp và bài kiểm tra để xem thông tin chi tiết.");
+            classResultsStatusBadge.setVisible(false);
+            classResultsStatusBadge.setManaged(false);
             return;
         }
+        classResultsQuizTitle.setText("Kết quả đề thi: " + quiz.title());
+        classResultsStatusBadge.setText(quiz.status().name());
+        classResultsStatusBadge.getStyleClass().removeAll("badge-draft", "badge-open", "badge-closed");
+        classResultsStatusBadge.getStyleClass().add(switch (quiz.status()) {
+            case DRAFT -> "badge-draft";
+            case OPEN -> "badge-open";
+            case CLOSED -> "badge-closed";
+        });
+        classResultsStatusBadge.setVisible(true);
+        classResultsStatusBadge.setManaged(true);
+        classResultsQuizInfo.setText("Chủ đề: " + quiz.category() + " | Thời lượng: " + quiz.durationMinutes()
+            + " phút | Điểm đạt: " + String.format("%.0f%%", quiz.passScore()));
         List<ResultDto> selected = allClassResults.stream().filter(result -> result.quizId() == quiz.id()).toList();
         classResultsList.setAll(selected);
         int count = selected.size();
         classResultsCount.setText(String.valueOf(count));
         if (count == 0) {
-            classResultsAverage.setText("—");
-            classResultsPassRate.setText("—");
-            classResultsHighest.setText("—");
+            classResultsAverage.setText("0.0 / 10");
+            classResultsPassRate.setText("0%");
+            classResultsHighest.setText("0.0 / 10");
+            showClassResultsNotice("Đề kiểm tra này chưa có bài nộp trong lớp được chọn. Thống kê sẽ được cập nhật khi có học viên hoàn thành bài thi.", false);
             return;
         }
+        classResultsNotice.setVisible(false);
+        classResultsNotice.setManaged(false);
         double average = selected.stream().mapToDouble(ResultDto::score).average().orElse(0);
         long passed = selected.stream().filter(ResultDto::passed).count();
         double highest = selected.stream().mapToDouble(ResultDto::score).max().orElse(0);
         classResultsAverage.setText(String.format("%.1f / 10", average));
         classResultsPassRate.setText(String.format("%.0f%%", passed * 100.0 / count));
         classResultsHighest.setText(String.format("%.1f / 10", highest));
+    }
+
+    private static String submitReasonLabel(SubmitReason reason) {
+        if (reason == null) return "—";
+        return switch (reason) {
+            case MANUAL -> "Tự nộp bài";
+            case TIMEOUT -> "Hết giờ làm bài";
+            case ANTICHEAT -> "Vi phạm tự nộp";
+        };
     }
 
     private void resetClassResultStats() {
@@ -1649,77 +1622,6 @@ public final class TeacherController extends ScreenController {
         );
 
         dialog.showAndWait();
-    }
-
-    @FXML
-    private void onViewResultsClick() {
-        QuizDto sel = quizTable.getSelectionModel().getSelectedItem();
-        if (sel == null) return;
-
-        hideAllQuizPanels();
-        quizResultsPanel.setVisible(true);
-        quizResultsPanel.setManaged(true);
-        scrollToBottom();
-
-        lblResultsQuizTitle.setText("📊 BẢNG KẾT QUẢ THI: " + sel.title());
-        lblResultsStatusBadge.setText(sel.status().name());
-        lblResultsStatusBadge.getStyleClass().removeAll("badge-draft", "badge-open", "badge-closed");
-        lblResultsStatusBadge.getStyleClass().add(sel.status() == QuizStatus.OPEN ? "badge-open" : "badge-closed");
-        lblResultsQuizInfo.setText("Chủ đề: " + sel.category() + " | Thời lượng: " + sel.durationMinutes() + " phút | Điểm đạt: " + String.format("%.0f%%", sel.passScore()));
-
-        loadResultsForQuiz(sel.id());
-    }
-
-    @FXML
-    private void onRefreshResultsClick() {
-        QuizDto sel = quizTable.getSelectionModel().getSelectedItem();
-        if (sel != null) {
-            loadResultsForQuiz(sel.id());
-        }
-    }
-
-    private void loadResultsForQuiz(long quizId) {
-        setQuizLoading(true);
-        fx.observe(api.listQuizResults(quizId), this::isActive,
-            results -> {
-                setQuizLoading(false);
-                resultsList.setAll(results);
-
-                int total = results.size();
-                lblResultsTotalSubmissions.setText(total + " bài");
-
-                if (total == 0) {
-                    lblResultsAverageScore.setText("0.0");
-                    lblResultsPassRate.setText("0%");
-                    lblResultsHighestScore.setText("0.0");
-                } else {
-                    double sum = 0;
-                    double max = 0;
-                    long passCount = 0;
-                    for (ResultDto r : results) {
-                        sum += r.score();
-                        if (r.score() > max) max = r.score();
-                        if (r.passed()) passCount++;
-                    }
-                    double avg = sum / total;
-                    double rate = (passCount * 100.0) / total;
-
-                    lblResultsAverageScore.setText(String.format("%.1f", avg));
-                    lblResultsPassRate.setText(String.format("%.0f%%", rate));
-                    lblResultsHighestScore.setText(String.format("%.1f", max));
-                }
-            },
-            err -> {
-                setQuizLoading(false);
-                showQuizNotice("Lỗi khi tải kết quả thi: " + formatError(err), true);
-            },
-            () -> setQuizLoading(false)
-        );
-    }
-
-    @FXML
-    private void onCloseResultsClick() {
-        hideAllQuizPanels();
     }
 
     // =========================================================================
@@ -1870,6 +1772,8 @@ public final class TeacherController extends ScreenController {
     // =========================================================================
 
     private void hideAllQuizPanels() {
+        quizOverview.setVisible(true);
+        quizOverview.setManaged(true);
         quizFormPanel.setVisible(false);
         quizFormPanel.setManaged(false);
         autoQuizPanel.setVisible(false);
@@ -1882,9 +1786,15 @@ public final class TeacherController extends ScreenController {
         quizDetailPanel.setManaged(false);
         questionPickerPanel.setVisible(false);
         questionPickerPanel.setManaged(false);
-        quizResultsPanel.setVisible(false);
-        quizResultsPanel.setManaged(false);
         scrollToTop();
+    }
+
+    private void showQuizPanel(VBox panel) {
+        hideAllQuizPanels();
+        quizOverview.setVisible(false);
+        quizOverview.setManaged(false);
+        panel.setVisible(true);
+        panel.setManaged(true);
     }
 
     private void scrollToBottom() {
