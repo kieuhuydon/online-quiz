@@ -1611,6 +1611,7 @@ public final class TeacherController extends ScreenController {
             case PASTE_ATTEMPT -> "Cố gắng Paste";
             case CUT_ATTEMPT -> "Cố gắng Cut";
             case CONTEXT_MENU_ATTEMPT -> "Menu chuột phải";
+            case PROHIBITED_PROCESS -> "Ứng dụng bị cấm";
         }));
 
         TableColumn<AntiCheatEventDto, String> colDetail = new TableColumn<>("Chi tiết vi phạm");

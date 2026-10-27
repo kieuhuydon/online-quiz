@@ -18,6 +18,10 @@ import quiz.common.dto.ClassDto;
 import quiz.common.dto.ResultDto;
 import quiz.common.protocol.ErrorCode;
 import quiz.common.enums.QuizStatus;
+import javafx.application.Platform;
+import quiz.client.anticheat.ProcessBlacklistScanner.DetectedProcess;
+import quiz.client.anticheat.ProcessScannerService;
+import java.util.stream.Collectors;
 
 import java.util.List;
 import java.util.HashSet;
@@ -56,10 +60,17 @@ public final class StudentController extends ScreenController {
     private final Set<Long> completedQuizIds = new HashSet<>();
     private boolean historyLoaded;
 
+    private final ProcessScannerService preExamScanner;
+
     public StudentController(QuizApi api, SceneNavigator navigator, FxAsync fx) {
+        this(api, navigator, fx, new ProcessScannerService());
+    }
+
+    StudentController(QuizApi api, SceneNavigator navigator, FxAsync fx, ProcessScannerService preExamScanner) {
         this.api = Objects.requireNonNull(api);
         this.navigator = Objects.requireNonNull(navigator);
         this.fx = Objects.requireNonNull(fx);
+        this.preExamScanner = Objects.requireNonNull(preExamScanner, "preExamScanner cannot be null");
     }
 
     @FXML
@@ -243,16 +254,97 @@ public final class StudentController extends ScreenController {
         }
         final String code = pin;
         btnStartExam.setDisable(true);
-        fx.observe(api.startAttempt(selected.id(), code), this::isActive,
+
+        // Pre-Exam Environment Check (FR-S13 nâng cấp, BR-13, NFR-09)
+        checkPreExamEnvironmentThenStart(selected.id(), code);
+    }
+
+    private void checkPreExamEnvironmentThenStart(long quizId, String code) {
+        showNotice("Đang kiểm tra môi trường thi...", false);
+        preExamScanner.scanViolationsAsync().thenAccept(violations -> {
+            Platform.runLater(() -> {
+                if (!isActive()) {
+                    btnStartExam.setDisable(false);
+                    return;
+                }
+                if (violations.isEmpty()) {
+                    proceedStartExam(quizId, code);
+                } else {
+                    btnStartExam.setDisable(false);
+                    showPreExamViolationDialog(quizId, code, violations);
+                }
+            });
+        }).exceptionally(err -> {
+            Platform.runLater(() -> {
+                proceedStartExam(quizId, code);
+            });
+            return null;
+        });
+    }
+
+    private void showPreExamViolationDialog(long quizId, String code, List<DetectedProcess> initialViolations) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle("Kiểm tra môi trường thi");
+        alert.setHeaderText("⚠️ Phát hiện ứng dụng không được phép đang chạy");
+        if (navigator.stage() != null) {
+            alert.initOwner(navigator.stage());
+        }
+
+        String appList = initialViolations.stream()
+            .map(p -> "• " + p.appName() + " (PID: " + p.pid() + " - " + p.category() + ")")
+            .distinct()
+            .collect(Collectors.joining("\n"));
+
+        alert.setContentText("Các ứng dụng sau bị cấm trong phòng thi:\n\n" + appList
+            + "\n\nVui lòng tắt toàn bộ ứng dụng trên trước khi bắt đầu làm bài.");
+
+        ButtonType btnAutoClose = new ButtonType("Tự động đóng giúp tôi", ButtonBar.ButtonData.OK_DONE);
+        ButtonType btnRecheck = new ButtonType("Kiểm tra lại", ButtonBar.ButtonData.APPLY);
+        ButtonType btnCancel = new ButtonType("Hủy bỏ", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        alert.getButtonTypes().setAll(btnAutoClose, btnRecheck, btnCancel);
+
+        var result = alert.showAndWait();
+        if (result.isPresent()) {
+            if (result.get() == btnAutoClose) {
+                showNotice("Đang tự động đóng các ứng dụng vi phạm...", false);
+                btnStartExam.setDisable(true);
+                preExamScanner.terminateProcessesAsync(initialViolations).thenAccept(ignored -> {
+                    preExamScanner.scanViolationsAsync().thenAccept(remaining -> {
+                        Platform.runLater(() -> {
+                            btnStartExam.setDisable(false);
+                            if (remaining.isEmpty()) {
+                                showNotice("Môi trường thi an toàn! Đang vào bài thi...", false);
+                                proceedStartExam(quizId, code);
+                            } else {
+                                showNotice("Một số ứng dụng không thể đóng tự động (thiếu quyền Admin). Vui lòng tắt thủ công.", true);
+                                showPreExamViolationDialog(quizId, code, remaining);
+                            }
+                        });
+                    });
+                });
+            } else if (result.get() == btnRecheck) {
+                checkPreExamEnvironmentThenStart(quizId, code);
+            } else {
+                showNotice("Đã hủy vào bài thi do chưa tắt ứng dụng cấm.", true);
+            }
+        }
+    }
+
+    private void proceedStartExam(long quizId, String code) {
+        btnStartExam.setDisable(true);
+        fx.observe(api.startAttempt(quizId, code), this::isActive,
             navigator::showExam,
             err -> {
-                String message = err instanceof ApiException apiError && apiError.errorCode() == ErrorCode.CONFLICT
-                    ? "Bài thi hiện không thể bắt đầu. Có thể bạn đã hoàn thành bài này hoặc đề thi đã đóng."
-                    : "Không thể bắt đầu bài thi. Vui lòng kiểm tra mã PIN hoặc thử lại sau.";
-                showNotice(message, true);
+                showNotice("Không thể bắt đầu bài thi: " + err.getMessage(), true);
                 btnStartExam.setDisable(false);
             },
             () -> btnStartExam.setDisable(false));
+    }
+
+    @Override
+    protected void onDispose() {
+        preExamScanner.stop();
     }
 
     private void showNotice(String msg, boolean isError) {

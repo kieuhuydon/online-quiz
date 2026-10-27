@@ -4,9 +4,8 @@ echo   Online Quiz - Khoi dong Server (Port 5555)
 echo =============================================
 cd /d "%~dp0"
 
-echo Dang bien dich va cap nhat cac module noi bo...
-call .\mvnw.cmd -DskipTests install -pl quiz-server -am
-if errorlevel 1 goto :build_error
+echo Dang bien dich quiz-server...
+call .\mvnw.cmd install -DskipTests -pl quiz-server -am
 
 echo Dang khoi dong Server...
 call .\mvnw.cmd exec:java -pl quiz-server

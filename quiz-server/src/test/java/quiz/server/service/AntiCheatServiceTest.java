@@ -165,4 +165,19 @@ class AntiCheatServiceTest {
         UserSession studentSession = new UserSession(studentId, Role.STUDENT, "student");
         assertThrows(ForbiddenException.class, () -> service.listAttemptEvents(attemptId, studentSession));
     }
+
+    @Test
+    @DisplayName("Ghi nhận sự kiện vi phạm chạy ứng dụng cấm PROHIBITED_PROCESS thành công")
+    void reportEvent_ProhibitedProcess() {
+        when(attemptRepo.findById(attemptId)).thenReturn(Optional.of(createMockAttempt(AttemptStatus.IN_PROGRESS)));
+        when(quizRepo.findById(quizId)).thenReturn(Optional.of(createMockQuiz(AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3)));
+        when(antiCheatRepo.countViolations(any(), eq(attemptId))).thenReturn(0);
+
+        String detail = "Phát hiện ứng dụng cấm: Discord (PID: 1234)";
+        ReportAntiCheatDto dto = new ReportAntiCheatDto(attemptId, AntiCheatEventType.PROHIBITED_PROCESS, detail, now);
+        service.reportEvent(dto, studentId);
+
+        verify(antiCheatRepo).recordEvent(any(), eq(attemptId), eq(AntiCheatEventType.PROHIBITED_PROCESS), eq(detail), eq(now), eq(now), eq(1), eq("WARNED"));
+        verify(connectionRegistry).sendToUser(eq(studentId), argThat(r -> r.pushType() == MessageType.PUSH_ANTICHEAT_WARNING));
+    }
 }
