@@ -108,6 +108,7 @@ public final class StudentController extends ScreenController {
                 completedQuizIds.clear();
                 results.stream().map(ResultDto::quizId).forEach(completedQuizIds::add);
                 historyLoaded = true;
+                assignedQuizTable.refresh();
                 QuizInfoDto selected = assignedQuizTable.getSelectionModel().getSelectedItem();
                 if (selected != null) showQuizInfo(selected);
             },
@@ -157,7 +158,11 @@ public final class StudentController extends ScreenController {
                 } else {
                     Label badge = new Label();
                     badge.getStyleClass().add("badge");
-                    if ("OPEN".equals(item)) {
+                    QuizInfoDto quiz = getTableView().getItems().get(getIndex());
+                    if ("OPEN".equals(item) && completedQuizIds.contains(quiz.id())) {
+                        badge.setText("ĐÃ THI");
+                        badge.getStyleClass().add("badge-completed");
+                    } else if ("OPEN".equals(item)) {
                         badge.setText("SẴN SÀNG THI");
                         badge.getStyleClass().add("badge-open");
                     } else if ("CLOSED".equals(item)) {
@@ -206,8 +211,8 @@ public final class StudentController extends ScreenController {
         infoDuration.setText(sel.durationMinutes() + " phút");
         infoPassScore.setText(String.format("%.0f%%", sel.passScore()));
         infoQuestionCount.setText(sel.questionCount() + " câu hỏi");
-        infoStatus.setText(sel.status() == QuizStatus.OPEN ? "Đang mở thi" : (sel.status() == QuizStatus.CLOSED ? "Đã đóng" : "Chưa mở"));
         boolean alreadySubmitted = completedQuizIds.contains(sel.id());
+        infoStatus.setText(alreadySubmitted ? "Đã thi" : sel.status() == QuizStatus.OPEN ? "Đang mở thi" : (sel.status() == QuizStatus.CLOSED ? "Đã đóng" : "Chưa mở"));
         btnStartExam.setDisable(!historyLoaded || sel.status() != QuizStatus.OPEN || alreadySubmitted);
         if (alreadySubmitted) {
             showNotice("Bạn đã hoàn thành bài kiểm tra này trước đó nên không thể làm lại.", true);
