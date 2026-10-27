@@ -346,7 +346,7 @@
         <!-- =================================================================== -->
         <!-- TAB 2: QUẢN LÝ LỚP HỌC & THÀNH VIÊN (CLASSES & MEMBERS - FR-A07) -->
         <!-- =================================================================== -->
-        <Tab text="  Quản Lý Lớp Học (Classes)  ">
+        <Tab text="  Lớp được phân công  ">
             <ScrollPane fx:id="classScrollPane" fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED" styleClass="content-scroll">
                 <VBox spacing="16" style="-fx-padding: 16 12 16 0;">
                     <Label fx:id="classNotice" visible="false" managed="false" styleClass="notice" wrapText="true" maxWidth="Infinity"/>
@@ -356,42 +356,46 @@
                         <!-- Left Column: Classes List & Create -->
                         <VBox spacing="12" HBox.hgrow="ALWAYS" prefWidth="440">
                             <HBox alignment="CENTER_LEFT" spacing="10">
-                                <Label text="Danh sách lớp học" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
+                                <Label text="Lớp được phân công" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
                                 <ProgressIndicator fx:id="classProgress" visible="false" prefWidth="20" prefHeight="20"/>
                                 <Button fx:id="btnRefreshClasses" text="Tải lại" onAction="#loadClasses" styleClass="secondary-button"/>
                             </HBox>
                             <TableView fx:id="classTable" prefHeight="260" VBox.vgrow="ALWAYS" styleClass="account-card"/>
-
-                            <!-- Create class form -->
-                            <VBox styleClass="content-card" spacing="10">
-                                <Label text="Tạo lớp học mới" styleClass="section-heading"/>
-                                <HBox spacing="8" alignment="CENTER_LEFT">
-                                    <TextField fx:id="txtNewClassName" promptText="Tên lớp (VD: ENG-B1-02)" HBox.hgrow="ALWAYS"/>
-                                    <TextField fx:id="txtNewClassDesc" promptText="Mô tả lớp học" HBox.hgrow="ALWAYS"/>
-                                    <Button fx:id="btnCreateClass" text="Tạo Lớp" onAction="#onCreateClassClick" styleClass="primary-button"/>
-                                </HBox>
-                            </VBox>
                         </VBox>
 
                         <!-- Right Column: Class Members List & Management -->
                         <VBox spacing="12" HBox.hgrow="ALWAYS" prefWidth="480">
                             <HBox alignment="CENTER_LEFT" spacing="10">
                                 <Label fx:id="selectedClassLabel" text="Chưa chọn lớp nào" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
-                                <Button fx:id="btnRemoveMember" text="Xóa Học Viên" onAction="#onRemoveMemberClick" styleClass="danger-button"/>
                             </HBox>
                             <TableView fx:id="memberTable" prefHeight="260" VBox.vgrow="ALWAYS" styleClass="account-card"/>
-
-                            <!-- Add student to class -->
-                            <VBox styleClass="content-card" spacing="10">
-                                <Label text="Thêm học viên vào lớp" styleClass="section-heading"/>
-                                <HBox spacing="8" alignment="CENTER_LEFT">
-                                    <TextField fx:id="txtAddStudentId" promptText="Nhập Student ID (VD: 4)" prefWidth="180"/>
-                                    <Button fx:id="btnAddMember" text="Thêm Vào Lớp" onAction="#onAddMemberClick" styleClass="primary-button"/>
-                                    <Label text="(Xem ID học viên ở Quản lý tài khoản Admin)" styleClass="muted"/>
-                                </HBox>
-                            </VBox>
                         </VBox>
                     </HBox>
+                </VBox>
+            </ScrollPane>
+        </Tab>
+        <Tab text="  Kết quả theo lớp  ">
+            <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED" styleClass="content-scroll">
+                <VBox spacing="16" style="-fx-padding: 16 12 16 0;">
+                    <VBox spacing="4">
+                        <Label text="KẾT QUẢ KIỂM TRA THEO LỚP" styleClass="card-heading"/>
+                        <Label text="Chọn lớp và bài kiểm tra để xem điểm của học viên trong lớp." styleClass="muted"/>
+                    </VBox>
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <Label text="Lớp:" styleClass="field-label"/>
+                        <ComboBox fx:id="resultsClassCombo" promptText="Chọn lớp" prefWidth="260"/>
+                        <Label text="Bài kiểm tra:" styleClass="field-label"/>
+                        <ComboBox fx:id="resultsQuizCombo" promptText="Chọn bài kiểm tra" prefWidth="300"/>
+                        <Button text="Tải lại" onAction="#refreshClassResults" styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="classResultsNotice" visible="false" managed="false" styleClass="notice" wrapText="true"/>
+                    <HBox spacing="14">
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4"><Label text="SỐ BÀI ĐÃ NỘP" styleClass="stat-label"/><Label fx:id="classResultsCount" text="0" styleClass="stat-value"/></VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4"><Label text="ĐIỂM TRUNG BÌNH" styleClass="stat-label"/><Label fx:id="classResultsAverage" text="—" styleClass="stat-value"/></VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4"><Label text="TỶ LỆ ĐẠT" styleClass="stat-label"/><Label fx:id="classResultsPassRate" text="—" styleClass="stat-value"/></VBox>
+                        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4"><Label text="ĐIỂM CAO NHẤT" styleClass="stat-label"/><Label fx:id="classResultsHighest" text="—" styleClass="stat-value"/></VBox>
+                    </HBox>
+                    <TableView fx:id="classResultsTable" prefHeight="360" VBox.vgrow="ALWAYS" styleClass="account-card"/>
                 </VBox>
             </ScrollPane>
         </Tab>

@@ -2,6 +2,7 @@ package quiz.server.service;
 
 import quiz.common.dto.CreateAccountDto;
 import quiz.common.enums.Role;
+import quiz.common.protocol.ErrorCode;
 import quiz.server.db.TransactionManager;
 import quiz.server.domain.User;
 import quiz.server.exception.ConflictException;
@@ -33,10 +34,10 @@ public final class AccountService {
         requireAdmin(adminId);
         CreateAccountDto validated = validateAccount(dto);
         if (users.existsByUsername(validated.username())) {
-            throw new ConflictException("Username is already in use");
+            throw new ConflictException(ErrorCode.USERNAME_ALREADY_EXISTS, "Username is already in use");
         }
         if (validated.email() != null && users.existsByEmail(validated.email())) {
-            throw new ConflictException("Email is already in use");
+            throw new ConflictException(ErrorCode.EMAIL_ALREADY_EXISTS, "Email is already in use");
         }
         String hash = PasswordHasher.hashPassword(validated.password());
         User input = User.createNew(validated.username(), hash, validated.fullName(),

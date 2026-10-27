@@ -3,26 +3,20 @@ package quiz.client.ui.admin.account;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
-import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.PasswordField;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
-import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
-import javafx.scene.layout.ColumnConstraints;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 import quiz.client.api.ApiException;
-import quiz.client.api.ClientValidation;
 import quiz.client.api.QuizApi;
 import quiz.client.ui.SceneNavigator;
 import quiz.client.ui.ScreenController;
+import quiz.client.ui.Screen;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.AccountDto;
-import quiz.common.dto.CreateAccountDto;
 import quiz.common.enums.Role;
 import quiz.common.protocol.ErrorCode;
 
@@ -39,15 +33,8 @@ public final class AccountController extends ScreenController {
     private final QuizApi api;
     private final SceneNavigator navigator;
     private final FxAsync fx;
-    @FXML private GridPane accountPanels;
-    @FXML private VBox accountForm;
     @FXML private VBox confirmation;
     @FXML private TableView<AccountDto> accountTable;
-    @FXML private TextField accountUsername;
-    @FXML private TextField accountFullName;
-    @FXML private TextField accountEmail;
-    @FXML private PasswordField accountPassword;
-    @FXML private ComboBox<Role> accountRole;
     @FXML private Button refreshAccounts;
     @FXML private Button createAccount;
     @FXML private Button toggleAccount;
@@ -55,9 +42,8 @@ public final class AccountController extends ScreenController {
     @FXML private Label listStatus;
     @FXML private Label accountNotice;
     @FXML private Label selectedAccount;
+    @FXML private javafx.scene.layout.HBox accountActions;
     @FXML private Label confirmationText;
-    @FXML private Label formError;
-    @FXML private Label timeZone;
     @FXML private ProgressIndicator accountProgress;
     private long loadVersion;
     private boolean loading;
@@ -65,6 +51,7 @@ public final class AccountController extends ScreenController {
     private boolean hasLoadedAccounts;
     private boolean listFresh;
     private AccountDto lockTarget;
+    private Long pendingSelection;
 
     public AccountController(QuizApi api, SceneNavigator navigator, FxAsync fx) {
         this.api = api;
@@ -75,11 +62,7 @@ public final class AccountController extends ScreenController {
     @FXML
     private void initialize() {
         configureTable();
-        accountRole.getItems().setAll(Role.TEACHER, Role.STUDENT);
-        accountRole.setValue(Role.STUDENT);
-        timeZone.setText("Ngày tạo theo múi giờ " + DISPLAY_ZONE.getId() + ". Toàn bộ danh sách, chưa phân trang.");
-        accountPanels.widthProperty().addListener((observable, oldWidth, width) -> layoutPanels(width.doubleValue()));
-        layoutPanels(0);
+        accountTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         updateControls();
     }
 
@@ -88,7 +71,7 @@ public final class AccountController extends ScreenController {
         addColumn("Tên đăng nhập", 145, AccountDto::username);
         addColumn("Họ và tên", 200, AccountDto::fullName);
         addColumn("Email", 200, account -> account.email() == null ? "—" : account.email());
-        addColumn("Vai trò", 105, account -> account.role().name());
+        addColumn("Vai trò", 105, account -> Screen.roleLabel(account.role()));
         addColumn("Trạng thái", 125, account -> account.active() ? "Hoạt động" : "Đã khóa");
         addColumn("Ngày tạo", 165, account -> CREATED_AT_FORMAT.format(account.createdAt()));
         accountTable.setPlaceholder(new Label("Chưa tải danh sách tài khoản."));
@@ -111,15 +94,19 @@ public final class AccountController extends ScreenController {
         accountTable.getColumns().add(column);
     }
 
-    private void layoutPanels(double width) {
-        boolean wide = width >= 780;
-        ColumnConstraints table = new ColumnConstraints();
-        table.setPercentWidth(wide ? 65 : 100);
-        ColumnConstraints form = new ColumnConstraints();
-        form.setPercentWidth(wide ? 35 : 0);
-        accountPanels.getColumnConstraints().setAll(wide ? List.of(table, form) : List.of(table));
-        GridPane.setColumnIndex(accountForm, wide ? 1 : 0);
-        GridPane.setRowIndex(accountForm, wide ? 0 : 1);
+    public void selectAfterLoad(long id) {
+        pendingSelection = id;
+        applyPendingSelection();
+    }
+
+    private void applyPendingSelection() {
+        if (pendingSelection == null) return;
+        accountTable.getItems().stream().filter(account -> account.id() == pendingSelection)
+            .findFirst().ifPresent(account -> {
+                accountTable.getSelectionModel().select(account);
+                accountTable.scrollTo(account);
+                pendingSelection = null;
+            });
     }
 
     @Override
@@ -155,6 +142,7 @@ public final class AccountController extends ScreenController {
                 .ifPresent(account -> accountTable.getSelectionModel().select(account));
         }
         hasLoadedAccounts = true;
+        applyPendingSelection();
         listFresh = true;
         accountTable.setPlaceholder(new Label("Chưa có tài khoản nào."));
         listStatus.setText(accounts.isEmpty() ? "Danh sách trống." : accounts.size() + " tài khoản • Đã cập nhật");
@@ -168,45 +156,7 @@ public final class AccountController extends ScreenController {
 
     @FXML
     private void create() {
-        if (!isActive() || writing || loading) {
-            return;
-        }
-        CreateAccountDto input;
-        try {
-            input = ClientValidation.account(new CreateAccountDto(accountUsername.getText(), accountPassword.getText(),
-                accountFullName.getText(), accountEmail.getText(), accountRole.getValue()));
-        } catch (ApiException invalid) {
-            accountPassword.clear();
-            show(formError, "Kiểm tra thông tin: tên đăng nhập 1–50 ký tự, họ tên 1–100 ký tự, email hợp lệ tối đa 100 ký tự; mật khẩu ít nhất 8 ký tự và tối đa 72 byte UTF-8.", true);
-            return;
-        }
-        accountUsername.setText(input.username());
-        accountFullName.setText(input.fullName());
-        accountEmail.setText(input.email() == null ? "" : input.email());
-        show(formError, "", false);
-        beginWrite("Đang tạo tài khoản…");
-        fx.observe(navigator.trackAccountWrite(api.createAccount(input)), this::isActive,
-            this::accountCreated, this::showCreateFailure, () -> {
-                accountPassword.clear();
-                finishWrite();
-            });
-    }
-
-    private void accountCreated(AccountDto created) {
-        accountUsername.clear();
-        accountFullName.clear();
-        accountEmail.clear();
-        accountPassword.clear();
-        writing = false;
-        show(accountNotice, "Đã tạo tài khoản “" + created.username() + "”.", false);
-        show(formError, "Đã tạo tài khoản “" + created.username() + "”. Xem trạng thái tải lại trong bảng tài khoản.", false);
-        reload();
-    }
-
-    private void showCreateFailure(Throwable failure) {
-        String message = AccountMessages.message(failure);
-        show(accountNotice, message, true);
-        show(formError, message, true);
+        if (isActive() && !writing) navigator.show(Screen.ADMIN_CREATE_ACCOUNT);
     }
 
     @FXML
@@ -273,15 +223,12 @@ public final class AccountController extends ScreenController {
 
     private void updateControls() {
         boolean busy = writing || loading;
-        createAccount.setDisable(busy);
+        createAccount.setDisable(writing);
         refreshAccounts.setDisable(writing);
-        accountUsername.setDisable(writing);
-        accountFullName.setDisable(writing);
-        accountEmail.setDisable(writing);
-        accountPassword.setDisable(writing);
-        accountRole.setDisable(writing);
         AccountDto selected = accountTable.getSelectionModel().getSelectedItem();
-        selectedAccount.setText(selected == null ? "Chọn một tài khoản để xem thao tác."
+        accountActions.setVisible(selected != null);
+        accountActions.setManaged(selected != null);
+        selectedAccount.setText(selected == null ? ""
             : "Đã chọn: " + selected.username() + (selected.role() == Role.ADMIN ? " • Tài khoản Admin được bảo vệ." : ""));
         toggleAccount.setText(selected != null && !selected.active() ? "Mở khóa tài khoản" : "Khóa tài khoản");
         toggleAccount.setDisable(busy || !listFresh || lockTarget != null || selected == null || selected.role() == Role.ADMIN);
@@ -303,9 +250,6 @@ public final class AccountController extends ScreenController {
     @Override
     protected void onDispose() {
         ++loadVersion;
-        if (accountPassword != null) {
-            accountPassword.clear();
-        }
         lockTarget = null;
     }
 }

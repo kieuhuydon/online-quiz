@@ -32,14 +32,14 @@ class ClassHandlerTest {
 
     @Test
     void supportedTypesAndRoles() {
-        assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.CREATE_CLASS));
+        assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(MessageType.CREATE_CLASS));
         assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.LIST_CLASSES));
-        assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.ADD_CLASS_MEMBER));
+        assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(MessageType.ADD_CLASS_MEMBER));
     }
 
     @Test
     void createClassDispatchesToService() {
-        CreateClassDto dto = new CreateClassDto("ENG-B1-01", "Morning class");
+        CreateClassDto dto = new CreateClassDto("ENG-B1-01", "Morning class", 2);
         ClassDto expected = new ClassDto(10, "ENG-B1-01", "Morning class", 2, "teacher1", Instant.now());
         when(classService.createClass(dto, teacherSession)).thenReturn(expected);
 

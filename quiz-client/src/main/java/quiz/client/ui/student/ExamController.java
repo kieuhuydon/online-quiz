@@ -457,6 +457,7 @@ public final class ExamController extends ScreenController {
         });
         previous.setDisable(index == 0);
         next.setDisable(index >= attempt.questions().size() - 1);
+        refreshReview();
     }
 
     @FXML

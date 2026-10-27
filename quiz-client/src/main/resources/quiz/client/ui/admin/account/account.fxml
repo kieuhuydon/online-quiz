@@ -1,52 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.admin.account.AccountController" spacing="20" minWidth="0">
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.admin.account.AccountController" spacing="18" minWidth="0">
     <VBox spacing="8">
         <Label text="QUẢN TRỊ TRUNG TÂM" styleClass="eyebrow"/>
         <Label text="Quản lý tài khoản" styleClass="page-heading" wrapText="true"/>
-        <Label text="Tạo tài khoản giáo viên, học viên và quản lý quyền truy cập trung tâm." styleClass="muted" wrapText="true"/>
     </VBox>
     <Label fx:id="accountNotice" styleClass="notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
-    <GridPane fx:id="accountPanels" hgap="20" vgap="20" minWidth="0">
-        <VBox spacing="14" styleClass="account-card" minWidth="0" GridPane.columnIndex="0" GridPane.rowIndex="0">
-            <HBox spacing="12" alignment="CENTER_LEFT">
-                <Label text="Tài khoản trung tâm" styleClass="card-heading" wrapText="true"/>
-                <Region HBox.hgrow="ALWAYS"/>
-                <ProgressIndicator fx:id="accountProgress" prefWidth="24" prefHeight="24" maxWidth="24" maxHeight="24"/>
-                <Button fx:id="refreshAccounts" text="Tải lại" onAction="#reload" styleClass="secondary-button"/>
-            </HBox>
-            <Label fx:id="listStatus" wrapText="true" styleClass="muted"/>
-            <TableView fx:id="accountTable" prefHeight="330" minHeight="240" minWidth="0"/>
-            <Label fx:id="timeZone" wrapText="true" styleClass="muted"/>
-            <Separator/>
-            <Label fx:id="selectedAccount" wrapText="true"/>
+    <VBox spacing="14" styleClass="account-card" minWidth="0" VBox.vgrow="ALWAYS">
+        <HBox spacing="10" alignment="CENTER_LEFT">
+            <Label text="Tài khoản trung tâm" styleClass="card-heading" wrapText="true" minWidth="100"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <ProgressIndicator fx:id="accountProgress" prefWidth="20" prefHeight="20" maxWidth="20" maxHeight="20"/>
+            <Button fx:id="refreshAccounts" text="Tải lại" onAction="#reload" styleClass="secondary-button"/>
+            <Button fx:id="createAccount" text="Tạo tài khoản" onAction="#create" styleClass="primary-button"/>
+        </HBox>
+        <Label fx:id="listStatus" wrapText="true" styleClass="muted"/>
+        <TableView fx:id="accountTable" minHeight="200" minWidth="0" VBox.vgrow="ALWAYS"/>
+        <HBox fx:id="accountActions" spacing="12" alignment="CENTER_LEFT" visible="false" managed="false">
+            <Label fx:id="selectedAccount" wrapText="true" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
             <Button fx:id="toggleAccount" text="Khóa tài khoản" onAction="#toggle" styleClass="secondary-button"/>
-            <VBox fx:id="confirmation" spacing="10" styleClass="note" visible="false" managed="false">
-                <Label fx:id="confirmationText" wrapText="true"/>
-                <HBox spacing="10">
-                    <Button fx:id="cancelLock" text="Hủy" onAction="#cancelLock" styleClass="secondary-button"/>
-                    <Button fx:id="confirmLock" text="Xác nhận khóa" onAction="#confirmLock" styleClass="danger-button"/>
-                </HBox>
-            </VBox>
+        </HBox>
+        <VBox fx:id="confirmation" spacing="10" styleClass="note" visible="false" managed="false">
+            <Label fx:id="confirmationText" wrapText="true"/>
+            <HBox spacing="10">
+                <Button fx:id="cancelLock" text="Hủy" onAction="#cancelLock" styleClass="secondary-button"/>
+                <Button fx:id="confirmLock" text="Xác nhận khóa" onAction="#confirmLock" styleClass="danger-button"/>
+            </HBox>
         </VBox>
-        <VBox fx:id="accountForm" spacing="12" styleClass="account-card" minWidth="0" GridPane.columnIndex="0" GridPane.rowIndex="1">
-            <Label text="Tạo tài khoản mới" styleClass="card-heading" wrapText="true"/>
-            <Label text="Các trường có dấu * là bắt buộc." styleClass="muted" wrapText="true"/>
-            <Label text="Tên đăng nhập *" styleClass="field-label" labelFor="$accountUsername"/>
-            <TextField fx:id="accountUsername" promptText="Tối đa 50 ký tự"/>
-            <Label text="Họ và tên *" styleClass="field-label" labelFor="$accountFullName"/>
-            <TextField fx:id="accountFullName" promptText="Tối đa 100 ký tự"/>
-            <Label text="Email" styleClass="field-label" labelFor="$accountEmail"/>
-            <TextField fx:id="accountEmail" promptText="Có thể để trống"/>
-            <Label text="Vai trò *" styleClass="field-label" labelFor="$accountRole"/>
-            <ComboBox fx:id="accountRole" maxWidth="Infinity"/>
-            <Label text="Mật khẩu *" styleClass="field-label" labelFor="$accountPassword"/>
-            <PasswordField fx:id="accountPassword" promptText="Ít nhất 8 ký tự" onAction="#create"/>
-            <Label text="Mật khẩu tối đa 72 byte UTF-8. Tài khoản mới được kích hoạt ngay." styleClass="muted" wrapText="true"/>
-            <Label fx:id="formError" styleClass="notice,error-notice" wrapText="true" visible="false" managed="false"/>
-            <Button fx:id="createAccount" text="Tạo tài khoản" onAction="#create" styleClass="primary-button,authentication-submit" maxWidth="Infinity"/>
-        </VBox>
-    </GridPane>
-    <Label text="Quyền quản trị được xác thực bởi máy chủ cho từng thao tác." styleClass="muted" wrapText="true"/>
+    </VBox>
 </VBox>

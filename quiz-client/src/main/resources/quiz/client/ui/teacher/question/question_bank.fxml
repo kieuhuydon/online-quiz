@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="quiz.client.ui.teacher.question.QuestionController"
+      spacing="20"
+      minWidth="0">
+    <VBox spacing="8">
+        <Label text="NGÂN HÀNG CÂU HỎI" styleClass="eyebrow"/>
+        <Label text="Quản lý câu hỏi" styleClass="page-heading" wrapText="true"/>
+        <Label text="Tạo, xem, sửa và vô hiệu hóa câu hỏi trắc nghiệm 4 đáp án." styleClass="muted" wrapText="true"/>
+    </VBox>
+    <Label fx:id="questionNotice" styleClass="notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
+    <GridPane fx:id="questionPanels" hgap="20" vgap="20" minWidth="0">
+        <VBox spacing="14" styleClass="account-card" minWidth="0" GridPane.columnIndex="0" GridPane.rowIndex="0">
+            <HBox spacing="12" alignment="CENTER_LEFT">
+                <Label text="Danh sách câu hỏi" styleClass="card-heading" wrapText="true"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <ProgressIndicator fx:id="questionProgress" prefWidth="24" prefHeight="24" maxWidth="24" maxHeight="24"/>
+                <Button fx:id="refreshQuestions" text="Tải lại" onAction="#reload" styleClass="secondary-button"/>
+                <Button fx:id="importQuestions" text="📥 Nhập từ file" onAction="#importQuestions" styleClass="secondary-button"/>
+                <Button fx:id="newQuestion" text="Thêm mới" onAction="#newQuestion" styleClass="primary-button"/>
+            </HBox>
+            <TableView fx:id="questionTable" prefHeight="260" minHeight="200"/>
+            <HBox spacing="8" alignment="CENTER_RIGHT">
+                <Button fx:id="editSelected" text="Sửa" onAction="#editSelected" styleClass="secondary-button"/>
+                <Button fx:id="deactivateQuestion" text="Vô hiệu hóa" onAction="#deactivate" styleClass="danger-button"/>
+            </HBox>
+        </VBox>
+        <VBox spacing="14" styleClass="account-card" minWidth="0" GridPane.columnIndex="1" GridPane.rowIndex="0" fx:id="questionForm" visible="false" managed="false">
+            <Label text="Biểu mẫu câu hỏi" styleClass="card-heading"/>
+            <TextArea fx:id="questionContent" promptText="Nội dung câu hỏi" wrapText="true" prefRowCount="3"/>
+            <TextField fx:id="questionOptionA" promptText="Đáp án A"/>
+            <TextField fx:id="questionOptionB" promptText="Đáp án B"/>
+            <TextField fx:id="questionOptionC" promptText="Đáp án C"/>
+            <TextField fx:id="questionOptionD" promptText="Đáp án D"/>
+            <ComboBox fx:id="questionCorrectOption" promptText="Đáp án đúng"/>
+            <TextField fx:id="questionTopic" promptText="Chủ đề"/>
+            <ComboBox fx:id="questionDifficulty" promptText="Độ khó"/>
+            <Label fx:id="formError" styleClass="error-notice" visible="false" managed="false"/>
+            <HBox spacing="8" alignment="CENTER_RIGHT">
+                <Button fx:id="cancelEdit" text="Hủy" onAction="#cancelEdit" styleClass="secondary-button"/>
+                <Button fx:id="createQuestion" text="Lưu" onAction="#create" styleClass="primary-button"/>
+                <Button fx:id="updateQuestion" text="Cập nhật" onAction="#update" styleClass="primary-button"/>
+            </HBox>
+        </VBox>
+    </GridPane>
+    <Label fx:id="listStatus" styleClass="status-label"/>
+    <TextArea fx:id="selectedQuestion" editable="false" wrapText="true" prefRowCount="4"/>
+    <Button fx:id="copySelected" text="📋 Sao chép" onAction="#copySelected" styleClass="secondary-button"/>
+</VBox>

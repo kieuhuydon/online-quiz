@@ -20,3 +20,10 @@ if %ERRORLEVEL% NEQ 0 (
     echo ========================================================
     pause
 )
+exit /b %ERRORLEVEL%
+
+:build_error
+echo.
+echo [LOI] Khong the bien dich quiz-client va quiz-common.
+pause
+exit /b 1

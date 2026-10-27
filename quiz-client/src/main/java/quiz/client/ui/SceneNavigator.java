@@ -11,6 +11,8 @@ import quiz.client.api.QuizApi;
 import quiz.client.network.TransportException;
 import quiz.client.session.ClientSession;
 import quiz.client.ui.admin.account.AccountController;
+import quiz.client.ui.admin.account.CreateAccountController;
+import quiz.common.dto.AccountDto;
 import quiz.client.ui.login.LoginController;
 import quiz.client.ui.teacher.question.QuestionController;
 import quiz.client.util.FxAsync;
@@ -62,7 +64,7 @@ public final class SceneNavigator implements AutoCloseable {
                 accountWrites.clear();
                 showLogin(uncertain
                     ? "Chưa xác nhận được kết quả thao tác tài khoản. Đăng nhập lại và tải danh sách để kiểm tra trước khi thực hiện lại."
-                    : "Phiên làm việc đã kết thúc. Vui lòng đăng nhập lại.");
+                    : "Kết nối tới máy chủ đã gián đoạn hoặc quyền đăng nhập đã thay đổi. Vui lòng đăng nhập lại.");
             }
         }));
         stage.setMinWidth(880);
@@ -84,6 +86,12 @@ public final class SceneNavigator implements AutoCloseable {
 
     public void showLogin(String notice) {
         navigate(Screen.LOGIN, notice == null ? "" : notice);
+    }
+
+    public void showCreatedAccount(AccountDto account) {
+        navigate(Screen.ADMIN_ACCOUNTS, "Đã tạo tài khoản “" + account.username() + "”.");
+        controllers.stream().filter(AccountController.class::isInstance)
+            .map(AccountController.class::cast).forEach(controller -> controller.selectAfterLoad(account.id()));
     }
 
     public Optional<Screen> currentScreen() {
@@ -175,6 +183,9 @@ public final class SceneNavigator implements AutoCloseable {
     }
 
     private ScreenController createController(Class<?> type) {
+        if (type == quiz.client.ui.admin.classes.AdminClassController.class) {
+            return new quiz.client.ui.admin.classes.AdminClassController(api, fx);
+        }
         if (type == LoginController.class) {
             return new LoginController(api, this, fx);
         }
@@ -195,6 +206,10 @@ public final class SceneNavigator implements AutoCloseable {
         }
         if (type == quiz.client.ui.student.HistoryController.class) {
             return new quiz.client.ui.student.HistoryController(api, this, fx);
+
+        }
+        if (type == CreateAccountController.class) {
+            return new CreateAccountController(api, this, fx);
         }
         if (type == DashboardController.class) {
             return new DashboardController(api, this, fx);
@@ -223,7 +238,7 @@ public final class SceneNavigator implements AutoCloseable {
             return;
         }
         if (api.session().current().isEmpty()) {
-            showLogin("Phiên làm việc đã kết thúc.");
+            showLogin("");
             return;
         }
         loggingOut = true;

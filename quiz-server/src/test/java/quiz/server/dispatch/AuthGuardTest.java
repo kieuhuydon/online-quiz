@@ -23,6 +23,22 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class AuthGuardTest {
+    @ParameterizedTest
+    @EnumSource(value = MessageType.class, names = {"CREATE_CLASS", "ADD_CLASS_MEMBER", "REMOVE_CLASS_MEMBER"})
+    void classMutationsCannotBeRegisteredForTeacherOrStudent(MessageType type) {
+        assertDoesNotThrow(() -> AuthGuard.validatePolicy(type, Set.of(Role.ADMIN)));
+        assertThrows(IllegalArgumentException.class,
+            () -> AuthGuard.validatePolicy(type, Set.of(Role.TEACHER, Role.ADMIN)));
+        assertThrows(IllegalArgumentException.class,
+            () -> AuthGuard.validatePolicy(type, Set.of(Role.STUDENT)));
+        CommandHandler handler = mock(CommandHandler.class);
+        when(handler.allowedRoles(type)).thenReturn(Set.of(Role.ADMIN));
+        when(auth.authenticate("token")).thenReturn(new UserSession(7, Role.TEACHER, "Teacher"));
+        assertThrows(ForbiddenException.class, () -> guard.check(new Request(1, type, "token", null), handler));
+        UserSession admin = new UserSession(8, Role.ADMIN, "Admin");
+        when(auth.authenticate("token")).thenReturn(admin);
+        assertEquals(admin, guard.check(new Request(2, type, "token", null), handler));
+    }
     private AuthService auth;
     private AuthGuard guard;
 

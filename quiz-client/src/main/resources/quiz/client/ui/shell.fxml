@@ -7,7 +7,14 @@
             <Label text="Q / ONLINE QUIZ" styleClass="brand"/>
             <Label fx:id="roleLabel" id="roleLabel" styleClass="role-badge"/>
             <Label text="KHÔNG GIAN LÀM VIỆC" styleClass="eyebrow-light"/>
-            <Label fx:id="activeSection" id="activeSection" styleClass="nav-active" maxWidth="Infinity"/>
+            <VBox fx:id="adminNavigation" spacing="8" visible="false" managed="false">
+                <Button fx:id="adminAccounts" text="Quản lí tài khoản" onAction="#accounts" styleClass="sidebar-navigation-button" maxWidth="Infinity"/>
+                <Button fx:id="adminClasses" text="Quản lí lớp học" onAction="#classes" styleClass="sidebar-navigation-button" maxWidth="Infinity"/>
+            </VBox>
+            <VBox fx:id="teacherNavigation" spacing="8" visible="false" managed="false">
+                <Button fx:id="teacherDashboard" text="Không gian giảng dạy" onAction="#teacherDashboard" styleClass="sidebar-navigation-button" maxWidth="Infinity"/>
+                <Button fx:id="teacherQuestions" text="Ngân hàng câu hỏi" onAction="#teacherQuestions" styleClass="sidebar-navigation-button" maxWidth="Infinity"/>
+            </VBox>
             <Region VBox.vgrow="ALWAYS"/>
             <Separator/>
             <VBox spacing="6">
@@ -24,10 +31,10 @@
                 <Region HBox.hgrow="ALWAYS"/>
                 <Label text="Trung tâm đào tạo" styleClass="muted"/>
             </HBox>
-            <ScrollPane id="pageScroll" fitToWidth="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS" styleClass="page-scroll">
-                <VBox spacing="18" styleClass="page-content">
+            <ScrollPane id="pageScroll" fitToWidth="true" fitToHeight="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS" styleClass="page-scroll">
+                <VBox spacing="18" styleClass="page-content" fillWidth="true">
                     <Label fx:id="notice" id="workspaceNotice" styleClass="notice" wrapText="true" maxWidth="Infinity" visible="false" managed="false"/>
-                    <StackPane fx:id="content" id="workspaceContent"/>
+                    <StackPane fx:id="content" id="workspaceContent" VBox.vgrow="ALWAYS"/>
                 </VBox>
             </ScrollPane>
         </VBox>

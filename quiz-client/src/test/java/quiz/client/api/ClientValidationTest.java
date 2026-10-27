@@ -10,6 +10,17 @@ import quiz.common.protocol.ErrorCode;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ClientValidationTest {
+    @Test void creationErrorsIdentifyFieldsAndPreserveValidationBoundaries() {
+        var invalid = new CreateAccountDto(" ", "short", " ", "bad-email", Role.ADMIN);
+        var errors = ClientValidation.accountErrors(invalid);
+        assertEquals(java.util.Set.of(ClientValidation.AccountField.values()), errors.keySet());
+        assertTrue(errors.get(ClientValidation.AccountField.EMAIL).contains("định dạng"));
+        assertTrue(errors.get(ClientValidation.AccountField.PASSWORD).contains("8 ký tự"));
+        assertFalse(errors.values().stream().anyMatch(message -> message.contains("bad-email")));
+        assertTrue(ClientValidation.accountErrors(dto("ế".repeat(24), " ", Role.STUDENT)).isEmpty());
+        assertTrue(ClientValidation.accountErrors(dto("ế".repeat(25), null, Role.TEACHER))
+            .containsKey(ClientValidation.AccountField.PASSWORD));
+    }
     @Test void normalizationPreservesCaseAndPasswordWhitespace() {
         var login = ClientValidation.login("  Admin  ", " x ");
         assertEquals("Admin", login.username()); assertEquals(" x ", login.password());

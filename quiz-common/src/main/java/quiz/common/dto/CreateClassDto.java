@@ -7,6 +7,7 @@ import java.io.Serializable;
  */
 public record CreateClassDto(
     String name,
-    String description
+    String description,
+    long teacherId
 ) implements Serializable {
 }

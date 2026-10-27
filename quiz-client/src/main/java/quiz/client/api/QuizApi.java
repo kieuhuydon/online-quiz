@@ -28,6 +28,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import static quiz.client.network.TransportException.Kind.CLOSED;
@@ -48,6 +52,10 @@ public final class QuizApi implements AutoCloseable {
     private long sessionRevision;
     private long transitioningGeneration;
     private boolean disposed;
+    private final ScheduledExecutorService heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(
+        Thread.ofPlatform().daemon().name("quiz-client-heartbeat").factory());
+    private ScheduledFuture<?> heartbeatTask;
+    private boolean heartbeatInFlight;
 
     public QuizApi(ServerConnection connection) {
         this.connection = Objects.requireNonNull(connection);
@@ -126,13 +134,46 @@ public final class QuizApi implements AutoCloseable {
             throw new TransportException(PROTOCOL);
         }
         sessionRevision = operation;
+        startHeartbeat();
         return login;
+    }
+
+    private void startHeartbeat() {
+        stopHeartbeat();
+        long interval = connection.heartbeatIntervalMs();
+        heartbeatTask = heartbeatExecutor.scheduleWithFixedDelay(this::heartbeat, interval, interval, TimeUnit.MILLISECONDS);
+    }
+
+    private void stopHeartbeat() {
+        if (heartbeatTask != null) {
+            heartbeatTask.cancel(false);
+            heartbeatTask = null;
+        }
+        heartbeatInFlight = false;
+    }
+
+    /** Runs on a daemon, with at most one heartbeat pending for the current session. */
+    private void heartbeat() {
+        synchronized (lock) {
+            if (disposed || transitionActive() || session.current().isEmpty() || heartbeatInFlight) return;
+            long operation = sessionRevision;
+            heartbeatInFlight = true;
+            protectedCall(MessageType.HEARTBEAT, null, payload -> {
+                requireNull(payload);
+                return null;
+            }).whenComplete((ignored, failure) -> {
+                synchronized (lock) {
+                    if (operation == sessionRevision) heartbeatInFlight = false;
+                }
+            });
+        }
     }
 
     public CompletableFuture<Void> logout() {
         synchronized (lock) {
             try {
                 ClientSession.Snapshot snapshot = authenticated();
+                stopHeartbeat();
                 transitioningGeneration = snapshot.generation();
                 long operation = ++revision;
                 return exchange(snapshot.generation(), operation, MessageType.LOGOUT, snapshot.token(), null,
@@ -193,6 +234,10 @@ public final class QuizApi implements AutoCloseable {
 
     public CompletableFuture<List<ClassDto>> listClasses() {
         return protectedCall(MessageType.LIST_CLASSES, null, QuizApi::decodeClasses);
+    }
+
+    public CompletableFuture<List<ClassDto>> listMyClasses() {
+        return protectedCall(MessageType.LIST_MY_CLASSES, null, QuizApi::decodeClasses);
     }
 
     public CompletableFuture<Void> addClassMember(long classId, long studentId) {
@@ -287,6 +332,14 @@ public final class QuizApi implements AutoCloseable {
 
     public CompletableFuture<List<ResultDto>> listQuizResults(long quizId) {
         return protectedCall(MessageType.LIST_QUIZ_RESULTS, quizId, QuizApi::decodeResults);
+    }
+
+    public CompletableFuture<ClassQuizResultsDto> getClassQuizResults(long classId) {
+        ClientValidation.positiveId(classId);
+        return protectedCall(MessageType.GET_CLASS_QUIZ_RESULTS, classId, payload -> {
+            if (!(payload instanceof ClassQuizResultsDto dto)) throw new TransportException(PROTOCOL);
+            return dto;
+        });
     }
 
     // --- Student Quiz Flow ---
@@ -419,6 +472,7 @@ public final class QuizApi implements AutoCloseable {
         SessionLost event;
         synchronized (lock) {
             lost = session.clear(generation);
+            if (lost) stopHeartbeat();
             if (transitioningGeneration == generation) {
                 transitioningGeneration = 0;
             }
@@ -568,6 +622,8 @@ public final class QuizApi implements AutoCloseable {
                 return connection.closeAsync();
             }
             disposed = true;
+            stopHeartbeat();
+            heartbeatExecutor.shutdownNow();
             revision++;
             session.clear();
             sessionLostListeners.clear();

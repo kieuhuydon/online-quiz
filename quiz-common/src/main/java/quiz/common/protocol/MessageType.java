@@ -7,18 +7,20 @@ public enum MessageType {
     // 1. Authentication & Session
     LOGIN,
     LOGOUT,
+    HEARTBEAT,
 
     // 2. Account Management (ADMIN)
     CREATE_ACCOUNT,
     LIST_ACCOUNTS,
     SET_ACCOUNT_ACTIVE,
 
-    // 3. Class Management (TEACHER, ADMIN)
+    // 3. Class Management: writes ADMIN; teacher reads only assigned classes.
     CREATE_CLASS,
     LIST_CLASSES,
     ADD_CLASS_MEMBER,
     REMOVE_CLASS_MEMBER,
     LIST_CLASS_MEMBERS,
+    LIST_MY_CLASSES,
 
     // 4. Question Bank (TEACHER, ADMIN)
     CREATE_QUESTION,
@@ -52,6 +54,7 @@ public enum MessageType {
     GET_MY_RESULT,          // STUDENT
     LIST_MY_HISTORY,        // STUDENT
     LIST_QUIZ_RESULTS,      // TEACHER, ADMIN
+    GET_CLASS_QUIZ_RESULTS, // TEACHER
     GET_QUIZ_STATISTICS,    // TEACHER, ADMIN
     LIST_ATTEMPT_EVENTS,    // TEACHER, ADMIN
 

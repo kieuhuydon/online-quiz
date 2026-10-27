@@ -19,3 +19,10 @@ if %ERRORLEVEL% NEQ 0 (
     echo 3. Cong 5555 khong bi chiem dung boi tien trinh khac.
     pause
 )
+exit /b %ERRORLEVEL%
+
+:build_error
+echo.
+echo [LOI] Khong the bien dich quiz-server va quiz-common.
+pause
+exit /b 1
