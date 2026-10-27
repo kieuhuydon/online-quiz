@@ -23,6 +23,9 @@ public interface ClassRepository {
      */
     Classroom save(Classroom classroom);
 
+    /** Deletes a class and its memberships/assignments atomically; false if it no longer exists. */
+    boolean deleteById(long classId);
+
     /**
      * Finds a classroom by ID.
      */

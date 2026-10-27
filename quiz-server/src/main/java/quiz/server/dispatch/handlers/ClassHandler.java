@@ -29,6 +29,7 @@ public final class ClassHandler implements CommandHandler {
     public Set<MessageType> supportedTypes() {
         return Set.of(
             MessageType.CREATE_CLASS,
+            MessageType.DELETE_CLASS,
             MessageType.LIST_CLASSES,
             MessageType.ADD_CLASS_MEMBER,
             MessageType.REMOVE_CLASS_MEMBER,
@@ -43,7 +44,7 @@ public final class ClassHandler implements CommandHandler {
             throw new IllegalArgumentException("Unsupported class command");
         }
         return switch (type) {
-            case CREATE_CLASS, ADD_CLASS_MEMBER, REMOVE_CLASS_MEMBER -> Set.of(Role.ADMIN);
+            case CREATE_CLASS, DELETE_CLASS, ADD_CLASS_MEMBER, REMOVE_CLASS_MEMBER -> Set.of(Role.ADMIN);
             case LIST_MY_CLASSES -> Set.of(Role.STUDENT);
             default -> Set.of(Role.TEACHER, Role.ADMIN);
         };
@@ -56,6 +57,10 @@ public final class ClassHandler implements CommandHandler {
             case CREATE_CLASS -> {
                 CreateClassDto dto = HandlerPayload.required(request, CreateClassDto.class);
                 yield Response.success(request.requestId(), classService.createClass(dto, authSession));
+            }
+            case DELETE_CLASS -> {
+                classService.deleteClass(HandlerPayload.requiredLong(request), authSession);
+                yield Response.success(request.requestId(), null);
             }
             case LIST_CLASSES -> {
                 HandlerPayload.absent(request);

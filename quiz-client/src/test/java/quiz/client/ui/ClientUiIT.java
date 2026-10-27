@@ -37,6 +37,99 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Real JavaFX/FXML + loopback client API. Requires desktop; no DB and no production fake sessions. */
 @Timeout(20)
 class ClientUiIT {
+    @Test void adminDeleteClassRequiresConfirmationAndWaitsForServer() throws Exception {
+        var peer = openClassForDeletion();
+        fx(() -> {
+            button("deleteClass").fire();
+            assertTrue(label("deleteConfirmationText").getText().contains("ENG-DELETE"));
+            assertTrue(label("deleteConfirmationText").getText().contains("liên kết giao bài"));
+            saveSnapshot("admin-class-delete-confirmation");
+            var warning = label("deleteConfirmationText");
+            assertTrue(warning.getHeight() >= warning.prefHeight(warning.getWidth()) - 1,
+                "The full deletion warning must fit without clipping");
+            button("cancelDelete").fire();
+            assertFalse(stage.getScene().lookup("#deleteConfirmation").isVisible());
+            button("confirmDelete").fire(); // A cancelled confirmation cannot submit.
+            button("deleteClass").fire();
+            ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().clearSelection();
+            assertFalse(stage.getScene().lookup("#deleteConfirmation").isVisible());
+            button("confirmDelete").fire();
+            assertTrue(button("deleteClass").isDisabled());
+            ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().select(0);
+            button("deleteClass").fire();
+            button("confirmDelete").fire(); button("confirmDelete").fire();
+            assertTrue(button("deleteClass").isDisabled());
+            assertTrue(button("refresh").isDisabled());
+            assertEquals(1, ((TableView<?>) stage.getScene().lookup("#classes")).getItems().size());
+            return null;
+        });
+        var members = peer.read();
+        assertEquals(MessageType.LIST_CLASS_MEMBERS, members.type());
+        var request = peer.read();
+        assertEquals(MessageType.DELETE_CLASS, request.type());
+        assertEquals(10L, request.payload());
+        assertNotNull(request.token());
+        peer.success(request, null);
+        awaitClassControl("refresh");
+        // A late member response must not repopulate the deleted class.
+        peer.success(members, new java.util.ArrayList<>(List.of(
+            new quiz.common.dto.ClassMemberDto(10, 3, "student", "Student", Instant.now()))));
+        var barrier = api.listClasses();
+        peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassDto>());
+        barrier.get(3, TimeUnit.SECONDS);
+        fx(() -> {
+            assertTrue(((TableView<?>) stage.getScene().lookup("#classes")).getItems().isEmpty());
+            assertTrue(((TableView<?>) stage.getScene().lookup("#members")).getItems().isEmpty());
+            assertTrue(((TableView<?>) stage.getScene().lookup("#students")).getItems().isEmpty());
+            assertTrue(button("deleteClass").isDisabled());
+            assertTrue(label("notice").getText().contains("Đã xóa lớp"));
+            return null;
+        });
+        peer.socket.setSoTimeout(200);
+        assertThrows(java.net.SocketTimeoutException.class, peer::read);
+    }
+
+    @ParameterizedTest @EnumSource(value = ErrorCode.class, names = {"DATABASE_ERROR", "NOT_FOUND"})
+    void adminDeleteClassHandlesFailureWithoutReportingSuccess(ErrorCode code) throws Exception {
+        var peer = openClassForDeletion();
+        fx(() -> { button("deleteClass").fire(); button("confirmDelete").fire(); return null; });
+        var request = peer.read();
+        assertEquals(MessageType.DELETE_CLASS, request.type());
+        peer.send(Response.error(request.requestId(), code, "internal details"));
+        awaitClassControl("refresh");
+        fx(() -> {
+            assertEquals(code == ErrorCode.NOT_FOUND ? 0 : 1,
+                ((TableView<?>) stage.getScene().lookup("#classes")).getItems().size());
+            assertTrue(label("notice").getStyleClass().contains("error-notice"));
+            assertFalse(label("notice").getText().contains("Đã xóa lớp"));
+            assertFalse(label("notice").getText().contains("internal details"));
+            return null;
+        });
+    }
+
+    private SocketFixture.Peer openClassForDeletion() throws Exception {
+        var peer = login(Role.ADMIN);
+        fx(() -> { button("adminClasses").fire(); return null; });
+        for (int i = 0; i < 2; i++) {
+            var request = peer.read();
+            peer.success(request, request.type() == MessageType.LIST_ACCOUNTS
+                ? new java.util.ArrayList<>(List.of(account(3, Role.STUDENT, true)))
+                : new java.util.ArrayList<>(List.of(new quiz.common.dto.ClassDto(
+                    10, "ENG-DELETE", null, 2, "Teacher", Instant.now()))));
+        }
+        awaitClassControl("refresh");
+        fx(() -> {
+            assertTrue(button("deleteClass").isDisabled());
+            ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().select(0);
+            return null;
+        });
+        var members = peer.read();
+        assertEquals(MessageType.LIST_CLASS_MEMBERS, members.type());
+        peer.success(members, new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        awaitClassControl("selectAllStudents");
+        return peer;
+    }
+
     @Test @SuppressWarnings("unchecked") void adminClassPageCreatesWithTeacherAndManagesMembers() throws Exception {
         var peer = login(Role.ADMIN);
         fx(() -> {
@@ -322,7 +415,7 @@ class ClientUiIT {
             peer.success(list, new java.util.ArrayList<AccountDto>());
             awaitAccountsReady();
         } else {
-            for (int i = 0; i < (role == Role.TEACHER ? 2 : 1); i++) {
+            for (int i = 0; i < (role == Role.TEACHER ? 2 : 3); i++) {
                 var list = peer.read(); peer.success(list, new java.util.ArrayList<>());
             }
         }
@@ -388,6 +481,11 @@ class ClientUiIT {
         fx(() -> { assertTrue(label("loginNotice").getText().contains("thời gian")); fillAndSubmit("fixture", "password"); return null; });
         var fresh = server.take();
         fresh.success(fresh.read(), new LoginResultDto("new-token", 1, "fixture", "Fixture", Role.TEACHER));
+        for (int i = 0; i < 2; i++) {
+            var list = fresh.read();
+            assertTrue(list.type() == MessageType.LIST_QUIZZES || list.type() == MessageType.LIST_CLASSES);
+            fresh.success(list, new java.util.ArrayList<>());
+        }
         awaitScreen(Screen.TEACHER_DASHBOARD);
         try { old.success(request, new LoginResultDto("old-token", 2, "old", "Old", Role.ADMIN)); }
         catch (java.io.IOException closed) { assertFalse(api.session().current().orElseThrow().token().equals("old-token")); }

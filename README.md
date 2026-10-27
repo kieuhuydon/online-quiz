@@ -286,7 +286,7 @@ public record Response(long requestId,          // trùng requestId của Reques
 | `LOGIN` | (chưa login) | LoginHandler | Xác thực, trả token + role |
 | `LOGOUT` | mọi role | LoginHandler | Hủy session |
 | `CREATE_ACCOUNT`, `LIST_ACCOUNTS`, `SET_ACCOUNT_ACTIVE` | ADMIN | AccountHandler | FR-AD01 |
-| `CREATE_CLASS`, `ADD_CLASS_MEMBER`, `REMOVE_CLASS_MEMBER` | ADMIN | ClassHandler | FR-A07; tạo lớp phải chọn giáo viên đang hoạt động, chỉ thêm học viên role STUDENT |
+| `CREATE_CLASS`, `DELETE_CLASS`, `ADD_CLASS_MEMBER`, `REMOVE_CLASS_MEMBER` | ADMIN | ClassHandler | FR-A07; tạo lớp phải chọn giáo viên đang hoạt động, chỉ thêm học viên role STUDENT |
 | `LIST_CLASSES`, `LIST_CLASS_MEMBERS` | TEACHER, ADMIN | ClassHandler | Admin xem toàn bộ; Teacher chỉ xem lớp được gán, kiểm tra quyền sở hữu ở server |
 | `CREATE_QUESTION`, `UPDATE_QUESTION`, `GET_QUESTION`, `LIST_QUESTIONS`, `DEACTIVATE_QUESTION` | TEACHER, ADMIN | QuestionHandler | FR-A02/A03, BR-05 |
 | `CREATE_QUIZ`, `UPDATE_QUIZ`, `GET_QUIZ`, `LIST_QUIZZES`, `SET_QUIZ_QUESTIONS` | TEACHER, ADMIN | QuizHandler | FR-A04/A05/A06 (chỉ sửa khi DRAFT) |
@@ -298,6 +298,8 @@ public record Response(long requestId,          // trùng requestId của Reques
 | `GET_CLASS_QUIZ_RESULTS` | TEACHER, ADMIN | QuizHandler | Returns quizzes and submitted results for one class; server verifies class ownership and scopes results to enrolled students |
 | `REPORT_ANTICHEAT_EVENT` | STUDENT | AntiCheatHandler | FR-S13/S14, FR-T09 |
 | **PUSH** `PUSH_ANTICHEAT_WARNING`, `PUSH_FORCE_SUBMITTED` | server → student | (AntiCheatService / Scheduler) | Cảnh báo; Attempt bị tự nộp |
+
+`DELETE_CLASS` nhận `Long classId` dương, trả payload `null` khi thành công; lớp không còn tồn tại trả `NOT_FOUND`. Admin chọn lớp → **Xóa lớp** → xác nhận tên lớp trước khi gửi. Xóa lớp đồng thời xóa thành viên và liên kết giao bài của lớp theo khóa ngoại `ON DELETE CASCADE`; giữ tài khoản, đề thi, lượt làm bài và kết quả đã lưu. Học viên mất quyền tham gia mới qua lớp đã xóa. Client chỉ cập nhật bảng sau response thành công, chặn gửi trùng khi đang xử lý và không tự retry nếu chưa xác nhận được kết quả.
 
 Quy tắc: nếu `type` không có handler → `INVALID_REQUEST`. `AuthGuard` kiểm tra token hợp lệ và role **trước** khi gọi handler (mỗi handler khai báo role cho từng `MessageType`).
 

@@ -50,6 +50,7 @@ public final class JdbcClassRepository implements ClassRepository {
         INSERT INTO class_members (class_id, student_id)
         VALUES (?, ?)
         """;
+    private static final String DELETE_CLASS = "DELETE FROM classes WHERE id = ?";
     private static final String DELETE_MEMBER = """
         DELETE FROM class_members WHERE class_id = ? AND student_id = ?
         """;
@@ -95,6 +96,17 @@ public final class JdbcClassRepository implements ClassRepository {
                 }
             } catch (SQLException error) {
                 throw translateException(error);
+            }
+        });
+    }
+
+    @Override
+    public boolean deleteById(long classId) {
+        if (classId <= 0) throw new IllegalArgumentException("Class ID must be positive");
+        return withConnection(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(DELETE_CLASS)) {
+                statement.setLong(1, classId);
+                return statement.executeUpdate() == 1;
             }
         });
     }

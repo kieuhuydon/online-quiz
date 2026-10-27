@@ -42,6 +42,7 @@ class ClassServiceTest {
     }
 
     @Test void assignedTeacherCannotWriteEvenOwnClass() {
+        assertThrows(ForbiddenException.class, () -> service.deleteClass(10, teacherSession));
         assertThrows(ForbiddenException.class, () -> service.createClass(new CreateClassDto("Class", null, 2), teacherSession));
         assertThrows(ForbiddenException.class, () -> service.addClassMember(10, 5, teacherSession));
         assertThrows(ForbiddenException.class, () -> service.removeClassMember(10, 5, teacherSession));
@@ -58,6 +59,33 @@ class ClassServiceTest {
         assertEquals(2, service.listClasses(adminSession).size());
         assertThrows(ForbiddenException.class, () -> service.listClassMembers(11, teacherSession));
         verify(classRepo, never()).findMembers(11);
+    }
+
+    @Test void adminDeletesClass() {
+        when(classRepo.deleteById(10)).thenReturn(true);
+        service.deleteClass(10, adminSession);
+        verify(classRepo).deleteById(10);
+    }
+
+    @Test void deletingMissingClassReturnsNotFound() {
+        assertThrows(quiz.server.exception.NotFoundException.class, () -> service.deleteClass(10, adminSession));
+    }
+
+    @Test void deletingInvalidClassDoesNotTouchRepository() {
+        assertThrows(ValidationException.class, () -> service.deleteClass(0, adminSession));
+        assertThrows(ValidationException.class, () -> service.deleteClass(-1, adminSession));
+        verifyNoInteractions(classRepo);
+    }
+
+    @Test void deleteRejectsMissingDisabledOrChangedIdentity() {
+        assertThrows(quiz.server.exception.UnauthorizedException.class, () -> service.deleteClass(10, null));
+        when(userRepo.findById(1)).thenReturn(Optional.of(User.restore(1, "admin", "hash", "Admin", null,
+            Role.ADMIN, false, null, Instant.now())));
+        assertThrows(quiz.server.exception.UnauthorizedException.class, () -> service.deleteClass(10, adminSession));
+        when(userRepo.findById(1)).thenReturn(Optional.of(User.restore(1, "admin", "hash", "Admin", null,
+            Role.STUDENT, true, null, Instant.now())));
+        assertThrows(quiz.server.exception.UnauthorizedException.class, () -> service.deleteClass(10, adminSession));
+        verifyNoInteractions(classRepo);
     }
 
     @Test void adminCannotBeAssignedAsTeacher() {

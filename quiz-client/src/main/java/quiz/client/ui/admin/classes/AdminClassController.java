@@ -5,6 +5,7 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.fxml.FXML;
+import javafx.scene.layout.VBox;
 import javafx.scene.control.*;
 import javafx.util.StringConverter;
 import quiz.client.api.ApiException;
@@ -33,6 +34,10 @@ public final class AdminClassController extends ScreenController {
     @FXML private TextField className, description;
     @FXML private Label notice, memberTitle, selectedCount;
     @FXML private Button createClass, addMember, removeMember, refresh;
+    @FXML private Button deleteClass, confirmDelete, cancelDelete;
+    @FXML private VBox deleteConfirmation;
+    @FXML private Label deleteConfirmationText;
+    private ClassDto deletionTarget;
     @FXML private Button selectAllStudents, clearStudents;
     private boolean busy;
     private boolean membersFresh;
@@ -83,6 +88,7 @@ public final class AdminClassController extends ScreenController {
 
     @FXML private void reload() {
         if (!isActive() || busy) return;
+        cancelDelete();
         setBusy(true);
         fx.observe(api.listAccounts().thenCombine(api.listClasses(), Data::new), this::isActive, data -> {
             var selected = classes.getSelectionModel().getSelectedItem();
@@ -95,6 +101,7 @@ public final class AdminClassController extends ScreenController {
     }
 
     private void loadMembers() {
+        cancelDelete();
         picked.clear();
         enrollmentNotes.clear();
         refreshMembers();
@@ -135,6 +142,45 @@ public final class AdminClassController extends ScreenController {
             classes.getItems().add(created);
             classes.getSelectionModel().select(created);
         });
+    }
+
+    @FXML private void requestDelete() {
+        if (!isActive() || busy) return;
+        deletionTarget = classes.getSelectionModel().getSelectedItem();
+        if (deletionTarget == null) return;
+        deleteConfirmationText.setText("Xóa vĩnh viễn lớp “" + deletionTarget.name()
+            + "”? Danh sách thành viên và các liên kết giao bài của lớp sẽ bị xóa. "
+            + "Tài khoản, đề thi và kết quả đã lưu được giữ lại. Không thể hoàn tác.");
+        deleteConfirmation.setVisible(true);
+        deleteConfirmation.setManaged(true);
+        cancelDelete.requestFocus();
+    }
+
+    @FXML private void cancelDelete() {
+        deletionTarget = null;
+        deleteConfirmation.setVisible(false);
+        deleteConfirmation.setManaged(false);
+    }
+
+    @FXML private void confirmDelete() {
+        if (!isActive() || busy || deletionTarget == null) return;
+        ClassDto target = deletionTarget;
+        ClassDto selected = classes.getSelectionModel().getSelectedItem();
+        if (selected == null || selected.id() != target.id()) { cancelDelete(); return; }
+        cancelDelete();
+        setBusy(true);
+        fx.observe(api.deleteClass(target.id()), this::isActive, ignored -> {
+            classes.getSelectionModel().clearSelection();
+            classes.getItems().removeIf(row -> row.id() == target.id());
+            message("Đã xóa lớp “" + target.name() + "”.", false);
+        }, failure -> {
+            if (FxAsync.unwrap(failure) instanceof ApiException error
+                && error.errorCode() == quiz.common.protocol.ErrorCode.NOT_FOUND) {
+                classes.getSelectionModel().clearSelection();
+                classes.getItems().removeIf(row -> row.id() == target.id());
+                message("Lớp “" + target.name() + "” không còn tồn tại. Đã cập nhật danh sách.", true);
+            } else failed(failure);
+        }, () -> setBusy(false));
     }
 
     @FXML private void add() {
@@ -251,6 +297,8 @@ public final class AdminClassController extends ScreenController {
     private void setBusy(boolean value) { busy = value; controls(); }
     private void controls() {
         createClass.setDisable(busy); refresh.setDisable(busy); classes.setDisable(busy);
+        deleteClass.setDisable(busy || classes.getSelectionModel().getSelectedItem() == null);
+        confirmDelete.setDisable(busy); cancelDelete.setDisable(busy);
         teacher.setDisable(busy); students.setDisable(busy || !membersFresh); className.setDisable(busy); description.setDisable(busy);
         long count = students.getItems().stream().filter(a -> picked.containsKey(a.id()) && picked.get(a.id()).get()).count();
         selectedCount.setText("Đã chọn " + count + " học viên");

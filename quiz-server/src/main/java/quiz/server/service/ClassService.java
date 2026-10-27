@@ -56,6 +56,14 @@ public final class ClassService {
         return new ClassDto(created.id(), created.name(), created.description(), created.teacherId(), teacherName, created.createdAt());
     }
 
+    public void deleteClass(long classId, UserSession session) {
+        requireAdmin(session);
+        if (classId <= 0) throw new ValidationException("ID lớp học phải là số dương");
+        if (!classRepository.deleteById(classId)) {
+            throw new NotFoundException("Lớp học không tồn tại");
+        }
+    }
+
     public ArrayList<ClassDto> listClasses(UserSession session) {
         requireReader(session);
         List<Classroom> classrooms = classRepository.findAll();

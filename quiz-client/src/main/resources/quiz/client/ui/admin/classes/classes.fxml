@@ -8,7 +8,17 @@
     </HBox>
     <Label fx:id="notice" styleClass="notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
     <VBox styleClass="account-card" spacing="12">
-        <Label text="Danh sách lớp học" styleClass="card-heading"/>
+        <HBox spacing="12" alignment="CENTER_LEFT">
+            <Label text="Danh sách lớp học" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
+            <Button fx:id="deleteClass" text="Xóa lớp" onAction="#requestDelete" styleClass="danger-button"/>
+        </HBox>
+        <VBox fx:id="deleteConfirmation" spacing="10" styleClass="note" visible="false" managed="false" minHeight="-Infinity">
+            <Label fx:id="deleteConfirmationText" wrapText="true" maxWidth="Infinity" minHeight="-Infinity"/>
+            <HBox spacing="10">
+                <Button fx:id="cancelDelete" text="Hủy" onAction="#cancelDelete" styleClass="secondary-button"/>
+                <Button fx:id="confirmDelete" text="Xác nhận xóa lớp" onAction="#confirmDelete" styleClass="danger-button"/>
+            </HBox>
+        </VBox>
         <TableView fx:id="classes" minHeight="320" prefHeight="360"/>
     </VBox>
     <VBox styleClass="account-card" spacing="12">

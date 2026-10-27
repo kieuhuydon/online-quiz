@@ -33,6 +33,7 @@ class ClassHandlerTest {
     @Test
     void supportedTypesAndRoles() {
         assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(MessageType.CREATE_CLASS));
+        assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(MessageType.DELETE_CLASS));
         assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.LIST_CLASSES));
         assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(MessageType.ADD_CLASS_MEMBER));
     }
@@ -47,6 +48,26 @@ class ClassHandlerTest {
         assertTrue(res.success());
         assertEquals(1, res.requestId());
         assertEquals(expected, res.payload());
+    }
+
+    @Test
+    void deleteClassDispatchesToService() {
+        var admin = new UserSession(1, Role.ADMIN, "admin");
+        var response = handler.handle(new Request(7, MessageType.DELETE_CLASS, "token", 10L), admin);
+        assertTrue(response.success());
+        assertEquals(7, response.requestId());
+        assertNull(response.payload());
+        verify(classService).deleteClass(10, admin);
+    }
+
+    @Test
+    void deleteRejectsMalformedPayloadBeforeService() {
+        for (java.io.Serializable payload : new java.io.Serializable[]{null, "10", 10, 0L, -1L}) {
+            var error = assertThrows(quiz.server.exception.QuizException.class,
+                () -> handler.handle(new Request(1, MessageType.DELETE_CLASS, "token", payload), teacherSession));
+            assertEquals(quiz.common.protocol.ErrorCode.INVALID_REQUEST, error.getErrorCode());
+        }
+        verifyNoInteractions(classService);
     }
 
     @Test
