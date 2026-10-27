@@ -4,6 +4,7 @@ import quiz.common.dto.ClassDto;
 import quiz.common.dto.ClassMemberDto;
 import quiz.common.dto.CreateClassDto;
 import quiz.common.enums.Role;
+import quiz.common.protocol.ErrorCode;
 import quiz.server.domain.Classroom;
 import quiz.server.domain.User;
 import quiz.server.exception.ConflictException;
@@ -56,6 +57,14 @@ public final class ClassService {
         return new ClassDto(created.id(), created.name(), created.description(), created.teacherId(), teacherName, created.createdAt());
     }
 
+    public void deleteClass(long classId, UserSession session) {
+        requireAdmin(session);
+        if (classId <= 0) throw new ValidationException("ID lớp học phải là số dương");
+        if (!classRepository.deleteById(classId)) {
+            throw new NotFoundException("Lớp học không tồn tại");
+        }
+    }
+
     public ArrayList<ClassDto> listClasses(UserSession session) {
         requireReader(session);
         List<Classroom> classrooms = classRepository.findAll();
@@ -94,8 +103,15 @@ public final class ClassService {
         return result;
     }
 
+    public List<User> listUnenrolledStudents(UserSession session) {
+        requireAdmin(session);
+        return userRepository.findUnenrolledStudents();
+    }
+
     public void addClassMember(long classId, long studentId, UserSession session) {
         requireAdmin(session);
+        ServiceValidation.positiveId(classId);
+        ServiceValidation.positiveId(studentId);
         Classroom classroom = classRepository.findById(classId)
             .orElseThrow(() -> new NotFoundException("Lớp học không tồn tại"));
 
@@ -105,8 +121,9 @@ public final class ClassService {
         if (student.role() != Role.STUDENT || !student.active()) {
             throw new ValidationException("Chỉ có thể thêm tài khoản có vai trò STUDENT vào lớp");
         }
-        if (classRepository.isMember(classId, studentId)) {
-            throw new ConflictException("Học viên đã ở trong lớp học này");
+        if (!classRepository.findClassIdsForStudent(studentId).isEmpty()) {
+            throw new ConflictException(ErrorCode.STUDENT_ALREADY_ENROLLED,
+                "Học viên đã có lớp. Xóa khỏi lớp hiện tại trước khi chuyển lớp.");
         }
         classRepository.addMember(classId, studentId);
     }

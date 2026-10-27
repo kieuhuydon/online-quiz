@@ -5,6 +5,7 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.fxml.FXML;
+import javafx.scene.layout.VBox;
 import javafx.scene.control.*;
 import javafx.util.StringConverter;
 import quiz.client.api.ApiException;
@@ -33,11 +34,14 @@ public final class AdminClassController extends ScreenController {
     @FXML private TextField className, description;
     @FXML private Label notice, memberTitle, selectedCount;
     @FXML private Button createClass, addMember, removeMember, refresh;
+    @FXML private Button deleteClass, confirmDelete, cancelDelete;
+    @FXML private VBox deleteConfirmation;
+    @FXML private Label deleteConfirmationText;
+    private ClassDto deletionTarget;
     @FXML private Button selectAllStudents, clearStudents;
     private boolean busy;
     private boolean membersFresh;
     private long memberRevision;
-    private List<AccountDto> studentAccounts = List.of();
     private final Map<Long, BooleanProperty> picked = new LinkedHashMap<>();
     private final Map<Long, String> enrollmentNotes = new LinkedHashMap<>();
 
@@ -83,11 +87,11 @@ public final class AdminClassController extends ScreenController {
 
     @FXML private void reload() {
         if (!isActive() || busy) return;
+        cancelDelete();
         setBusy(true);
         fx.observe(api.listAccounts().thenCombine(api.listClasses(), Data::new), this::isActive, data -> {
             var selected = classes.getSelectionModel().getSelectedItem();
             teacher.getItems().setAll(data.accounts().stream().filter(a -> a.role() == Role.TEACHER && a.active()).toList());
-            studentAccounts = data.accounts().stream().filter(a -> a.role() == Role.STUDENT && a.active()).toList();
             classes.getItems().setAll(data.classes());
             if (selected != null) data.classes().stream().filter(c -> c.id() == selected.id()).findFirst()
                 .ifPresent(c -> classes.getSelectionModel().select(c));
@@ -95,6 +99,7 @@ public final class AdminClassController extends ScreenController {
     }
 
     private void loadMembers() {
+        cancelDelete();
         picked.clear();
         enrollmentNotes.clear();
         refreshMembers();
@@ -109,13 +114,15 @@ public final class AdminClassController extends ScreenController {
         memberTitle.setText(selected == null ? "Học viên trong lớp" : "Học viên lớp " + selected.name());
         controls();
         if (selected == null) return;
-        fx.observe(api.listClassMembers(selected.id()), () -> isActive() && version == memberRevision,
-            rows -> {
-                members.getItems().setAll(rows);
-                Set<Long> enrolled = rows.stream().map(ClassMemberDto::studentId).collect(Collectors.toSet());
-                picked.keySet().removeAll(enrolled);
-                students.getItems().setAll(studentAccounts.stream().filter(a -> !enrolled.contains(a.id())).toList());
-                students.setPlaceholder(new Label("Không còn học viên đang hoạt động để thêm vào lớp."));
+        fx.observe(api.listClassMembers(selected.id()).thenCombine(api.listUnenrolledStudents(), MembersData::new),
+            () -> isActive() && version == memberRevision, data -> {
+                members.getItems().setAll(data.members());
+                Set<Long> enrolled = data.members().stream().map(ClassMemberDto::studentId).collect(Collectors.toSet());
+                List<AccountDto> available = data.students().stream()
+                    .filter(a -> a.role() == Role.STUDENT && a.active() && !enrolled.contains(a.id())).toList();
+                picked.keySet().retainAll(available.stream().map(AccountDto::id).collect(Collectors.toSet()));
+                students.getItems().setAll(available);
+                students.setPlaceholder(new Label("Không có học viên đang hoạt động và chưa có lớp."));
                 membersFresh = true;
             }, failure -> message((notice.isVisible() ? notice.getText() + " " : "")
                 + "Chưa tải được danh sách học viên. Hãy tải lại trước khi thêm tiếp.", true), this::controls);
@@ -137,6 +144,45 @@ public final class AdminClassController extends ScreenController {
         });
     }
 
+    @FXML private void requestDelete() {
+        if (!isActive() || busy) return;
+        deletionTarget = classes.getSelectionModel().getSelectedItem();
+        if (deletionTarget == null) return;
+        deleteConfirmationText.setText("Xóa vĩnh viễn lớp “" + deletionTarget.name()
+            + "”? Danh sách thành viên và các liên kết giao bài của lớp sẽ bị xóa. "
+            + "Tài khoản, đề thi và kết quả đã lưu được giữ lại. Không thể hoàn tác.");
+        deleteConfirmation.setVisible(true);
+        deleteConfirmation.setManaged(true);
+        cancelDelete.requestFocus();
+    }
+
+    @FXML private void cancelDelete() {
+        deletionTarget = null;
+        deleteConfirmation.setVisible(false);
+        deleteConfirmation.setManaged(false);
+    }
+
+    @FXML private void confirmDelete() {
+        if (!isActive() || busy || deletionTarget == null) return;
+        ClassDto target = deletionTarget;
+        ClassDto selected = classes.getSelectionModel().getSelectedItem();
+        if (selected == null || selected.id() != target.id()) { cancelDelete(); return; }
+        cancelDelete();
+        setBusy(true);
+        fx.observe(api.deleteClass(target.id()), this::isActive, ignored -> {
+            classes.getSelectionModel().clearSelection();
+            classes.getItems().removeIf(row -> row.id() == target.id());
+            message("Đã xóa lớp “" + target.name() + "”.", false);
+        }, failure -> {
+            if (FxAsync.unwrap(failure) instanceof ApiException error
+                && error.errorCode() == quiz.common.protocol.ErrorCode.NOT_FOUND) {
+                classes.getSelectionModel().clearSelection();
+                classes.getItems().removeIf(row -> row.id() == target.id());
+                message("Lớp “" + target.name() + "” không còn tồn tại. Đã cập nhật danh sách.", true);
+            } else failed(failure);
+        }, () -> setBusy(false));
+    }
+
     @FXML private void add() {
         if (!isActive() || busy || !membersFresh) return;
         var selected = classes.getSelectionModel().getSelectedItem();
@@ -145,11 +191,10 @@ public final class AdminClassController extends ScreenController {
         enrollmentNotes.clear();
         write(enroll(selected.id(), ids), result -> {
             result.added.forEach(picked::remove);
-            result.existing.forEach(picked::remove);
             enrollmentNotes.putAll(result.notes);
-            int pending = ids.size() - result.added.size() - result.existing.size() - result.rejected;
+            int pending = ids.size() - result.added.size() - result.rejected;
             String summary = "Đã thêm " + result.added.size() + "/" + ids.size() + " học viên.";
-            if (!result.existing.isEmpty()) summary += " " + result.existing.size() + " học viên đã có trong lớp.";
+            if (result.alreadyEnrolled > 0) summary += " " + result.alreadyEnrolled + " học viên đã có lớp, không thêm lại.";
             if (result.rejected > 0) summary += " " + result.rejected + " học viên không thêm được; xem trạng thái trong bảng.";
             if (pending > 0) summary += " " + pending + " học viên chưa xác nhận hoặc chưa xử lý. Tải lại trước khi thử lại.";
             message(summary, result.rejected > 0 || pending > 0);
@@ -170,7 +215,11 @@ public final class AdminClassController extends ScreenController {
                 if (cause == null) result.added.add(id);
                 else if (cause instanceof ApiException error) {
                     switch (error.errorCode()) {
-                        case CONFLICT -> result.existing.add(id);
+                        case STUDENT_ALREADY_ENROLLED, CONFLICT -> {
+                            result.rejected++;
+                            result.alreadyEnrolled++;
+                            result.notes.put(id, "Đã có lớp; xóa khỏi lớp cũ trước khi chuyển lớp");
+                        }
                         case VALIDATION_ERROR, NOT_FOUND -> {
                             result.rejected++;
                             result.notes.put(id, error.errorCode() == quiz.common.protocol.ErrorCode.NOT_FOUND
@@ -209,9 +258,9 @@ public final class AdminClassController extends ScreenController {
 
     private static final class Enrollment {
         final List<Long> added = new ArrayList<>();
-        final List<Long> existing = new ArrayList<>();
         final Map<Long, String> notes = new LinkedHashMap<>();
         int rejected;
+        int alreadyEnrolled;
         boolean stopped;
     }
 
@@ -234,6 +283,7 @@ public final class AdminClassController extends ScreenController {
         String text = "Chưa xác nhận được kết quả. Tải lại dữ liệu trước khi thử lại.";
         if (FxAsync.unwrap(failure) instanceof ApiException error) text = switch (error.errorCode()) {
             case CONFLICT -> "Tên lớp đã tồn tại hoặc học viên đã ở trong lớp.";
+            case STUDENT_ALREADY_ENROLLED -> "Học viên đã có lớp. Xóa khỏi lớp hiện tại trước khi chuyển lớp.";
             case VALIDATION_ERROR -> "Thông tin không hợp lệ; kiểm tra giáo viên và học viên đang hoạt động.";
             case FORBIDDEN -> "Chỉ Admin được thay đổi lớp và học viên.";
             case NOT_FOUND -> "Lớp hoặc tài khoản không còn tồn tại. Hãy tải lại.";
@@ -251,6 +301,8 @@ public final class AdminClassController extends ScreenController {
     private void setBusy(boolean value) { busy = value; controls(); }
     private void controls() {
         createClass.setDisable(busy); refresh.setDisable(busy); classes.setDisable(busy);
+        deleteClass.setDisable(busy || classes.getSelectionModel().getSelectedItem() == null);
+        confirmDelete.setDisable(busy); cancelDelete.setDisable(busy);
         teacher.setDisable(busy); students.setDisable(busy || !membersFresh); className.setDisable(busy); description.setDisable(busy);
         long count = students.getItems().stream().filter(a -> picked.containsKey(a.id()) && picked.get(a.id()).get()).count();
         selectedCount.setText("Đã chọn " + count + " học viên");
@@ -260,4 +312,5 @@ public final class AdminClassController extends ScreenController {
         removeMember.setDisable(busy || !membersFresh || members.getSelectionModel().getSelectedItem() == null);
     }
     private record Data(List<AccountDto> accounts, List<ClassDto> classes) { }
+    private record MembersData(List<ClassMemberDto> members, List<AccountDto> students) { }
 }

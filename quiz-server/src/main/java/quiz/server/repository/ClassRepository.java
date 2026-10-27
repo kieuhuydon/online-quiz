@@ -23,6 +23,9 @@ public interface ClassRepository {
      */
     Classroom save(Classroom classroom);
 
+    /** Deletes a class and its memberships/assignments atomically; false if it no longer exists. */
+    boolean deleteById(long classId);
+
     /**
      * Finds a classroom by ID.
      */
@@ -46,7 +49,7 @@ public interface ClassRepository {
     /**
      * Adds a student to a class.
      *
-     * @throws ConflictException if student is already in the class
+     * @throws ConflictException with STUDENT_ALREADY_ENROLLED if the student already has any class
      */
     void addMember(long classId, long studentId);
 

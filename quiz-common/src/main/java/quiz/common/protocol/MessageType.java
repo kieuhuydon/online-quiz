@@ -16,10 +16,12 @@ public enum MessageType {
 
     // 3. Class Management: writes ADMIN; teacher reads only assigned classes.
     CREATE_CLASS,
+    DELETE_CLASS,
     LIST_CLASSES,
     ADD_CLASS_MEMBER,
     REMOVE_CLASS_MEMBER,
     LIST_CLASS_MEMBERS,
+    LIST_UNENROLLED_STUDENTS,
     LIST_MY_CLASSES,
 
     // 4. Question Bank (TEACHER, ADMIN)

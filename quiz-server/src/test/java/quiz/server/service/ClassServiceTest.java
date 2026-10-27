@@ -42,6 +42,7 @@ class ClassServiceTest {
     }
 
     @Test void assignedTeacherCannotWriteEvenOwnClass() {
+        assertThrows(ForbiddenException.class, () -> service.deleteClass(10, teacherSession));
         assertThrows(ForbiddenException.class, () -> service.createClass(new CreateClassDto("Class", null, 2), teacherSession));
         assertThrows(ForbiddenException.class, () -> service.addClassMember(10, 5, teacherSession));
         assertThrows(ForbiddenException.class, () -> service.removeClassMember(10, 5, teacherSession));
@@ -58,6 +59,33 @@ class ClassServiceTest {
         assertEquals(2, service.listClasses(adminSession).size());
         assertThrows(ForbiddenException.class, () -> service.listClassMembers(11, teacherSession));
         verify(classRepo, never()).findMembers(11);
+    }
+
+    @Test void adminDeletesClass() {
+        when(classRepo.deleteById(10)).thenReturn(true);
+        service.deleteClass(10, adminSession);
+        verify(classRepo).deleteById(10);
+    }
+
+    @Test void deletingMissingClassReturnsNotFound() {
+        assertThrows(quiz.server.exception.NotFoundException.class, () -> service.deleteClass(10, adminSession));
+    }
+
+    @Test void deletingInvalidClassDoesNotTouchRepository() {
+        assertThrows(ValidationException.class, () -> service.deleteClass(0, adminSession));
+        assertThrows(ValidationException.class, () -> service.deleteClass(-1, adminSession));
+        verifyNoInteractions(classRepo);
+    }
+
+    @Test void deleteRejectsMissingDisabledOrChangedIdentity() {
+        assertThrows(quiz.server.exception.UnauthorizedException.class, () -> service.deleteClass(10, null));
+        when(userRepo.findById(1)).thenReturn(Optional.of(User.restore(1, "admin", "hash", "Admin", null,
+            Role.ADMIN, false, null, Instant.now())));
+        assertThrows(quiz.server.exception.UnauthorizedException.class, () -> service.deleteClass(10, adminSession));
+        when(userRepo.findById(1)).thenReturn(Optional.of(User.restore(1, "admin", "hash", "Admin", null,
+            Role.STUDENT, true, null, Instant.now())));
+        assertThrows(quiz.server.exception.UnauthorizedException.class, () -> service.deleteClass(10, adminSession));
+        verifyNoInteractions(classRepo);
     }
 
     @Test void adminCannotBeAssignedAsTeacher() {
@@ -95,7 +123,7 @@ class ClassServiceTest {
         Classroom classroom = Classroom.restore(10, "ENG-B1-01", "Desc", 2, now);
         when(classRepo.findById(10)).thenReturn(Optional.of(classroom));
         when(userRepo.findById(5)).thenReturn(Optional.of(User.restore(5, "student01", "hash", "Student 01", "s1@quiz.center", Role.STUDENT, true, 1L, now)));
-        when(classRepo.isMember(10, 5)).thenReturn(false);
+        when(classRepo.findClassIdsForStudent(5)).thenReturn(List.of());
 
         service.addClassMember(10, 5, adminSession);
         verify(classRepo).addMember(10, 5);
@@ -118,5 +146,26 @@ class ClassServiceTest {
         when(classRepo.findById(10)).thenReturn(Optional.of(classroom));
 
         assertThrows(ForbiddenException.class, () -> service.addClassMember(10, 5, otherSession));
+    }
+
+    @Test void rejectsStudentsAlreadyInThisOrAnotherClass() {
+        when(classRepo.findById(10)).thenReturn(Optional.of(Classroom.restore(10, "Class", null, 2, Instant.now())));
+        when(userRepo.findById(5)).thenReturn(Optional.of(User.restore(5, "student", "hash", "Student", null,
+            Role.STUDENT, true, 1L, Instant.now())));
+        for (long existing : new long[]{10, 11}) {
+            when(classRepo.findClassIdsForStudent(5)).thenReturn(List.of(existing));
+            var error = assertThrows(ConflictException.class, () -> service.addClassMember(10, 5, adminSession));
+            assertEquals(quiz.common.protocol.ErrorCode.STUDENT_ALREADY_ENROLLED, error.getErrorCode());
+        }
+        verify(classRepo, never()).addMember(anyLong(), anyLong());
+    }
+
+    @Test void candidatesRequireAdminAndUseRepositoryFilter() {
+        var student = User.restore(5, "student", "hash", "Student", null, Role.STUDENT, true, 1L, Instant.now());
+        when(userRepo.findUnenrolledStudents()).thenReturn(List.of(student));
+        assertEquals(List.of(student), service.listUnenrolledStudents(adminSession));
+        assertThrows(ForbiddenException.class, () -> service.listUnenrolledStudents(teacherSession));
+        assertThrows(quiz.server.exception.UnauthorizedException.class, () -> service.listUnenrolledStudents(null));
+        verify(userRepo, times(1)).findUnenrolledStudents();
     }
 }

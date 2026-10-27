@@ -8,7 +8,17 @@
     </HBox>
     <Label fx:id="notice" styleClass="notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
     <VBox styleClass="account-card" spacing="12">
-        <Label text="Danh sách lớp học" styleClass="card-heading"/>
+        <HBox spacing="12" alignment="CENTER_LEFT">
+            <Label text="Danh sách lớp học" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
+            <Button fx:id="deleteClass" text="Xóa lớp" onAction="#requestDelete" styleClass="danger-button"/>
+        </HBox>
+        <VBox fx:id="deleteConfirmation" spacing="10" styleClass="note" visible="false" managed="false" minHeight="-Infinity">
+            <Label fx:id="deleteConfirmationText" wrapText="true" maxWidth="Infinity" minHeight="-Infinity"/>
+            <HBox spacing="10">
+                <Button fx:id="cancelDelete" text="Hủy" onAction="#cancelDelete" styleClass="secondary-button"/>
+                <Button fx:id="confirmDelete" text="Xác nhận xóa lớp" onAction="#confirmDelete" styleClass="danger-button"/>
+            </HBox>
+        </VBox>
         <TableView fx:id="classes" minHeight="320" prefHeight="360"/>
     </VBox>
     <VBox styleClass="account-card" spacing="12">
@@ -18,7 +28,7 @@
         </HBox>
         <TableView fx:id="members" minHeight="280" prefHeight="320"/>
         <Label text="Chọn học viên để thêm vào lớp" styleClass="section-heading"/>
-        <Label text="Đánh dấu các học viên cần thêm; có thể chọn nhiều người cùng lúc." styleClass="muted" wrapText="true"/>
+        <Label text="Chỉ hiển thị học viên đang hoạt động và chưa có lớp. Mỗi học viên thuộc tối đa một lớp; muốn chuyển lớp, hãy xóa khỏi lớp cũ trước." styleClass="muted" wrapText="true" minHeight="-Infinity"/>
         <FlowPane hgap="10" vgap="8" alignment="CENTER_LEFT">
             <Button fx:id="selectAllStudents" text="Chọn tất cả" onAction="#selectAll" styleClass="secondary-button"/>
             <Button fx:id="clearStudents" text="Bỏ chọn" onAction="#clearSelection" styleClass="secondary-button"/>
