@@ -19,10 +19,17 @@ import quiz.common.dto.UpdateQuestionDto;
 import quiz.common.enums.Difficulty;
 import quiz.common.protocol.ErrorCode;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
+import javafx.stage.FileChooser;
 
 /** FX thread owns the question list and form. Responses update only the mounted session. */
 public final class QuestionController extends ScreenController {
@@ -35,7 +42,7 @@ public final class QuestionController extends ScreenController {
     @FXML private GridPane questionPanels;
     @FXML private VBox questionForm;
     @FXML private TableView<QuestionDto> questionTable;
-    @FXML private TextField questionContent;
+    @FXML private TextArea questionContent;
     @FXML private TextField questionOptionA;
     @FXML private TextField questionOptionB;
     @FXML private TextField questionOptionC;
@@ -44,6 +51,8 @@ public final class QuestionController extends ScreenController {
     @FXML private TextField questionTopic;
     @FXML private ComboBox<Difficulty> questionDifficulty;
     @FXML private Button refreshQuestions;
+    @FXML private Button importQuestions;
+    @FXML private Button newQuestion;
     @FXML private Button createQuestion;
     @FXML private Button updateQuestion;
     @FXML private Button deactivateQuestion;
@@ -308,6 +317,8 @@ public final class QuestionController extends ScreenController {
         QuestionDto selected = questionTable.getSelectionModel().getSelectedItem();
         createQuestion.setDisable(busy || editTarget != null);
         updateQuestion.setDisable(busy || editTarget == null);
+        if (newQuestion != null) newQuestion.setDisable(busy);
+        if (importQuestions != null) importQuestions.setDisable(busy);
         deactivateQuestion.setDisable(busy || !listFresh || selected == null || !selected.active());
         refreshQuestions.setDisable(writing);
         questionContent.setDisable(writing);
@@ -387,6 +398,174 @@ public final class QuestionController extends ScreenController {
             return text == null ? "" : text;
         }
         return text.substring(0, max - 1) + "…";
+    }
+
+    @FXML
+    private void importQuestions() {
+        if (!isActive() || writing || loading) {
+            return;
+        }
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Chọn tài liệu câu hỏi (TXT hoặc CSV)");
+        fileChooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("Tài liệu câu hỏi (*.txt, *.csv)", "*.txt", "*.csv"),
+            new FileChooser.ExtensionFilter("Tất cả tệp (*.*)", "*.*")
+        );
+        File file = fileChooser.showOpenDialog(questionPanels.getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+
+        List<CreateQuestionDto> parsed;
+        try {
+            parsed = parseQuestionFile(file);
+        } catch (Exception ex) {
+            show(questionNotice, "Lỗi đọc tệp: " + ex.getMessage(), true);
+            return;
+        }
+
+        if (parsed.isEmpty()) {
+            show(questionNotice, "Không tìm thấy câu hỏi hợp lệ trong tệp hoặc tệp rỗng.", true);
+            return;
+        }
+
+        if (!confirm("Xác nhận nhập câu hỏi",
+            String.format("Tìm thấy %d câu hỏi hợp lệ từ tệp '%s'. Bạn có muốn nhập vào ngân hàng câu hỏi?",
+                parsed.size(), file.getName()))) {
+            return;
+        }
+
+        importBatch(parsed, 0, 0);
+    }
+
+    private void importBatch(List<CreateQuestionDto> list, int index, int successCount) {
+        if (!isActive()) {
+            return;
+        }
+        if (index >= list.size()) {
+            writing = false;
+            updateControls();
+            show(questionNotice, String.format("Nhập hoàn tất: đã thêm thành công %d/%d câu hỏi từ tệp.",
+                successCount, list.size()), false);
+            reload();
+            return;
+        }
+
+        beginWrite(String.format("Đang nhập câu hỏi %d/%d…", index + 1, list.size()));
+        CreateQuestionDto dto = list.get(index);
+        fx.observe(api.createQuestion(dto), () -> isActive(),
+            created -> importBatch(list, index + 1, successCount + 1),
+            failure -> {
+                // Tiếp tục nhập các câu tiếp theo nếu một câu gặp lỗi
+                importBatch(list, index + 1, successCount);
+            },
+            () -> {});
+    }
+
+    private List<CreateQuestionDto> parseQuestionFile(File file) throws Exception {
+        List<CreateQuestionDto> results = new ArrayList<>();
+        boolean isCsv = file.getName().toLowerCase().endsWith(".csv");
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+            String line;
+            if (isCsv) {
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty() || line.startsWith("#")) continue;
+                    // Format CSV: content,optionA,optionB,optionC,optionD,correctOption,topic,difficulty
+                    String[] parts = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
+                    if (parts.length >= 6) {
+                        String content = cleanCsvField(parts[0]);
+                        if (content.equalsIgnoreCase("content") || content.equalsIgnoreCase("nội dung")) {
+                            continue; // Bỏ qua header
+                        }
+                        String a = cleanCsvField(parts[1]);
+                        String b = cleanCsvField(parts[2]);
+                        String c = cleanCsvField(parts[3]);
+                        String d = cleanCsvField(parts[4]);
+                        char correct = cleanCsvField(parts[5]).toUpperCase().charAt(0);
+                        String topic = parts.length > 6 ? cleanCsvField(parts[6]) : "Tổng hợp";
+                        if (topic.isBlank()) topic = "Tổng hợp";
+                        Difficulty diff = Difficulty.MEDIUM;
+                        if (parts.length > 7) {
+                            try {
+                                diff = Difficulty.valueOf(cleanCsvField(parts[7]).toUpperCase());
+                            } catch (Exception ignored) {}
+                        }
+                        try {
+                            results.add(ClientValidation.question(new CreateQuestionDto(content, a, b, c, d, correct, topic, diff)));
+                        } catch (Exception ignored) {}
+                    }
+                }
+            } else {
+                // Format TXT dạng khối (Question, A., B., C., D., Answer/Đáp án)
+                String currentContent = null;
+                String optA = null, optB = null, optC = null, optD = null;
+                char correct = 'A';
+                String topic = "Tổng hợp";
+                Difficulty diff = Difficulty.MEDIUM;
+
+                while ((line = reader.readLine()) != null) {
+                    String trimmed = line.trim();
+                    if (trimmed.isEmpty()) {
+                        if (currentContent != null && optA != null && optB != null && optC != null && optD != null) {
+                            try {
+                                results.add(ClientValidation.question(new CreateQuestionDto(currentContent, optA, optB, optC, optD, correct, topic, diff)));
+                            } catch (Exception ignored) {}
+                            currentContent = null; optA = null; optB = null; optC = null; optD = null;
+                            correct = 'A'; topic = "Tổng hợp"; diff = Difficulty.MEDIUM;
+                        }
+                        continue;
+                    }
+                    if (trimmed.startsWith("#")) continue;
+
+                    String upper = trimmed.toUpperCase();
+                    if (upper.startsWith("CHỦ ĐỀ:") || upper.startsWith("TOPIC:")) {
+                        topic = trimmed.substring(trimmed.indexOf(':') + 1).trim();
+                    } else if (upper.startsWith("ĐỘ KHÓ:") || upper.startsWith("DIFFICULTY:")) {
+                        String dStr = trimmed.substring(trimmed.indexOf(':') + 1).trim().toUpperCase();
+                        try { diff = Difficulty.valueOf(dStr); } catch (Exception ignored) {}
+                    } else if (upper.startsWith("A.") || upper.startsWith("A)")) {
+                        optA = trimmed.substring(2).trim();
+                    } else if (upper.startsWith("B.") || upper.startsWith("B)")) {
+                        optB = trimmed.substring(2).trim();
+                    } else if (upper.startsWith("C.") || upper.startsWith("C)")) {
+                        optC = trimmed.substring(2).trim();
+                    } else if (upper.startsWith("D.") || upper.startsWith("D)")) {
+                        optD = trimmed.substring(2).trim();
+                    } else if (upper.startsWith("ĐÁP ÁN:") || upper.startsWith("ANSWER:") || upper.startsWith("KEY:")) {
+                        String ans = trimmed.substring(trimmed.indexOf(':') + 1).trim().toUpperCase();
+                        if (!ans.isEmpty()) correct = ans.charAt(0);
+                    } else {
+                        // Nội dung câu hỏi (có thể gồm chữ Câu 1:, Question 1:, ...)
+                        if (currentContent == null) {
+                            int colon = trimmed.indexOf(':');
+                            if ((upper.startsWith("CÂU ") || upper.startsWith("QUESTION ")) && colon > 0) {
+                                currentContent = trimmed.substring(colon + 1).trim();
+                            } else {
+                                currentContent = trimmed;
+                            }
+                        } else {
+                            currentContent += "\n" + trimmed;
+                        }
+                    }
+                }
+                if (currentContent != null && optA != null && optB != null && optC != null && optD != null) {
+                    try {
+                        results.add(ClientValidation.question(new CreateQuestionDto(currentContent, optA, optB, optC, optD, correct, topic, diff)));
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+        return results;
+    }
+
+    private static String cleanCsvField(String field) {
+        if (field == null) return "";
+        field = field.trim();
+        if (field.startsWith("\"") && field.endsWith("\"") && field.length() >= 2) {
+            field = field.substring(1, field.length() - 1).replace("\"\"", "\"");
+        }
+        return field.trim();
     }
 
     @Override
