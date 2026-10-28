@@ -730,7 +730,20 @@ Trên `quizdb` vừa tạo schema và còn trống:
 & "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz -d quizdb -W -v ON_ERROR_STOP=1 -c "SET quiz.allow_demo_seed = 'on'" -f database/seed.sql
 ```
 
-Seed cần opt-in, bảng users trống và các sequence liên quan chưa dùng. Kết quả phải kết thúc bằng COMMIT. Tài khoản ứng dụng mẫu: `admin`, `teacher1`, `teacher2`, `student01`–`student50`, cùng mật khẩu **password123**. Đây là tài khoản Online Quiz, khác với các role PostgreSQL `postgres`/`quiz`/`quiz_test`; chỉ dùng cho demo, không dùng triển khai thật.
+Seed cần opt-in và cả 11 bảng trống; không yêu cầu sequence bắt đầu từ 1 vì mọi liên kết dùng ID trả về hoặc tra theo username/tên lớp. Script khóa ghi các bảng trong transaction, không xóa dữ liệu và từ chối chạy lại nếu đã có dữ liệu. Kết quả phải kết thúc bằng COMMIT. Tài khoản ứng dụng mẫu: `admin`, `teacher1`, `teacher2`, `student01`–`student50`, cùng mật khẩu **password123**; `student50` bị khóa để thử đăng nhập thất bại. Đây là tài khoản Online Quiz, khác với các role PostgreSQL `postgres`/`quiz`/`quiz_test`; chỉ dùng cho demo.
+
+| Dữ liệu demo | Nội dung |
+|---|---|
+| Lớp B1 · teacher1 | `ENG-B1-01`: student01–student20; đề OPEN `B1 Grammar - Practice`, PIN **123456** |
+| Lớp B2 · teacher2 | `ENG-B2-01`: student21–student35; đề OPEN `B2 Vocabulary - Practice`, PIN **234567** |
+| Lớp TOEIC · teacher1 | `TOEIC-650`: student36–student45; đề OPEN `TOEIC Reading - Practice`, PIN **345678** |
+| Chưa có lớp | student46–student49 đang hoạt động, có thể thêm bằng trang Admin; student50 đang bị khóa |
+| Ngân hàng câu hỏi | 30 câu Grammar/Vocabulary/Reading, đủ ba mức độ khó |
+| Đề nháp | `General English - Draft` của teacher2: 15 câu, chưa giao lớp |
+| Lịch sử/kết quả | Hai đề CLOSED: `B1 Grammar - Completed`, `B2 Vocabulary - Completed`; 8 bài đã nộp, 80 câu trả lời, đủ đạt/trượt và MANUAL/TIMEOUT/ANTICHEAT |
+| Chống gian lận | student04 và student24 có 3 sự kiện FOCUS_LOST/bài; sự kiện cuối AUTO_SUBMITTED. Dữ liệu này là mô phỏng demo, không phải log thực nghiệm. |
+
+Các đề đang OPEN chưa có lượt làm bài để thử luồng nhập PIN và làm bài mới; không seed lượt IN_PROGRESS để tránh bộ hẹn giờ thay đổi dữ liệu ngay khi khởi động server.
 
 Giữ `quizdb_test` **không có seed demo** để integration test tạo fixture riêng.
 
