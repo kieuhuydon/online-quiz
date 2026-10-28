@@ -114,6 +114,7 @@ public final class TeacherController extends ScreenController {
     @FXML private Label selectedQuestionsCount;
     @FXML private Button btnSaveSelectedQuestions;
     @FXML private Button btnCancelQuestionSelection;
+    @FXML private TextArea questionSelectionPreview;
     private long targetQuizIdForQuestions = 0;
 
     // Assign Quiz to Multiple Classes Panel (Feature 3)
@@ -146,6 +147,7 @@ public final class TeacherController extends ScreenController {
     @FXML private TextField txtPickerSearch;
     @FXML private ComboBox<Difficulty> cmbPickerDifficulty;
     @FXML private TableView<QuestionDto> pickerTable;
+    @FXML private TextArea pickerPreview;
     @FXML private Button btnConfirmPicker;
 
     // --- Tab 2: Class Controls ---
@@ -887,23 +889,7 @@ public final class TeacherController extends ScreenController {
         TableColumn<DetailQuestionRow, String> colContent = new TableColumn<>("Nội dung câu hỏi");
         colContent.setPrefWidth(280);
         colContent.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().getQuestion().content()));
-        colContent.setCellFactory(col -> new TableCell<>() {
-            private final TextField txt = new TextField();
-            {
-                txt.setEditable(false);
-                txt.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 0; -fx-text-fill: #1e293b;");
-            }
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setGraphic(null);
-                } else {
-                    txt.setText(item);
-                    setGraphic(txt);
-                }
-            }
-        });
+        colContent.setCellFactory(col -> wrappingTextCell());
 
         TableColumn<DetailQuestionRow, String> colOptions = new TableColumn<>("Đáp án đúng & Lựa chọn");
         colOptions.setPrefWidth(220);
@@ -911,23 +897,7 @@ public final class TeacherController extends ScreenController {
             QuestionDto q = r.getValue().getQuestion();
             return new SimpleStringProperty("Đáp án: " + q.correctOption() + " | A: " + q.optionA() + " | B: " + q.optionB() + " | C: " + q.optionC() + " | D: " + q.optionD());
         });
-        colOptions.setCellFactory(col -> new TableCell<>() {
-            private final TextField txt = new TextField();
-            {
-                txt.setEditable(false);
-                txt.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 0; -fx-text-fill: #475569;");
-            }
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setGraphic(null);
-                } else {
-                    txt.setText(item);
-                    setGraphic(txt);
-                }
-            }
-        });
+        colOptions.setCellFactory(col -> wrappingTextCell());
 
         TableColumn<DetailQuestionRow, Void> colActions = new TableColumn<>("Thao tác");
         colActions.setPrefWidth(170);
@@ -1031,6 +1001,7 @@ public final class TeacherController extends ScreenController {
         TableColumn<QuestionDto, String> colContent = new TableColumn<>("Nội dung câu hỏi");
         colContent.setPrefWidth(380);
         colContent.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().content()));
+        colContent.setCellFactory(col -> wrappingTextCell());
 
         TableColumn<QuestionDto, String> colCorrect = new TableColumn<>("Đáp án");
         colCorrect.setPrefWidth(65);
@@ -1041,6 +1012,8 @@ public final class TeacherController extends ScreenController {
         pickerTable.getSelectionModel().selectedItemProperty().addListener((obs, o, n) ->
             btnConfirmPicker.setDisable(n == null)
         );
+        pickerTable.getSelectionModel().selectedItemProperty().addListener((obs, oldQuestion, question) ->
+            pickerPreview.setText(question == null ? "" : formatQuestionPreview(question)));
     }
 
     @FXML
@@ -1684,6 +1657,7 @@ public final class TeacherController extends ScreenController {
         TableColumn<QuestionRow, String> colContent = new TableColumn<>("Nội dung câu hỏi");
         colContent.setPrefWidth(280);
         colContent.setCellValueFactory(f -> new SimpleStringProperty(f.getValue().getQuestion().content()));
+        colContent.setCellFactory(col -> wrappingTextCell());
 
         TableColumn<QuestionRow, String> colTopic = new TableColumn<>("Chủ đề");
         colTopic.setPrefWidth(110);
@@ -1696,6 +1670,40 @@ public final class TeacherController extends ScreenController {
         questionTable.getColumns().setAll(List.of(colCheck, colId, colContent, colTopic, colDiff));
         questionTable.setEditable(true);
         questionTable.setItems(questionRows);
+        questionTable.getSelectionModel().selectedItemProperty().addListener((obs, oldRow, row) ->
+            questionSelectionPreview.setText(row == null ? "" : formatQuestionPreview(row.getQuestion())));
+    }
+
+    private String formatQuestionPreview(QuestionDto question) {
+        return question.content() + "\n\n"
+            + "A. " + question.optionA() + "\n"
+            + "B. " + question.optionB() + "\n"
+            + "C. " + question.optionC() + "\n"
+            + "D. " + question.optionD();
+    }
+
+    private <S> TableCell<S, String> wrappingTextCell() {
+        return new TableCell<>() {
+            private final Label text = new Label();
+            {
+                text.setWrapText(true);
+                text.setMaxWidth(Double.MAX_VALUE);
+                text.setStyle("-fx-text-fill: #1e293b; -fx-padding: 4 2;");
+                widthProperty().addListener((obs, oldWidth, newWidth) ->
+                    text.setPrefWidth(Math.max(40, newWidth.doubleValue() - 16)));
+            }
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                } else {
+                    text.setText(item);
+                    text.setPrefWidth(Math.max(40, getWidth() - 16));
+                    setGraphic(text);
+                }
+            }
+        };
     }
 
     @FXML
