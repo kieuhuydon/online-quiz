@@ -30,6 +30,7 @@ DECLARE
     v_started timestamptz;
     v_deadline timestamptz;
     v_submitted timestamptz;
+    v_new_questions boolean;
 BEGIN
     IF current_setting('quiz.allow_demo_seed', true) IS DISTINCT FROM 'on' THEN
         RAISE EXCEPTION 'Demo seed requires quiz.allow_demo_seed=on';
@@ -79,7 +80,7 @@ BEGIN
     FROM generate_series(1, 45) AS s
     JOIN users u ON u.username = 'student' || lpad(s::text, 2, '0');
 
-    -- 3. Shared question bank: ten questions for each topic, with mixed difficulties.
+    -- 3. Shared question bank: twenty questions for each topic, with mixed difficulties.
     INSERT INTO questions (content, option_a, option_b, option_c, option_d,
         correct_option, topic, difficulty, active, created_by)
     VALUES
@@ -112,10 +113,43 @@ BEGIN
 ('The idiom "break the ice" means to:', 'Make people feel more comfortable', 'Cause an accident', 'Freeze relationships', 'Avoid talking to people', 'A', 'Reading', 'MEDIUM', TRUE, v_teacher2),
 ('A statement that appears self-contradictory but may reveal truth is a:', 'Metaphor', 'Paradox', 'Hyperbole', 'Simile', 'B', 'Reading', 'HARD', TRUE, v_teacher2),
 ('When evidence is described as "empirical", it is based on:', 'Observation or experiment', 'Theoretical speculation', 'Traditional belief', 'Pure mathematical deduction', 'A', 'Reading', 'HARD', TRUE, v_teacher2),
-('The phrase "take with a grain of salt" implies:', 'Total acceptance', 'Mild skepticism', 'Complete rejection', 'Extreme enthusiasm', 'B', 'Reading', 'HARD', TRUE, v_teacher2);
+('The phrase "take with a grain of salt" implies:', 'Total acceptance', 'Mild skepticism', 'Complete rejection', 'Extreme enthusiasm', 'B', 'Reading', 'HARD', TRUE, v_teacher2),
+-- Additional Grammar questions for mock exams and question-bank filtering.
+('He _____ to school yesterday.', 'go', 'goes', 'went', 'going', 'C', 'Grammar', 'EASY', TRUE, v_teacher1),
+('There _____ three books on the desk.', 'is', 'are', 'was', 'be', 'B', 'Grammar', 'EASY', TRUE, v_teacher1),
+('Please bring _____ umbrella because it may rain.', 'an', 'a', 'the only', 'some', 'A', 'Grammar', 'EASY', TRUE, v_teacher1),
+('This is the person _____ helped me yesterday.', 'which', 'where', 'when', 'who', 'D', 'Grammar', 'EASY', TRUE, v_teacher1),
+('The meeting has been postponed _____ Friday.', 'at', 'in', 'until', 'on the', 'C', 'Grammar', 'MEDIUM', TRUE, v_teacher1),
+('The new bridge _____ next month.', 'will complete', 'will be completed', 'has completing', 'is complete by', 'B', 'Grammar', 'MEDIUM', TRUE, v_teacher1),
+('You _____ wear a seat belt when driving; it is required.', 'might', 'could', 'would', 'must', 'D', 'Grammar', 'MEDIUM', TRUE, v_teacher1),
+('If I had known about the delay, I _____ earlier.', 'would have left', 'will leave', 'leave', 'am leaving', 'A', 'Grammar', 'HARD', TRUE, v_teacher1),
+('No sooner had she arrived _____ the presentation began.', 'when', 'then', 'than', 'that', 'C', 'Grammar', 'HARD', TRUE, v_teacher1),
+('The manager insisted that the report _____ submitted by noon.', 'is', 'be', 'was', 'has', 'B', 'Grammar', 'HARD', TRUE, v_teacher1),
+-- Additional Vocabulary questions, including common workplace/TOEIC terms.
+('A person who applies for a job is an _____.', 'employer', 'employee', 'applicant', 'application', 'C', 'Vocabulary', 'EASY', TRUE, v_teacher1),
+('A "receipt" is usually given after you _____.', 'pay for something', 'apply for leave', 'attend a lecture', 'book a meeting room', 'A', 'Vocabulary', 'EASY', TRUE, v_teacher1),
+('The word "purchase" means _____.', 'sell', 'repair', 'borrow', 'buy', 'D', 'Vocabulary', 'EASY', TRUE, v_teacher1),
+('Which word is closest in meaning to "reliable"?', 'Expensive', 'Dependable', 'Temporary', 'Careless', 'B', 'Vocabulary', 'EASY', TRUE, v_teacher1),
+('A project "deadline" is the _____.', 'date work begins', 'name of the manager', 'latest time work must be completed', 'total cost of the project', 'C', 'Vocabulary', 'MEDIUM', TRUE, v_teacher1),
+('To "reschedule" a meeting means to _____.', 'change its planned time', 'cancel all future meetings', 'write its minutes', 'attend it remotely', 'A', 'Vocabulary', 'MEDIUM', TRUE, v_teacher1),
+('A "vacant" position is one that is _____.', 'well paid', 'permanent', 'already filled', 'available to be filled', 'D', 'Vocabulary', 'MEDIUM', TRUE, v_teacher1),
+('Which word is closest in meaning to "mitigate"?', 'Intensify', 'Lessen', 'Ignore', 'Predict', 'B', 'Vocabulary', 'HARD', TRUE, v_teacher1),
+('A "contingency plan" is prepared for _____.', 'a routine lunch break', 'a confirmed promotion', 'a possible unexpected event', 'a completed purchase', 'C', 'Vocabulary', 'HARD', TRUE, v_teacher1),
+('An "impartial" reviewer is _____.', 'unbiased', 'inexperienced', 'unavailable', 'indecisive', 'A', 'Vocabulary', 'HARD', TRUE, v_teacher1),
+-- Short reading passages: all information needed to answer is included in the question.
+('Notice: "The library closes at 6 p.m. on weekdays." When does it close on Tuesday?', '5 p.m.', '7 p.m.', '8 p.m.', '6 p.m.', 'D', 'Reading', 'EASY', TRUE, v_teacher2),
+('Email: "Please send your registration form by Friday." What must be sent?', 'A payment receipt', 'A registration form', 'A travel ticket', 'A meeting agenda', 'B', 'Reading', 'EASY', TRUE, v_teacher2),
+('Sign: "Staff entrance only. Visitors use the main door." Which entrance should a visitor use?', 'The main door', 'The staff entrance', 'The loading entrance', 'Any entrance', 'A', 'Reading', 'EASY', TRUE, v_teacher2),
+('Message: "The train departs at 9:30. Please arrive 15 minutes early." When should passengers arrive?', '9:00', '9:30', '9:15', '9:45', 'C', 'Reading', 'EASY', TRUE, v_teacher2),
+('Memo: "Room 201 is unavailable due to repairs. Today the workshop will take place in Room 305." Why was the workshop moved?', 'More seats were requested', 'The speaker was late', 'The building is closed', 'Room 201 is being repaired', 'D', 'Reading', 'MEDIUM', TRUE, v_teacher2),
+('Offer: "Order before June 1 to receive free shipping. Later orders incur a delivery fee." Which order qualifies for free shipping?', 'An order on June 2', 'An order on May 31', 'An order on June 5', 'An order on June 10', 'B', 'Reading', 'MEDIUM', TRUE, v_teacher2),
+('Email: "Your application is complete. We will contact shortlisted candidates next week." What has already happened?', 'All interviews have ended', 'The job has been filled', 'The application has been completed', 'The candidate has been hired', 'C', 'Reading', 'MEDIUM', TRUE, v_teacher2),
+('Report: "Sales rose after the campaign, but the team cannot rule out seasonal demand." What can be concluded?', 'The campaign may not be the only reason for the increase', 'The campaign definitely caused the entire increase', 'Seasonal demand had no effect', 'Sales declined during the campaign', 'A', 'Reading', 'HARD', TRUE, v_teacher2),
+('Memo: "The supplier met the revised delivery date, although the original deadline was missed." Which statement is supported?', 'Both deadlines were missed', 'The original deadline was met', 'No delivery date was agreed', 'The revised deadline was met', 'D', 'Reading', 'HARD', TRUE, v_teacher2),
+('Email: "Approval is conditional on receiving the signed contract." What must happen before approval is finalized?', 'The project must be completed', 'The signed contract must be received', 'The invoice must be cancelled', 'A new supplier must be selected', 'B', 'Reading', 'HARD', TRUE, v_teacher2);
 
-    -- 4. Three ready-to-take quizzes, one draft, two closed quizzes with history.
-    -- PINs: B1 123456, B2 234567, TOEIC 345678; closed quizzes 456789 / 567890.
+    -- 4. Five ready-to-take quizzes, three drafts, two closed quizzes with history.
+    -- Practice PINs: B1 123456, B2 234567, TOEIC 345678; mock PINs: B1 678901, TOEIC 789012.
     INSERT INTO quizzes (title, description, category, duration_minutes, pass_score,
         status, pin, anticheat_policy, max_violations, created_by, created_at, opened_at, closed_at)
     VALUES
@@ -130,14 +164,24 @@ BEGIN
     ('B1 Grammar - Completed', 'Bài kiểm tra đã đóng, có kết quả và nhật ký vi phạm mẫu.', 'Grammar', 15, 50,
         'CLOSED', '456789', 'WARN_THEN_AUTO_SUBMIT', 3, v_teacher1, now() - interval '2 days', now() - interval '1 day', now() - interval '23 hours'),
     ('B2 Vocabulary - Completed', 'Bài kiểm tra đã đóng, có kết quả và nhật ký vi phạm mẫu.', 'Vocabulary', 20, 60,
-        'CLOSED', '567890', 'WARN_THEN_AUTO_SUBMIT', 3, v_teacher2, now() - interval '2 days', now() - interval '1 day', now() - interval '23 hours');
+        'CLOSED', '567890', 'WARN_THEN_AUTO_SUBMIT', 3, v_teacher2, now() - interval '2 days', now() - interval '1 day', now() - interval '23 hours'),
+    ('B1 Grammar - Mock Exam', 'Đề thi thử dùng bộ câu hỏi ngữ pháp bổ sung.', 'Grammar', 15, 60,
+        'OPEN', '678901', 'WARN_THEN_AUTO_SUBMIT', 3, v_teacher1, now() - interval '1 day', now() - interval '1 hour', NULL),
+    ('TOEIC Reading - Mock Exam', 'Đề thi thử đọc thông báo, email và suy luận ngắn.', 'Reading', 25, 60,
+        'OPEN', '789012', 'WARN_THEN_AUTO_SUBMIT', 3, v_teacher1, now() - interval '1 day', now() - interval '1 hour', NULL),
+    ('B2 Vocabulary - Draft', 'Đề nháp từ vựng công việc để demo sửa đề và mở bài.', 'Vocabulary', 15, 60,
+        'DRAFT', NULL, 'LOG_ONLY', 3, v_teacher2, now(), NULL, NULL),
+    ('B1 Grammar - Draft', 'Đề nháp để demo chọn lại câu hỏi và giao bài cho lớp B1.', 'Grammar', 10, 50,
+        'DRAFT', NULL, 'WARN_THEN_AUTO_SUBMIT', 3, v_teacher1, now(), NULL, NULL);
 
-    FOR v_quiz IN SELECT id, category FROM quizzes ORDER BY id LOOP
+    FOR v_quiz IN SELECT id, title, category FROM quizzes ORDER BY id LOOP
+        v_new_questions := v_quiz.title IN ('B1 Grammar - Mock Exam', 'TOEIC Reading - Mock Exam', 'B2 Vocabulary - Draft');
         INSERT INTO quiz_questions (quiz_id, question_id, position)
-        SELECT v_quiz.id, q.id, row_number() OVER (ORDER BY q.id)::integer
+        SELECT v_quiz.id, q.id,
+            row_number() OVER (ORDER BY CASE WHEN v_new_questions THEN q.id END DESC, q.id)::integer
         FROM questions q
         WHERE q.topic = v_quiz.category OR v_quiz.category = 'General English'
-        ORDER BY q.id
+        ORDER BY CASE WHEN v_new_questions THEN q.id END DESC, q.id
         LIMIT CASE WHEN v_quiz.category = 'General English' THEN 15 ELSE 10 END;
     END LOOP;
 
@@ -147,6 +191,8 @@ BEGIN
         ('B1 Grammar - Practice', 'ENG-B1-01'),
         ('B2 Vocabulary - Practice', 'ENG-B2-01'),
         ('TOEIC Reading - Practice', 'TOEIC-650'),
+        ('B1 Grammar - Mock Exam', 'ENG-B1-01'),
+        ('TOEIC Reading - Mock Exam', 'TOEIC-650'),
         ('B1 Grammar - Completed', 'ENG-B1-01'),
         ('B2 Vocabulary - Completed', 'ENG-B2-01')
     ) AS assignment(title, class_name)

@@ -63,12 +63,23 @@ class SingleClassMigrationIT {
         assertEquals(53, scalar(connection, "SELECT count(*) FROM users"));
         assertEquals(1, scalar(connection, "SELECT count(*) FROM users WHERE NOT active AND username = 'student50'"));
         assertEquals(4, scalar(connection, "SELECT count(*) FROM users u WHERE role = 'STUDENT' AND active AND NOT EXISTS (SELECT 1 FROM class_members cm WHERE cm.student_id = u.id)"));
-        assertEquals(30, scalar(connection, "SELECT count(*) FROM questions"));
-        assertEquals(6, scalar(connection, "SELECT count(*) FROM quizzes"));
-        assertEquals(3, scalar(connection, "SELECT count(*) FROM quizzes WHERE status = 'OPEN' AND pin IN ('123456', '234567', '345678')"));
-        assertEquals(1, scalar(connection, "SELECT count(*) FROM quizzes WHERE status = 'DRAFT' AND pin IS NULL"));
-        assertEquals(65, scalar(connection, "SELECT count(*) FROM quiz_questions"));
-        assertEquals(5, scalar(connection, "SELECT count(*) FROM quiz_assignments"));
+        assertEquals(60, scalar(connection, "SELECT count(*) FROM questions"));
+        assertEquals(10, scalar(connection, "SELECT count(*) FROM quizzes"));
+        assertEquals(5, scalar(connection, "SELECT count(*) FROM quizzes WHERE status = 'OPEN' AND pin IN ('123456', '234567', '345678', '678901', '789012')"));
+        assertEquals(3, scalar(connection, "SELECT count(*) FROM quizzes WHERE status = 'DRAFT' AND pin IS NULL"));
+        assertEquals(105, scalar(connection, "SELECT count(*) FROM quiz_questions"));
+        assertEquals(7, scalar(connection, "SELECT count(*) FROM quiz_assignments"));
+        assertEquals(0, scalar(connection, """
+            SELECT count(*) FROM quizzes q
+            WHERE NOT EXISTS (SELECT 1 FROM quiz_questions qq WHERE qq.quiz_id = q.id)
+               OR (q.status = 'OPEN' AND NOT EXISTS (SELECT 1 FROM quiz_assignments qa WHERE qa.quiz_id = q.id))
+            """));
+        assertEquals(0, scalar(connection, """
+            SELECT count(*) FROM quiz_questions mock JOIN quizzes mq ON mq.id = mock.quiz_id
+            JOIN quiz_questions practice ON practice.question_id = mock.question_id
+            JOIN quizzes pq ON pq.id = practice.quiz_id
+            WHERE mq.title LIKE '%Mock Exam' AND pq.title LIKE '%Practice' AND mq.category = pq.category
+            """));
         assertEquals(8, scalar(connection, "SELECT count(*) FROM attempts WHERE status = 'SUBMITTED'"));
         assertEquals(80, scalar(connection, "SELECT count(*) FROM attempt_answers"));
         assertEquals(8, scalar(connection, "SELECT count(*) FROM results"));

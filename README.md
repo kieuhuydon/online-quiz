@@ -739,14 +739,27 @@ Seed cần opt-in và cả 11 bảng trống; không yêu cầu sequence bắt �
 | Lớp B2 · teacher2 | `ENG-B2-01`: student21–student35; đề OPEN `B2 Vocabulary - Practice`, PIN **234567** |
 | Lớp TOEIC · teacher1 | `TOEIC-650`: student36–student45; đề OPEN `TOEIC Reading - Practice`, PIN **345678** |
 | Chưa có lớp | student46–student49 đang hoạt động, có thể thêm bằng trang Admin; student50 đang bị khóa |
-| Ngân hàng câu hỏi | 30 câu Grammar/Vocabulary/Reading, đủ ba mức độ khó |
-| Đề nháp | `General English - Draft` của teacher2: 15 câu, chưa giao lớp |
+| Thi thử thêm · teacher1 | `B1 Grammar - Mock Exam` giao ENG-B1-01, PIN **678901**; `TOEIC Reading - Mock Exam` giao TOEIC-650, PIN **789012**. Mỗi đề 10 câu bổ sung, khác bộ luyện tập. |
+| Ngân hàng câu hỏi | 60 câu: mỗi chủ đề Grammar/Vocabulary/Reading có 20 câu, đủ ba mức độ khó; Reading có các đoạn thông báo/email ngắn |
+| Đề nháp | `General English - Draft` của teacher2: 15 câu; `B2 Vocabulary - Draft` của teacher2 và `B1 Grammar - Draft` của teacher1: mỗi đề 10 câu, chưa giao lớp |
 | Lịch sử/kết quả | Hai đề CLOSED: `B1 Grammar - Completed`, `B2 Vocabulary - Completed`; 8 bài đã nộp, 80 câu trả lời, đủ đạt/trượt và MANUAL/TIMEOUT/ANTICHEAT |
 | Chống gian lận | student04 và student24 có 3 sự kiện FOCUS_LOST/bài; sự kiện cuối AUTO_SUBMITTED. Dữ liệu này là mô phỏng demo, không phải log thực nghiệm. |
 
 Các đề đang OPEN chưa có lượt làm bài để thử luồng nhập PIN và làm bài mới; không seed lượt IN_PROGRESS để tránh bộ hẹn giờ thay đổi dữ liệu ngay khi khởi động server.
 
 Giữ `quizdb_test` **không có seed demo** để integration test tạo fixture riêng.
+
+**Xóa dữ liệu cũ và nạp lại seed trên máy phát triển:** dừng server/client, rồi chạy từ thư mục project:
+
+```powershell
+.\database\reset-and-seed.ps1
+# Nếu PowerShell chặn thực thi script:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\database\reset-and-seed.ps1
+```
+
+Script đọc `server-local.properties`; biến `DB_URL`, `DB_USER`, `DB_PASSWORD` có ưu tiên cao hơn file giống cấu hình server. Chỉ nhận PostgreSQL trên localhost/127.0.0.1. Có thể chọn config bằng `-Config .\server-local.properties` và đường dẫn PostgreSQL bằng `-PsqlPath 'C:\Program Files\PostgreSQL\18\bin\psql.exe'`. Script hiển thị DB/schema đích và chạy ngay, không hỏi xác nhận. Nó **xóa toàn bộ dữ liệu trong 11 bảng Online Quiz**, đặt lại sequence ID rồi nạp nội dung hiện tại của `database/seed.sql`. Tài khoản, lớp, đề thi, bài làm, điểm và nhật ký cũ được thay bằng dữ liệu demo. Không tạo lại cấu trúc bảng; DB phải có schema hiện hành. `TRUNCATE` không dùng `CASCADE` để tránh lan sang bảng ngoài danh sách. Toàn bộ reset/seed chạy trong một transaction: lỗi SQL hoặc timeout chờ khóa sẽ rollback dữ liệu và sequence. Không chạy reset vào DB có dữ liệu cần giữ. Tham số `-Schema` dành cho schema demo/kiểm thử riêng; mặc định là `public`.
+
+Kiểm thử riêng script bằng `.\database\tests\reset-and-seed.test.ps1`: đọc `db-test-local.properties`, chỉ nhận `quizdb_test`/role `quiz_test`, tạo schema UUID riêng rồi dọn sau khi kiểm tra reset thành công, chạy lại, và rollback dữ liệu/sequence khi seed cố ý gặp lỗi. Không reset schema `public` của DB test.
 
 ### 15.5. Cấu hình JDBC và mật khẩu local
 
