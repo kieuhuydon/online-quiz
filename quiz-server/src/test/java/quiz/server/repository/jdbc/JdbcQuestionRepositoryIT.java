@@ -64,10 +64,18 @@ class JdbcQuestionRepositoryIT {
     @AfterEach
     void cleanupOnlyOwnFixtures() throws SQLException {
         if (creatorId > 0) {
-            try (Connection connection = dataSource.getConnection();
-                 PreparedStatement statement = connection.prepareStatement("DELETE FROM users WHERE id = ?")) {
-                statement.setLong(1, creatorId);
-                statement.executeUpdate();
+            try (Connection connection = dataSource.getConnection()) {
+                // Xóa câu hỏi do creator tạo trước (ràng buộc FK)
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM questions WHERE created_by = ?")) {
+                    statement.setLong(1, creatorId);
+                    statement.executeUpdate();
+                }
+                // Sau đó xóa user
+                try (PreparedStatement statement = connection.prepareStatement("DELETE FROM users WHERE id = ?")) {
+                    statement.setLong(1, creatorId);
+                    statement.executeUpdate();
+                }
             }
         }
     }
@@ -143,7 +151,7 @@ class JdbcQuestionRepositoryIT {
         Question saved = repository.save(Question.createNew("Cũ?", "A", "B", "C", "D", 'A',
             "T", Difficulty.EASY, creatorId));
         Question updated = new Question(saved.id(), "Mới?", "A", "B", "C", "D", 'B',
-            "T", Difficulty.HARD, true, creatorId, saved.createdAt(), null);
+            "T", Difficulty.HARD, true, creatorId, saved.createdAt(), saved.updatedAt());
 
         boolean ok = repository.update(updated);
 
@@ -165,7 +173,7 @@ class JdbcQuestionRepositoryIT {
         repository.deactivate(saved.id());
 
         Question updated = new Question(saved.id(), "Mới?", "A", "B", "C", "D", 'B',
-            "T", Difficulty.HARD, true, creatorId, saved.createdAt(), null);
+            "T", Difficulty.HARD, true, creatorId, saved.createdAt(), saved.updatedAt());
 
         boolean ok = repository.update(updated);
 

@@ -81,7 +81,8 @@ public final class SceneNavigator implements AutoCloseable {
     }
 
     public void showExam(quiz.common.dto.AttemptStateDto attempt) { activeAttempt = Objects.requireNonNull(attempt); navigate(Screen.STUDENT_EXAM, ""); }
-    public void showResult(quiz.common.dto.ResultDto result) { activeResult = Objects.requireNonNull(result); navigate(Screen.STUDENT_RESULT, ""); }
+    public void showResult(quiz.common.dto.ResultDto result) { showResult(result, ""); }
+    public void showResult(quiz.common.dto.ResultDto result, String notice) { activeResult = Objects.requireNonNull(result); navigate(Screen.STUDENT_RESULT, notice == null ? "" : notice); }
 
     public void showLogin(String notice) {
         navigate(Screen.LOGIN, notice == null ? "" : notice);
@@ -135,7 +136,7 @@ public final class SceneNavigator implements AutoCloseable {
             Parent root = content.root();
             if (target == Screen.LOGIN) {
                 ((LoginController) content.controller()).setNotice(notice);
-            } else {
+            } else if (target != Screen.STUDENT_EXAM) {
                 Loaded shell = load("/quiz/client/ui/shell.fxml", created);
                 ((WorkspaceController) shell.controller()).show(session, target, content.root(), notice);
                 root = shell.root();

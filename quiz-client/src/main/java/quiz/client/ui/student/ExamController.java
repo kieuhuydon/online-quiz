@@ -3,25 +3,24 @@ package quiz.client.ui.student;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
-import javafx.beans.value.ChangeListener;
-import javafx.event.EventHandler;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
-import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.input.ContextMenuEvent;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCombination;
-import javafx.scene.input.KeyEvent;
-import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.TilePane;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import quiz.client.anticheat.ExamAntiCheatController;
+import quiz.client.anticheat.ProcessBlacklistScanner.DetectedProcess;
+import quiz.client.anticheat.ProcessScannerService;
 import quiz.client.api.ApiException;
 import quiz.client.api.QuizApi;
 import quiz.client.network.PushListener;
 import quiz.client.ui.SceneNavigator;
+import quiz.client.ui.Screen;
 import quiz.client.ui.ScreenController;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.AntiCheatWarningDto;
@@ -32,17 +31,15 @@ import quiz.common.enums.AntiCheatEventType;
 import quiz.common.protocol.MessageType;
 
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Điều khiển màn hình làm bài thi của thí sinh:
- * - Giám sát và chống gian lận (FR-S13, FR-S14, NFR-09)
- * - Toàn màn hình bắt buộc, chống Alt+Tab và theo dõi mất focus
- * - Chặn sao chép / dán (Copy / Paste / Cut), chuột phải ContextMenu
- * - Giao diện popup/modal in-scene không làm mất FullScreen hay phát sinh vi phạm giả khi nộp bài
- * - Lắng nghe cảnh báo và tự động nộp bài khi vi phạm vượt ngưỡng
+ * - Tích hợp ExamAntiCheatController (Process Blacklist Scanner + Window/Focus Monitor + Grace Period).
+ * - Cơ chế chốt chặn nộp bài đơn nhất AtomicBoolean (NFR-03).
+ * - Cơ chế Safe Remediation ngay trong Fullscreen (Buộc dừng tiến trình cấm hoặc bật ân hạn 15s).
+ * - Cơ chế Cưỡng chế nộp bài (Force Submit) tự động chấm điểm và điều hướng trực tiếp sang ResultController (FR-S11, BR-12, FR-T04).
  */
 public final class ExamController extends ScreenController {
     private static final Logger log = LoggerFactory.getLogger(ExamController.class);
@@ -56,7 +53,7 @@ public final class ExamController extends ScreenController {
     @FXML private TextArea questionText;
     @FXML private RadioButton optionA, optionB, optionC, optionD;
     @FXML private ToggleGroup options;
-    @FXML private GridPane reviewGrid;
+    @FXML private TilePane reviewGrid;
     @FXML private Button previous, next, submit;
 
     // Các thành phần Modal in-scene (tránh thoát Fullscreen hoặc mất window focus)
@@ -64,34 +61,69 @@ public final class ExamController extends ScreenController {
     @FXML private StackPane confirmOverlay;
     @FXML private StackPane warningOverlay;
     @FXML private Label warningHeader, warningDetail;
+    @FXML private HBox remediationBox;
+    @FXML private Button btnKillProcesses, btnGracePeriod, btnDismissWarning;
 
     private final Map<Long, Character> answers = new HashMap<>();
     private Timeline countdown;
     private long seconds;
     private int index;
 
-    // Trạng thái nộp bài và mở hộp thoại
-    private volatile boolean isSubmitting = false;
+    // Chốt chặn trùng lặp nộp bài (NFR-03): dùng chung cho Manual Submit, Auto Submit Timer, và Force Submit
+    private final AtomicBoolean isSubmitting = new AtomicBoolean(false);
     private volatile boolean isDialogOpen = false;
 
-    // Quản lý listeners & filters chống gian lận
-    private ChangeListener<Boolean> fsListener;
-    private ChangeListener<Boolean> focusListener;
-    private ChangeListener<Boolean> iconListener;
-    private EventHandler<KeyEvent> keyFilter;
-    private EventHandler<ContextMenuEvent> contextMenuFilter;
-
-    // Throttle gửi báo cáo vi phạm
-    private long lastReportTime = 0;
-    private AntiCheatEventType lastReportType = null;
+    // Bộ điều phối chống gian lận
+    private final ExamAntiCheatController antiCheatController;
+    private final List<DetectedProcess> lastDetectedProcesses = new ArrayList<>();
 
     public ExamController(QuizApi api, SceneNavigator navigator, FxAsync fx, AttemptStateDto attempt) {
+        this(api, navigator, fx, attempt, null);
+    }
+
+    ExamController(QuizApi api, SceneNavigator navigator, FxAsync fx, AttemptStateDto attempt, ExamAntiCheatController customController) {
         this.api = api;
         this.navigator = navigator;
         this.fx = fx;
         this.attempt = attempt;
         answers.putAll(attempt.savedAnswers());
         seconds = attempt.remainingSeconds();
+
+        if (customController != null) {
+            this.antiCheatController = customController;
+        } else {
+            this.antiCheatController = new ExamAntiCheatController(
+                new ProcessScannerService(),
+                new ExamAntiCheatController.AntiCheatCallback() {
+                    @Override
+                    public void onReportViolation(AntiCheatEventType type, String detail) {
+                        sendViolationReport(type, detail);
+                    }
+
+                    @Override
+                    public void onProhibitedProcessDetected(List<DetectedProcess> newViolations, String formattedSummary) {
+                        showProhibitedProcessOverlay(newViolations, formattedSummary);
+                    }
+
+                    @Override
+                    public void onViolationsResolved(Set<String> resolvedApps) {
+                        log.info("Thí sinh đã tắt ứng dụng cấm: {}", resolvedApps);
+                        fx.run(() -> saveStatus.setText("Đã tắt ứng dụng cấm: " + String.join(", ", resolvedApps)));
+                    }
+
+                    @Override
+                    public void onGracePeriodTick(int secondsRemaining) {
+                        fx.run(() -> saveStatus.setText("⚠️ Thời gian ân hạn tắt ứng dụng ngoài Desktop: còn " + secondsRemaining + "s"));
+                    }
+
+                    @Override
+                    public void onGracePeriodEnded() {
+                        fx.run(() -> saveStatus.setText("Hết thời gian ân hạn. Hệ thống tiếp tục giám sát bài thi."));
+                    }
+                },
+                () -> !isActive() || isSubmitting.get()
+            );
+        }
     }
 
     @FXML
@@ -103,7 +135,7 @@ public final class ExamController extends ScreenController {
 
     @Override
     protected void onMount() {
-        // 1. Đồng hồ đếm ngược
+        // 1. Khởi động đồng hồ đếm ngược bài thi
         if (seconds <= 0) {
             executeSubmit();
         } else {
@@ -117,31 +149,20 @@ public final class ExamController extends ScreenController {
             updateTimer();
         }
 
-        // 2. Kích hoạt giám sát FullScreen & Chống gian lận
-        setupAntiCheatMonitoring();
-
-        // 3. Lắng nghe thông báo PUSH từ Server
+        // 2. Lắng nghe thông báo PUSH từ Server (Đăng ký trước khi bật Anti-Cheat)
         PushListener pushListener = (generation, response) -> {
             if (response.pushType() == MessageType.PUSH_FORCE_SUBMITTED) {
                 fx.run(() -> {
                     if (isActive()) {
-                        isSubmitting = true;
-                        removeAntiCheatListeners();
                         String reason = response.payload() instanceof String str
                             ? str
-                            : "Bài thi của bạn đã bị thu hồi do vi phạm quy chế thi!";
-                        if (warningOverlay != null && warningHeader != null && warningDetail != null) {
-                            warningHeader.setText("🛑 BÀI THI ĐÃ BỊ THU HỒI");
-                            warningDetail.setText(reason);
-                            warningOverlay.setVisible(true);
-                            warningOverlay.toFront();
-                        }
-                        executeSubmit();
+                            : "Bài thi bị cưỡng chế nộp do vi phạm quy chế thi vượt ngưỡng!";
+                        handleForceSubmit(reason);
                     }
                 });
             } else if (response.pushType() == MessageType.PUSH_ANTICHEAT_WARNING) {
                 fx.run(() -> {
-                    if (isActive() && !isSubmitting) {
+                    if (isActive() && !isSubmitting.get()) {
                         String msg = "Bạn vừa vi phạm quy chế thi!";
                         int count = 1, max = 3;
                         if (response.payload() instanceof AntiCheatWarningDto w) {
@@ -149,126 +170,240 @@ public final class ExamController extends ScreenController {
                             count = w.violationCount();
                             max = w.maxViolations();
                         }
-                        if (warningOverlay != null && warningHeader != null && warningDetail != null) {
-                            warningHeader.setText(String.format("⚠️ CẢNH BÁO VI PHẠM (LẦN %d / %d)", count, max));
-                            warningDetail.setText(msg);
-                            isDialogOpen = true;
-                            warningOverlay.setVisible(true);
-                            warningOverlay.toFront();
-                        } else {
-                            isDialogOpen = true;
-                            Alert alert = new Alert(Alert.AlertType.WARNING, msg, ButtonType.OK);
-                            alert.setTitle("CẢNH BÁO VI PHẠM");
-                            alert.setHeaderText(String.format("CẢNH BÁO VI PHẠM LẦN %d / %d", count, max));
-                            if (navigator.stage() != null) alert.initOwner(navigator.stage());
-                            alert.showAndWait();
-                            isDialogOpen = false;
-                        }
+                        showWarningDialog(count, max, msg);
                     }
                 });
             }
         };
         own(api.addPushListener(pushListener));
-    }
 
-    private void setupAntiCheatMonitoring() {
-        Stage stage = navigator.stage();
-        if (stage == null) return;
-
-        // Vô hiệu hóa phím Esc thoát toàn màn hình mặc định của JavaFX
-        stage.setFullScreenExitKeyCombination(KeyCombination.NO_MATCH);
-        stage.setFullScreenExitHint("CHẾ ĐỘ THI TOÀN MÀN HÌNH — KHÔNG ĐƯỢC THOÁT HOẶC RỜI KHỎI CỬA SỔ");
-        stage.setFullScreen(true);
-
-        // Theo dõi thoát toàn màn hình
-        fsListener = (obs, oldVal, newVal) -> {
-            if (!newVal && isActive() && !isSubmitting && !isDialogOpen) {
-                triggerAntiCheat(AntiCheatEventType.FOCUS_LOST, "Thoát chế độ toàn màn hình");
-                stage.setFullScreen(true); // Tự động bật lại FullScreen
-            }
-        };
-        stage.fullScreenProperty().addListener(fsListener);
-
-        // Theo dõi mất focus / chuyển tab / Alt+Tab
-        focusListener = (obs, oldVal, newVal) -> {
-            if (!newVal && isActive() && !isSubmitting && !isDialogOpen) {
-                triggerAntiCheat(AntiCheatEventType.FOCUS_LOST, "Rời khỏi cửa sổ bài thi (Alt+Tab / Mất focus)");
-            }
-        };
-        stage.focusedProperty().addListener(focusListener);
-
-        // Theo dõi minimize cửa sổ
-        iconListener = (obs, oldVal, newVal) -> {
-            if (newVal && isActive() && !isSubmitting && !isDialogOpen) {
-                triggerAntiCheat(AntiCheatEventType.FOCUS_LOST, "Thu nhỏ cửa sổ thi (Minimize)");
-            }
-        };
-        stage.iconifiedProperty().addListener(iconListener);
-
-        // Chặn phím Copy / Paste / Cut và chuột phải CHỈ TRONG PHẠM VI BÀI THI (examRoot)
-        // Tuyệt đối không can thiệp vào các màn hình khác của giáo viên hoặc học sinh
-        if (examRoot != null) {
-            keyFilter = event -> {
-                if (!isActive() || isSubmitting) return;
-                if (event.isControlDown() && (event.getCode() == KeyCode.C || event.getCode() == KeyCode.INSERT)) {
-                    event.consume();
-                    triggerAntiCheat(AntiCheatEventType.COPY_ATTEMPT, "Cố gắng sao chép nội dung (Ctrl+C)");
-                } else if ((event.isControlDown() && event.getCode() == KeyCode.V) || (event.isShiftDown() && event.getCode() == KeyCode.INSERT)) {
-                    event.consume();
-                    triggerAntiCheat(AntiCheatEventType.PASTE_ATTEMPT, "Cố gắng dán nội dung (Ctrl+V)");
-                } else if (event.isControlDown() && event.getCode() == KeyCode.X) {
-                    event.consume();
-                    triggerAntiCheat(AntiCheatEventType.CUT_ATTEMPT, "Cố gắng cắt nội dung (Ctrl+X)");
-                }
-            };
-            examRoot.addEventFilter(KeyEvent.KEY_PRESSED, keyFilter);
-
-            contextMenuFilter = event -> {
-                if (!isActive() || isSubmitting) return;
-                event.consume();
-                triggerAntiCheat(AntiCheatEventType.CONTEXT_MENU_ATTEMPT, "Nhấp chuột phải mở menu ngữ cảnh");
-            };
-            examRoot.addEventFilter(ContextMenuEvent.CONTEXT_MENU_REQUESTED, contextMenuFilter);
-        }
-    }
-
-    private void removeAntiCheatListeners() {
-        if (examRoot != null) {
-            if (keyFilter != null) examRoot.removeEventFilter(KeyEvent.KEY_PRESSED, keyFilter);
-            if (contextMenuFilter != null) examRoot.removeEventFilter(ContextMenuEvent.CONTEXT_MENU_REQUESTED, contextMenuFilter);
-        }
+        // 3. Kích hoạt giám sát FullScreen & Chống gian lận (WindowFocusMonitor + ProcessScanner 10s)
         Stage stage = navigator.stage();
         if (stage != null) {
-            if (fsListener != null) stage.fullScreenProperty().removeListener(fsListener);
-            if (focusListener != null) stage.focusedProperty().removeListener(focusListener);
-            if (iconListener != null) stage.iconifiedProperty().removeListener(iconListener);
-            Scene scene = stage.getScene();
-            if (scene != null) {
-                if (keyFilter != null) scene.removeEventFilter(KeyEvent.KEY_PRESSED, keyFilter);
-                if (contextMenuFilter != null) scene.removeEventFilter(ContextMenuEvent.CONTEXT_MENU_REQUESTED, contextMenuFilter);
-            }
+            antiCheatController.startMonitoring(stage, examRoot);
         }
     }
 
-    private void triggerAntiCheat(AntiCheatEventType type, String detail) {
-        if (!isActive() || isSubmitting || isDialogOpen) {
-            return;
-        }
-        long now = System.currentTimeMillis();
-        // Cooldown 1.5 giây cho cùng loại sự kiện để tránh spam
-        if (type == lastReportType && (now - lastReportTime < 1500)) {
-            return;
-        }
-        lastReportTime = now;
-        lastReportType = type;
+    // ========================================================
+    // XỬ LÝ CẢNH BÁO & REMEDIATION (YÊU CẦU 2 & 3)
+    // ========================================================
 
-        log.warn("Client AntiCheat phát hiện: type={}, detail={}", type, detail);
+    private void sendViolationReport(AntiCheatEventType type, String detail) {
+        if (!isActive() || isSubmitting.get()) {
+            return;
+        }
+        log.warn("Client AntiCheat ghi nhận vi phạm: type={}, detail={}", type, detail);
         ReportAntiCheatDto dto = new ReportAntiCheatDto(attempt.attemptId(), type, detail, Instant.now());
         api.reportAntiCheat(dto).exceptionally(err -> {
             log.error("Gửi sự kiện chống gian lận lên Server thất bại: {}", err.getMessage());
             return null;
         });
     }
+
+    private void showProhibitedProcessOverlay(List<DetectedProcess> newViolations, String formattedSummary) {
+        lastDetectedProcesses.clear();
+        lastDetectedProcesses.addAll(newViolations);
+
+        if (warningOverlay != null && warningHeader != null && warningDetail != null) {
+            warningHeader.setText("⚠️ PHÁT HIỆN ỨNG DỤNG BỊ CẤM");
+            warningDetail.setText(formattedSummary + "\n\nBạn có thể nhấn 'Buộc dừng ứng dụng vi phạm' để tắt ngay, hoặc chọn 'Tắt bên ngoài (Ân hạn 15s)'.");
+            if (remediationBox != null) {
+                remediationBox.setVisible(true);
+                remediationBox.setManaged(true);
+            }
+            if (btnKillProcesses != null) {
+                btnKillProcesses.setDisable(false);
+            }
+            isDialogOpen = true;
+            warningOverlay.setVisible(true);
+            warningOverlay.toFront();
+        }
+    }
+
+    private void showWarningDialog(int count, int max, String msg) {
+        // Quét ngay xem có ứng dụng cấm nào đang chạy trên máy không (ví dụ Zalo, Discord vừa mở ngoài Desktop)
+        List<DetectedProcess> runningProhibited = antiCheatController.getProcessScannerService().scanViolations();
+
+        if (warningOverlay != null && warningHeader != null && warningDetail != null) {
+            isDialogOpen = true;
+            if (!runningProhibited.isEmpty()) {
+                // Có ứng dụng cấm đang chạy: kích hoạt ngay các nút remediation
+                lastDetectedProcesses.clear();
+                lastDetectedProcesses.addAll(runningProhibited);
+
+                warningHeader.setText(String.format("⚠️ CẢNH BÁO VI PHẠM (LẦN %d / %d)", count, max));
+                String processDetail = quiz.client.anticheat.ProcessBlacklistScanner.formatViolationDetail(runningProhibited);
+                warningDetail.setText(msg + "\n\nPhát hiện ứng dụng không được phép đang chạy: " + processDetail
+                    + ".\nBạn có thể nhấn 'Buộc dừng ứng dụng vi phạm' để tắt ngay, hoặc chọn 'Tắt bên ngoài (Ân hạn 15s)'.");
+
+                if (remediationBox != null) {
+                    remediationBox.setVisible(true);
+                    remediationBox.setManaged(true);
+                }
+                if (btnKillProcesses != null) {
+                    btnKillProcesses.setDisable(false);
+                }
+            } else {
+                warningHeader.setText(String.format("⚠️ CẢNH BÁO VI PHẠM (LẦN %d / %d)", count, max));
+                warningDetail.setText(msg);
+                if (remediationBox != null) {
+                    remediationBox.setVisible(false);
+                    remediationBox.setManaged(false);
+                }
+            }
+            warningOverlay.setVisible(true);
+            warningOverlay.toFront();
+        } else {
+            isDialogOpen = true;
+            Alert alert = new Alert(Alert.AlertType.WARNING, msg, ButtonType.OK);
+            alert.setTitle("CẢNH BÁO VI PHẠM");
+            alert.setHeaderText(String.format("CẢNH BÁO VI PHẠM LẦN %d / %d", count, max));
+            if (navigator.stage() != null) alert.initOwner(navigator.stage());
+            alert.showAndWait();
+            isDialogOpen = false;
+        }
+    }
+
+    /**
+     * Nút "Buộc dừng ứng dụng vi phạm": gọi ProcessHandle.destroyForcibly() trực tiếp từ UI (Yêu cầu 3).
+     */
+    @FXML
+    private void killProhibitedProcesses() {
+        if (btnKillProcesses != null) {
+            btnKillProcesses.setDisable(true);
+        }
+        // Quét lại danh sách tiến trình vi phạm thực tế mới nhất
+        List<DetectedProcess> toKill = antiCheatController.getProcessScannerService().scanViolations();
+        if (toKill.isEmpty()) {
+            toKill = new ArrayList<>(lastDetectedProcesses);
+        }
+        antiCheatController.killProcesses(toKill).thenAccept(ignored -> {
+            Platform.runLater(() -> {
+                List<DetectedProcess> remaining = antiCheatController.getProcessScannerService().scanViolations();
+                if (remaining.isEmpty()) {
+                    saveStatus.setText("Đã buộc dừng các ứng dụng cấm thành công.");
+                    dismissWarning();
+                } else {
+                    String remainingDetail = quiz.client.anticheat.ProcessBlacklistScanner.formatViolationDetail(remaining);
+                    warningDetail.setText("Không thể tự động dừng một số tiến trình: " + remainingDetail
+                        + " (thiếu quyền Admin).\nVui lòng chọn 'Tắt bên ngoài (Ân hạn 15s)' để tắt thủ công.");
+                    if (btnKillProcesses != null) {
+                        btnKillProcesses.setDisable(false);
+                    }
+                }
+            });
+        });
+    }
+
+    /**
+     * Nút "Tắt bên ngoài (Ân hạn 15s)": bật thời gian ân hạn 15s cho phép ra Desktop mà không bị phạt (Yêu cầu 3).
+     */
+    @FXML
+    private void requestGracePeriod() {
+        dismissWarning();
+        antiCheatController.startGracePeriod(15, () -> {
+            log.info("Thời gian ân hạn 15s kết thúc, đã bật lại Fullscreen");
+        });
+    }
+
+    @FXML
+    private void dismissWarning() {
+        if (warningOverlay != null) {
+            warningOverlay.setVisible(false);
+        }
+        if (remediationBox != null) {
+            remediationBox.setVisible(false);
+            remediationBox.setManaged(false);
+        }
+        isDialogOpen = false;
+    }
+
+    // =========================================================================
+    // 4. LUỒNG THU HỒI BÀI THI VÀ ĐƯA HỌC VIÊN RA KHỎI MÀN HÌNH THI
+    // =========================================================================
+
+    /**
+     * Phương thức cưỡng chế nộp bài (Force Submit):
+     * - Chốt chặn trùng lặp bằng AtomicBoolean (NFR-03).
+     * - Dọn dẹp tài nguyên giám sát ngay lập tức (dừng Scanner, gỡ Window listeners, dừng Timer).
+     * - Server đã tự nộp bài trước khi gửi PUSH_FORCE_SUBMITTED.
+     * - Chuyển ngay về không gian học tập để học viên không tiếp tục ở màn hình thi.
+     */
+    public void handleForceSubmit(String violationReason) {
+        if (!isSubmitting.compareAndSet(false, true)) {
+            return;
+        }
+        log.warn("Kích hoạt cưỡng chế nộp bài (Force Submit): {}", violationReason);
+
+        // 1. Dọn dẹp tài nguyên giám sát ngay lập tức
+        if (countdown != null) {
+            countdown.stop();
+        }
+        if (antiCheatController != null) {
+            antiCheatController.stopMonitoring();
+        }
+        submit.setDisable(true);
+
+        // 2. Tắt chế độ toàn màn hình và đóng các hộp thoại trên UI thread
+        log.warn("Đưa học viên ra khỏi bài thi đã bị thu hồi: {}", violationReason);
+        fx.run(() -> {
+            Stage stage = navigator.stage();
+            if (stage != null) {
+                stage.setFullScreen(false);
+            }
+            if (warningOverlay != null) warningOverlay.setVisible(false);
+            if (confirmOverlay != null) confirmOverlay.setVisible(false);
+            isDialogOpen = false;
+            // Server đã chốt lượt thi và lưu kết quả trước khi đẩy sự kiện này.
+            navigator.show(Screen.STUDENT_DASHBOARD);
+        });
+    }
+
+    /**
+     * Nộp bài bình thường (thí sinh tự bấm nộp hoặc hết thời gian làm bài).
+     */
+    private void executeSubmit() {
+        if (!isSubmitting.compareAndSet(false, true)) {
+            return;
+        }
+        submit.setDisable(true);
+        if (countdown != null) countdown.stop();
+
+        // Gỡ bỏ ngay lập tức các listener chống gian lận
+        if (antiCheatController != null) {
+            antiCheatController.stopMonitoring();
+        }
+
+        fx.run(() -> {
+            Stage stage = navigator.stage();
+            if (stage != null) {
+                stage.setFullScreen(false);
+            }
+            if (confirmOverlay != null) confirmOverlay.setVisible(false);
+            if (warningOverlay != null) warningOverlay.setVisible(false);
+            isDialogOpen = false;
+        });
+
+        fx.observe(api.submitAttempt(attempt.attemptId()), this::isActive,
+            navigator::showResult,
+            e -> {
+                if (e instanceof ApiException) {
+                    fx.observe(api.getMyResult(attempt.attemptId()), this::isActive, navigator::showResult, x -> {
+                        saveStatus.setText("Không thể tải kết quả. Vui lòng thử lại từ lịch sử.");
+                        submit.setDisable(false);
+                        isSubmitting.set(false);
+                    }, () -> {});
+                } else {
+                    saveStatus.setText("Không xác nhận được việc nộp bài. Hãy kết nối lại để kiểm tra trạng thái.");
+                    submit.setDisable(false);
+                    isSubmitting.set(false);
+                }
+            }, () -> {});
+    }
+
+    // ==========================================
+    // CÁC HÀM ĐIỀU HƯỚNG & LÀM BÀI THI
+    // ==========================================
 
     private StudentQuestionDto current() {
         return attempt.questions().get(index);
@@ -301,17 +436,16 @@ public final class ExamController extends ScreenController {
 
     @FXML
     private void selectAnswer() {
-        if (!isActive() || isSubmitting || attempt.questions().isEmpty()) return;
-        Toggle t = options.getSelectedToggle();
-        if (t == null) return;
-        char option = t == optionA ? 'A' : t == optionB ? 'B' : t == optionC ? 'C' : 'D';
+        if (!isActive() || isSubmitting.get() || attempt.questions().isEmpty()) return;
+        Toggle sel = options.getSelectedToggle();
+        if (sel == null) return;
+        char option = sel == optionA ? 'A' : sel == optionB ? 'B' : sel == optionC ? 'C' : 'D';
         long questionId = current().id();
         answers.put(questionId, option);
-        refreshReview();
-        saveStatus.setText("Đang lưu…");
+        saveStatus.setText("Đang lưu câu trả lời...");
         fx.observe(api.saveAnswer(attempt.attemptId(), questionId, option), this::isActive,
-            v -> saveStatus.setText(""),
-            e -> saveStatus.setText("Chưa lưu được — hãy thử chọn lại"),
+            ignored -> { saveStatus.setText(""); refreshReview(); },
+            e -> saveStatus.setText("Không lưu được đáp án: " + e.getMessage()),
             () -> {});
     }
 
@@ -325,57 +459,65 @@ public final class ExamController extends ScreenController {
 
     @FXML
     private void next() {
-        if (index + 1 < attempt.questions().size()) {
+        if (index < attempt.questions().size() - 1) {
             index++;
             render();
+        }
+    }
+
+    private void updateTimer() {
+        long min = seconds / 60;
+        long sec = seconds % 60;
+        timer.setText(String.format("%02d:%02d", min, sec));
+        if (seconds <= 60) {
+            timer.setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold; -fx-font-size: 16px;");
+        } else {
+            timer.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
         }
     }
 
     private void refreshReview() {
         reviewGrid.getChildren().clear();
         for (int i = 0; i < attempt.questions().size(); i++) {
-            final int n = i;
             StudentQuestionDto q = attempt.questions().get(i);
-            Button b = new Button(Integer.toString(i + 1));
-            b.setPrefSize(72, 44);
-            String background = answers.containsKey(q.id()) ? "#b7e4c7" : "#e5e7eb";
-            String border = n == index ? "-fx-border-color: #2563eb; -fx-border-width: 2;" : "-fx-border-color: transparent;";
-            b.setStyle("-fx-background-color: " + background + "; " + border + " -fx-background-radius: 6; -fx-border-radius: 6;");
+            Button b = new Button(String.valueOf(i + 1));
+            b.setMinSize(48, 42);
+            b.setPrefSize(48, 42);
+            b.setMaxSize(48, 42);
+            b.getStyleClass().add("question-index-button");
+            if (i == index) {
+                b.getStyleClass().add("question-index-current");
+            } else if (answers.containsKey(q.id())) {
+                b.getStyleClass().add("question-index-answered");
+            } else {
+                b.getStyleClass().add("question-index-unanswered");
+            }
+            int targetIndex = i;
             b.setOnAction(e -> {
-                index = n;
+                index = targetIndex;
                 render();
             });
-            reviewGrid.add(b, i % 3, i / 3);
+            reviewGrid.getChildren().add(b);
         }
-    }
-
-    private void updateTimer() {
-        long m = seconds / 60, s = seconds % 60;
-        timer.setText(String.format("%02d:%02d", m, s));
-        timer.setStyle(seconds < 60
-            ? "-fx-text-fill: #c0392b; -fx-font-size: 20px; -fx-font-weight: bold;"
-            : "-fx-font-size: 20px; -fx-font-weight: bold;");
     }
 
     @FXML
     private void manualSubmit() {
-        if (!isActive() || isSubmitting || submit.isDisabled()) return;
-
+        if (!isActive() || isSubmitting.get() || submit.isDisabled()) return;
         if (confirmOverlay != null) {
             isDialogOpen = true;
             confirmOverlay.setVisible(true);
             confirmOverlay.toFront();
         } else {
-            // Trường hợp dự phòng nếu FXML không có overlay
             isDialogOpen = true;
-            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "Bạn chắc chắn muốn nộp bài?", ButtonType.CANCEL, ButtonType.OK);
-            confirm.setHeaderText("Nộp bài");
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "Bạn có chắc chắn muốn nộp bài không?", ButtonType.YES, ButtonType.NO);
+            confirm.setTitle("Xác nhận nộp bài");
+            confirm.setHeaderText("Nộp bài thi");
             if (navigator.stage() != null) confirm.initOwner(navigator.stage());
-            Optional<ButtonType> res = confirm.showAndWait();
-            isDialogOpen = false;
-            if (res.orElse(ButtonType.CANCEL) == ButtonType.OK) {
-                executeSubmit();
-            }
+            confirm.showAndWait().ifPresent(ans -> {
+                isDialogOpen = false;
+                if (ans == ButtonType.YES) executeSubmit();
+            });
         }
     }
 
@@ -396,46 +538,14 @@ public final class ExamController extends ScreenController {
         executeSubmit();
     }
 
-    @FXML
-    private void dismissWarning() {
-        if (warningOverlay != null) {
-            warningOverlay.setVisible(false);
-        }
-        isDialogOpen = false;
-    }
-
-    private void executeSubmit() {
-        if (!isActive() || isSubmitting) return;
-        isSubmitting = true;
-        submit.setDisable(true);
-        if (countdown != null) countdown.stop();
-
-        // Gỡ bỏ ngay lập tức các listener chống gian lận để tránh kích hoạt khi đóng cửa sổ / chuyển cảnh
-        removeAntiCheatListeners();
-
-        fx.observe(api.submitAttempt(attempt.attemptId()), this::isActive,
-            navigator::showResult,
-            e -> {
-                if (e instanceof ApiException) {
-                    fx.observe(api.getMyResult(attempt.attemptId()), this::isActive, navigator::showResult, x -> {
-                        saveStatus.setText("Không thể tải kết quả. Vui lòng thử lại từ lịch sử.");
-                        submit.setDisable(false);
-                        isSubmitting = false;
-                    }, () -> {});
-                } else {
-                    saveStatus.setText("Không xác nhận được việc nộp bài. Hãy kết nối lại để kiểm tra trạng thái.");
-                    submit.setDisable(false);
-                    isSubmitting = false;
-                }
-            }, () -> {});
-    }
-
     @Override
     protected void onDispose() {
-        isSubmitting = true;
+        isSubmitting.set(true);
         if (countdown != null) countdown.stop();
 
-        removeAntiCheatListeners();
+        if (antiCheatController != null) {
+            antiCheatController.stopMonitoring();
+        }
 
         Stage stage = navigator.stage();
         if (stage != null) {

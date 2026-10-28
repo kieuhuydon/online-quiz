@@ -67,10 +67,24 @@ class JdbcQuizRepositoryIT {
     @AfterEach
     void cleanup() throws SQLException {
         if (creatorId > 0) {
-            try (Connection connection = dataSource.getConnection();
-                 PreparedStatement statement = connection.prepareStatement("DELETE FROM users WHERE id = ?")) {
-                statement.setLong(1, creatorId);
-                statement.executeUpdate();
+            try (Connection connection = dataSource.getConnection()) {
+                // Xóa câu hỏi do creator tạo trước (ràng buộc FK)
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM questions WHERE created_by = ?")) {
+                    statement.setLong(1, creatorId);
+                    statement.executeUpdate();
+                }
+                // Xóa quiz do creator tạo (ràng buộc FK)
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM quizzes WHERE created_by = ?")) {
+                    statement.setLong(1, creatorId);
+                    statement.executeUpdate();
+                }
+                // Sau đó xóa user
+                try (PreparedStatement statement = connection.prepareStatement("DELETE FROM users WHERE id = ?")) {
+                    statement.setLong(1, creatorId);
+                    statement.executeUpdate();
+                }
             }
         }
     }
@@ -123,8 +137,8 @@ class JdbcQuizRepositoryIT {
         Quiz quiz = repository.save(Quiz.createNew("Quiz", null, null, 15, 50.0,
             AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3, creatorId));
 
-        Long q1 = createQuestion(qRepo, "Câu 1?", "A", "B", "C", "D", 'A');
-        Long q2 = createQuestion(qRepo, "Câu 2?", "A", "B", "C", "D", 'B');
+        Long q1 = createQuestion(qRepo, creatorId, "Câu 1?", "A", "B", "C", "D", 'A');
+        Long q2 = createQuestion(qRepo, creatorId, "Câu 2?", "A", "B", "C", "D", 'B');
 
         boolean ok = repository.setQuestions(quiz.id(), List.of(q1, q2));
         assertTrue(ok);
@@ -164,10 +178,10 @@ class JdbcQuizRepositoryIT {
         }
     }
 
-    private static Long createQuestion(JdbcQuestionRepository repo, String content, String a, String b,
+    private static Long createQuestion(JdbcQuestionRepository repo, long creatorId, String content, String a, String b,
                                        String c, String d, char correct) {
         Question q = Question.createNew(content, a, b, c, d, correct,
-            "T", Difficulty.EASY, 1L);
+            "T", Difficulty.EASY, creatorId);
         return repo.save(q).id();
     }
 

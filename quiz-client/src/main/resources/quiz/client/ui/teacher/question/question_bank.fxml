@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="quiz.client.ui.teacher.question.QuestionController"
+      spacing="16"
+      minWidth="0"
+      fillWidth="true"
+      VBox.vgrow="ALWAYS">
+
+    <!-- BẢNG ĐIỀU KHIỂN CỐ ĐỊNH Ở ĐẦU TRANG (Sticky Top Control Panel) -->
+    <VBox fx:id="controlPanel" spacing="14" styleClass="content-card" minWidth="0">
+        <!-- Header row & Các nút thao tác ở đầu trang -->
+        <HBox alignment="CENTER_LEFT" spacing="16">
+            <VBox spacing="4" HBox.hgrow="ALWAYS">
+                <Label text="NGÂN HÀNG CÂU HỎI" styleClass="eyebrow"/>
+                <Label text="Quản lý câu hỏi" styleClass="page-heading" wrapText="true"/>
+                <Label text="Tạo, xem, tìm kiếm, sửa và xóa câu hỏi trắc nghiệm." styleClass="muted" wrapText="true"/>
+            </VBox>
+            <HBox spacing="10" alignment="CENTER_RIGHT">
+                <ProgressIndicator fx:id="questionProgress" prefWidth="26" prefHeight="26" maxWidth="26" maxHeight="26" visible="false" managed="false"/>
+                <Button fx:id="refreshQuestions" text="🔄 Tải lại" onAction="#reload" styleClass="secondary-button"/>
+                <Button fx:id="importQuestions" text="📥 Nhập từ file" onAction="#importQuestions" styleClass="secondary-button"/>
+                <Button fx:id="newQuestion" text="➕ Thêm mới" onAction="#newQuestion" styleClass="primary-button"/>
+            </HBox>
+        </HBox>
+
+        <Label fx:id="questionNotice" styleClass="notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
+
+        <Separator/>
+
+        <!-- Thanh tìm kiếm & lọc: Tìm kiếm theo nội dung, chủ đề, độ khó -->
+        <HBox spacing="10" alignment="CENTER_LEFT">
+            <TextField fx:id="searchContent" promptText="🔍 Tìm kiếm nội dung câu hỏi..." prefWidth="240" HBox.hgrow="ALWAYS"/>
+            <TextField fx:id="filterTopic" promptText="Chủ đề..." prefWidth="140"/>
+            <ComboBox fx:id="filterDifficulty" promptText="Độ khó" prefWidth="130"/>
+            <Button fx:id="filterApply" text="🔍 Lọc" onAction="#applyFilter" styleClass="secondary-button"/>
+            <Button fx:id="filterClear" text="Đặt lại" onAction="#clearFilter" styleClass="secondary-button"/>
+            <Label fx:id="listStatus" styleClass="status-label"/>
+        </HBox>
+
+        <!-- Biểu mẫu thêm / sửa câu hỏi (hiển thị cố định trong bảng điều khiển ở đầu trang) -->
+        <VBox fx:id="questionForm" spacing="14" fillWidth="true" visible="false" managed="false"
+              style="-fx-background-color: #f8fafc; -fx-padding: 16; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8;">
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label fx:id="formTitle" text="Biểu mẫu câu hỏi" styleClass="card-heading"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label text="Các trường có dấu * là bắt buộc" styleClass="muted"/>
+            </HBox>
+
+            <VBox spacing="6">
+                <Label text="Nội dung câu hỏi *" styleClass="field-label"/>
+                <TextArea fx:id="questionContent" promptText="Nhập nội dung câu hỏi..." wrapText="true" prefRowCount="3"/>
+            </VBox>
+
+            <GridPane hgap="16" vgap="10">
+                <columnConstraints>
+                    <ColumnConstraints percentWidth="50"/>
+                    <ColumnConstraints percentWidth="50"/>
+                </columnConstraints>
+                <VBox spacing="4" GridPane.columnIndex="0" GridPane.rowIndex="0">
+                    <Label text="Đáp án A *" styleClass="field-label"/>
+                    <TextField fx:id="questionOptionA" promptText="Nội dung đáp án A"/>
+                </VBox>
+                <VBox spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                    <Label text="Đáp án B *" styleClass="field-label"/>
+                    <TextField fx:id="questionOptionB" promptText="Nội dung đáp án B"/>
+                </VBox>
+                <VBox spacing="4" GridPane.columnIndex="0" GridPane.rowIndex="1">
+                    <Label text="Đáp án C *" styleClass="field-label"/>
+                    <TextField fx:id="questionOptionC" promptText="Nội dung đáp án C"/>
+                </VBox>
+                <VBox spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                    <Label text="Đáp án D *" styleClass="field-label"/>
+                    <TextField fx:id="questionOptionD" promptText="Nội dung đáp án D"/>
+                </VBox>
+            </GridPane>
+
+            <HBox spacing="16" alignment="CENTER_LEFT">
+                <VBox spacing="4" prefWidth="150">
+                    <Label text="Đáp án đúng *" styleClass="field-label"/>
+                    <ComboBox fx:id="questionCorrectOption" maxWidth="Infinity"/>
+                </VBox>
+                <VBox spacing="4" HBox.hgrow="ALWAYS">
+                    <Label text="Chủ đề *" styleClass="field-label"/>
+                    <TextField fx:id="questionTopic" promptText="Ví dụ: Ngữ pháp, Từ vựng..."/>
+                </VBox>
+                <VBox spacing="4" prefWidth="170">
+                    <Label text="Độ khó *" styleClass="field-label"/>
+                    <ComboBox fx:id="questionDifficulty" maxWidth="Infinity"/>
+                </VBox>
+            </HBox>
+
+            <Label fx:id="formError" styleClass="notice,error-notice" visible="false" managed="false"/>
+
+            <HBox spacing="10" alignment="CENTER_RIGHT">
+                <Button fx:id="cancelEdit" text="Hủy bỏ" onAction="#cancelEdit" styleClass="secondary-button"/>
+                <Button fx:id="createQuestion" text="Lưu câu hỏi" onAction="#create" styleClass="primary-button"/>
+                <Button fx:id="updateQuestion" text="Cập nhật thay đổi" onAction="#update" styleClass="primary-button"/>
+            </HBox>
+        </VBox>
+    </VBox>
+
+    <!-- KHU VỰC CUỘN DANH SÁCH CÂU HỎI (Bảng điều khiển không bị cuộn theo) -->
+    <VBox fx:id="questionPanels" VBox.vgrow="ALWAYS" minWidth="0" minHeight="200" fillWidth="true">
+        <ScrollPane fx:id="questionsScroll" fitToWidth="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS"
+                    style="-fx-background-color: transparent; -fx-background: transparent; -fx-padding: 0;">
+            <VBox fx:id="questionsContainer" spacing="14" fillWidth="true" style="-fx-padding: 2 4 20 2;"/>
+        </ScrollPane>
+    </VBox>
+
+    <!-- Các control ẩn hỗ trợ tương thích mã cũ & test runner -->
+    <TableView fx:id="questionTable" visible="false" managed="false"/>
+    <Button fx:id="editSelected" visible="false" managed="false" onAction="#editSelected"/>
+    <Button fx:id="deactivateQuestion" visible="false" managed="false" onAction="#deactivate"/>
+    <Button fx:id="deleteQuestion" visible="false" managed="false" onAction="#deleteSelected"/>
+    <TextArea fx:id="selectedQuestion" visible="false" managed="false"/>
+    <Button fx:id="copySelected" visible="false" managed="false" onAction="#copySelected"/>
+</VBox>
