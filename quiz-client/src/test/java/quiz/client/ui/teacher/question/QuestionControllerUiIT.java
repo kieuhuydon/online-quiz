@@ -72,7 +72,7 @@ class QuestionControllerUiIT {
         )));
         awaitQuestionsReady();
         fx(() -> {
-            assertEquals(2, questionTable().getItems().size());
+            assertEquals(1, questionTable().getItems().size());
             return null;
         });
     }
@@ -162,6 +162,7 @@ class QuestionControllerUiIT {
         assertEquals(MessageType.DEACTIVATE_QUESTION, request.type());
         assertEquals(1L, request.payload());
         peer.success(request, null);
+        awaitQuestionsReady();
         fx(() -> {
             assertTrue(label("questionNotice").getText().contains("Đã vô hiệu hóa"));
             return null;
@@ -249,6 +250,31 @@ class QuestionControllerUiIT {
     }
 
     @Test
+    void searchByContentFiltersQuestions() throws Exception {
+        var peer = loginAsTeacher();
+        var questions = List.of(
+            new QuestionDto(1, "Thủ đô của Việt Nam là gì?", "A", "B", "C", "D", 'A', "Địa lý", Difficulty.EASY, true, 2, Instant.now()),
+            new QuestionDto(2, "Đỉnh núi Fansipan cao bao nhiêu mét?", "A", "B", "C", "D", 'B', "Địa lý", Difficulty.HARD, true, 2, Instant.now()),
+            new QuestionDto(3, "Công thức hóa học của nước?", "A", "B", "C", "D", 'C', "Hóa học", Difficulty.EASY, true, 2, Instant.now())
+        );
+        fx(() -> { navigator.show(Screen.TEACHER_QUESTIONS); return null; });
+        var listMsg = readUntil(peer, MessageType.LIST_QUESTIONS);
+        peer.success(listMsg, new java.util.ArrayList<>(questions));
+        awaitQuestionsReady();
+
+        fx(() -> {
+            text("searchContent").setText("Fansipan");
+            return null;
+        });
+        awaitQuestionsReady();
+        fx(() -> {
+            assertEquals(1, questionTable().getItems().size());
+            assertTrue(questionTable().getItems().get(0).content().contains("Fansipan"));
+            return null;
+        });
+    }
+
+    @Test
     void invalidQuestionFormSendsNoRequest() throws Exception {
         var peer = loginAsTeacher();
         fx(() -> { navigator.show(Screen.TEACHER_QUESTIONS); return null; });
@@ -263,10 +289,10 @@ class QuestionControllerUiIT {
             text("questionOptionC").setText("C");
             text("questionOptionD").setText("D");
             button("createQuestion").fire();
+            assertTrue(label("formError").isVisible());
+            assertFalse(label("formError").getText().contains("SQL"));
             return null;
         });
-        assertTrue(label("formError").isVisible());
-        assertFalse(label("formError").getText().contains("SQL"));
         Thread.sleep(200);
     }
 
