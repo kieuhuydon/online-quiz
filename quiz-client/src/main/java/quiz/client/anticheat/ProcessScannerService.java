@@ -183,6 +183,7 @@ public class ProcessScannerService {
         if (!isRunning) return;
         try {
             List<DetectedProcess> currentViolations = scanner.scan();
+            if (!isRunning) return;
             Set<String> currentApps = currentViolations.stream()
                 .map(DetectedProcess::appName)
                 .collect(Collectors.toSet());
@@ -198,6 +199,7 @@ public class ProcessScannerService {
                 }
             }
 
+            if (!isRunning) return;
             // 2. Kiểm tra các ứng dụng cấm MỚI xuất hiện (PROCESS_DETECTED)
             List<DetectedProcess> newViolations = currentViolations.stream()
                 .filter(p -> !activeViolatingApps.contains(p.appName()))
@@ -229,7 +231,6 @@ public class ProcessScannerService {
             scheduledTask.cancel(true);
             scheduledTask = null;
         }
-        activeViolatingApps.clear();
         scheduler.shutdown();
         try {
             if (!scheduler.awaitTermination(500, TimeUnit.MILLISECONDS)) {
@@ -239,6 +240,7 @@ public class ProcessScannerService {
             scheduler.shutdownNow();
             Thread.currentThread().interrupt();
         }
+        activeViolatingApps.clear();
         log.info("ProcessScannerService đã dừng");
     }
 
@@ -250,4 +252,3 @@ public class ProcessScannerService {
         return Collections.unmodifiableSet(activeViolatingApps);
     }
 }
-

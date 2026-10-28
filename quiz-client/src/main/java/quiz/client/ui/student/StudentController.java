@@ -4,9 +4,12 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import quiz.client.api.QuizApi;
 import quiz.client.api.ApiException;
@@ -21,12 +24,13 @@ import quiz.common.enums.QuizStatus;
 import javafx.application.Platform;
 import quiz.client.anticheat.ProcessBlacklistScanner.DetectedProcess;
 import quiz.client.anticheat.ProcessScannerService;
-import java.util.stream.Collectors;
-
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.HashSet;
 import java.util.Objects;
+import java.util.Map;
 import java.util.Set;
+import java.util.HashSet;
+import java.util.stream.Collectors;
 
 /**
  * Controller cho Học viên xem các bài kiểm tra được giao (FR-S02) và thông tin bài kiểm tra (FR-S04).
@@ -290,24 +294,74 @@ public final class StudentController extends ScreenController {
     private void showPreExamViolationDialog(long quizId, String code, List<DetectedProcess> initialViolations) {
         Alert alert = new Alert(Alert.AlertType.WARNING);
         alert.setTitle("Kiểm tra môi trường thi");
-        alert.setHeaderText("⚠️ Phát hiện ứng dụng không được phép đang chạy");
+        alert.setHeaderText("Phát hiện ứng dụng không được phép đang chạy");
         if (navigator.stage() != null) {
             alert.initOwner(navigator.stage());
         }
 
-        String appList = initialViolations.stream()
-            .map(p -> "• " + p.appName() + " (PID: " + p.pid() + " - " + p.category() + ")")
-            .distinct()
+        // Gom nhóm theo tên ứng dụng để tránh spam nhiều dòng khi một ứng dụng mở nhiều tiến trình
+        Map<String, List<DetectedProcess>> grouped = initialViolations.stream()
+            .collect(Collectors.groupingBy(DetectedProcess::appName, LinkedHashMap::new, Collectors.toList()));
+
+        String appList = grouped.entrySet().stream()
+            .map(entry -> {
+                String name = entry.getKey();
+                List<DetectedProcess> procs = entry.getValue();
+                String cat = procs.get(0).category();
+                String pids = procs.stream().map(p -> String.valueOf(p.pid())).collect(Collectors.joining(", "));
+                if (procs.size() > 1) {
+                    return String.format("• %s (%s) — %d tiến trình (PID: %s)", name, cat, procs.size(), pids);
+                } else {
+                    return String.format("• %s (%s) — PID: %s", name, cat, pids);
+                }
+            })
             .collect(Collectors.joining("\n"));
 
         alert.setContentText("Các ứng dụng sau bị cấm trong phòng thi:\n\n" + appList
             + "\n\nVui lòng tắt toàn bộ ứng dụng trên trước khi bắt đầu làm bài.");
 
-        ButtonType btnAutoClose = new ButtonType("Tự động đóng giúp tôi", ButtonBar.ButtonData.OK_DONE);
-        ButtonType btnRecheck = new ButtonType("Kiểm tra lại", ButtonBar.ButtonData.APPLY);
+        ButtonType btnAutoClose = new ButtonType("Tự động đóng", ButtonBar.ButtonData.OK_DONE);
+        ButtonType btnRecheck = new ButtonType("Kiểm tra lại", ButtonBar.ButtonData.OTHER);
         ButtonType btnCancel = new ButtonType("Hủy bỏ", ButtonBar.ButtonData.CANCEL_CLOSE);
 
         alert.getButtonTypes().setAll(btnAutoClose, btnRecheck, btnCancel);
+
+        DialogPane dialogPane = alert.getDialogPane();
+        var cssUrl = getClass().getResource("/quiz/client/ui/app.css");
+        if (cssUrl != null) {
+            dialogPane.getStylesheets().add(cssUrl.toExternalForm());
+        }
+        dialogPane.setMinWidth(520);
+        dialogPane.setPrefWidth(540);
+
+        // Khóa thứ tự hiển thị nút cố định theo đúng danh sách khai báo: [Tự động đóng] [Kiểm tra lại] [Hủy bỏ]
+        ButtonBar bar = findButtonBar(dialogPane);
+        if (bar != null) {
+            bar.setButtonOrder(ButtonBar.BUTTON_ORDER_NONE);
+        }
+
+        // Tắt uniform size và đặt kích thước rộng rãi để tuyệt đối không bị co chữ thành "Tự động đó..."
+        Button autoCloseBtn = (Button) dialogPane.lookupButton(btnAutoClose);
+        if (autoCloseBtn != null) {
+            ButtonBar.setButtonUniformSize(autoCloseBtn, false);
+            autoCloseBtn.setMinWidth(140);
+            autoCloseBtn.setPrefWidth(140);
+            autoCloseBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand; -fx-padding: 6 12; -fx-min-width: 140px; -fx-pref-width: 140px;");
+        }
+        Button recheckBtn = (Button) dialogPane.lookupButton(btnRecheck);
+        if (recheckBtn != null) {
+            ButtonBar.setButtonUniformSize(recheckBtn, false);
+            recheckBtn.setMinWidth(110);
+            recheckBtn.setPrefWidth(110);
+            recheckBtn.setStyle("-fx-cursor: hand; -fx-padding: 6 12; -fx-min-width: 110px; -fx-pref-width: 110px;");
+        }
+        Button cancelBtn = (Button) dialogPane.lookupButton(btnCancel);
+        if (cancelBtn != null) {
+            ButtonBar.setButtonUniformSize(cancelBtn, false);
+            cancelBtn.setMinWidth(85);
+            cancelBtn.setPrefWidth(85);
+            cancelBtn.setStyle("-fx-cursor: hand; -fx-padding: 6 12; -fx-min-width: 85px; -fx-pref-width: 85px;");
+        }
 
         var result = alert.showAndWait();
         if (result.isPresent()) {
@@ -334,6 +388,19 @@ public final class StudentController extends ScreenController {
                 showNotice("Đã hủy vào bài thi do chưa tắt ứng dụng cấm.", true);
             }
         }
+    }
+
+    private ButtonBar findButtonBar(Parent parent) {
+        for (Node child : parent.getChildrenUnmodifiable()) {
+            if (child instanceof ButtonBar bar) {
+                return bar;
+            }
+            if (child instanceof Parent p) {
+                ButtonBar bar = findButtonBar(p);
+                if (bar != null) return bar;
+            }
+        }
+        return null;
     }
 
     private void proceedStartExam(long quizId, String code) {
