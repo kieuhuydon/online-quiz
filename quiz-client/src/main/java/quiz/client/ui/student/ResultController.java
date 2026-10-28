@@ -5,7 +5,6 @@ import javafx.scene.control.Label;
 import quiz.client.api.QuizApi;
 import quiz.client.ui.*;
 import quiz.common.dto.ResultDto;
-import quiz.common.enums.SubmitReason;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -15,7 +14,7 @@ public final class ResultController extends ScreenController {
     private final SceneNavigator navigator;
     private final ResultDto result;
 
-    @FXML private Label quizTitle, score, correct, outcome, submitted, reason;
+    @FXML private Label quizTitle, score, correct, outcome, submitted;
 
     public ResultController(QuizApi api, SceneNavigator navigator, ResultDto result) {
         this.api = api;
@@ -33,14 +32,6 @@ public final class ResultController extends ScreenController {
             .withZone(ZoneId.systemDefault())
             .format(result.submittedAt()));
 
-        if (result.submitReason() == SubmitReason.ANTICHEAT) {
-            reason.setText("Vi phạm quy chế thi (Buộc nộp sớm)");
-            reason.setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
-        } else if (result.submitReason() == SubmitReason.TIMEOUT) {
-            reason.setText("Hết giờ làm bài");
-        } else {
-            reason.setText("Tự nộp bài");
-        }
     }
 
     @FXML

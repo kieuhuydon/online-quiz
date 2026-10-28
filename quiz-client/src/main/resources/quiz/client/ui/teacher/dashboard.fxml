@@ -242,7 +242,9 @@
                         <Button fx:id="btnSaveSelectedQuestions" text="Lưu Danh Sách Câu Hỏi Vào Đề" onAction="#onSaveSelectedQuestionsClick" styleClass="primary-button"/>
                     </HBox>
                     <Separator/>
-                    <TableView fx:id="questionTable" prefHeight="240" styleClass="account-card"/>
+                    <TableView fx:id="questionTable" prefHeight="320" minHeight="260" VBox.vgrow="ALWAYS" styleClass="account-card"/>
+                    <Label text="Xem trước câu hỏi đã chọn" styleClass="section-heading"/>
+                    <TextArea fx:id="questionSelectionPreview" editable="false" wrapText="true" prefRowCount="8" prefHeight="190" minHeight="150" promptText="Chọn một câu hỏi trong bảng để xem đầy đủ nội dung và các lựa chọn." styleClass="account-card"/>
                 </VBox>
 
                 <!-- SUB-PANEL 4: Assign Quiz to Multiple Classes Panel -->
@@ -298,10 +300,10 @@
                     </HBox>
 
                     <!-- Questions Table with Delete & Replace actions -->
-                    <TableView fx:id="detailQuestionTable" prefHeight="320" minHeight="220" maxHeight="Infinity" VBox.vgrow="ALWAYS" styleClass="account-card"/>
+                    <TableView fx:id="detailQuestionTable" prefHeight="360" minHeight="260" maxHeight="Infinity" VBox.vgrow="ALWAYS" styleClass="account-card"/>
 
                     <!-- Question Bank Picker Panel (for Adding or Replacing Question) -->
-                    <VBox fx:id="questionPickerPanel" visible="false" managed="false" spacing="10" style="-fx-background-color: #f1f5f9; -fx-padding: 14; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8;">
+                    <VBox fx:id="questionPickerPanel" visible="false" managed="false" maxWidth="Infinity" fillWidth="true" spacing="10" style="-fx-background-color: #f1f5f9; -fx-padding: 14; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8;">
                         <HBox alignment="CENTER_LEFT" spacing="12">
                             <Label fx:id="lblPickerTitle" text="Chọn câu hỏi từ ngân hàng để thay thế / thêm:" style="-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #1e293b;"/>
                             <Region HBox.hgrow="ALWAYS"/>
@@ -309,7 +311,9 @@
                             <ComboBox fx:id="cmbPickerDifficulty" prefWidth="130" promptText="Độ khó"/>
                             <Button text="Đóng bộ chọn" onAction="#onCancelPickerClick" styleClass="secondary-button"/>
                         </HBox>
-                        <TableView fx:id="pickerTable" prefHeight="180" styleClass="account-card"/>
+                        <TableView fx:id="pickerTable" prefHeight="300" minHeight="240" maxWidth="Infinity" VBox.vgrow="ALWAYS" styleClass="account-card"/>
+                        <Label text="Xem trước câu hỏi đang chọn" styleClass="section-heading"/>
+                        <TextArea fx:id="pickerPreview" editable="false" wrapText="true" prefRowCount="8" prefHeight="190" minHeight="150" promptText="Chọn một câu hỏi trong bảng để xem đầy đủ nội dung và các lựa chọn." styleClass="account-card"/>
                         <HBox alignment="CENTER_RIGHT" spacing="10">
                             <Button text="Hủy" onAction="#onCancelPickerClick" styleClass="secondary-button"/>
                             <Button fx:id="btnConfirmPicker" text="Xác Nhận Chọn Câu Hỏi Này" onAction="#onConfirmPickerClick" styleClass="primary-button"/>
