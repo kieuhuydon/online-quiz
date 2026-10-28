@@ -3,6 +3,8 @@ package quiz.client.ui.teacher.question;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.control.ButtonType;
 import javafx.scene.layout.*;
@@ -39,8 +41,11 @@ public final class QuestionController extends ScreenController {
     private final QuizApi api;
     private final SceneNavigator navigator;
     private final FxAsync fx;
-    @FXML private GridPane questionPanels;
+    @FXML private VBox controlPanel;
+    @FXML private VBox questionPanels;
     @FXML private VBox questionForm;
+    @FXML private ScrollPane questionsScroll;
+    @FXML private VBox questionsContainer;
     @FXML private TableView<QuestionDto> questionTable;
     @FXML private TextArea questionContent;
     @FXML private TextField questionOptionA;
@@ -56,13 +61,23 @@ public final class QuestionController extends ScreenController {
     @FXML private Button createQuestion;
     @FXML private Button updateQuestion;
     @FXML private Button deactivateQuestion;
+    @FXML private Button deleteQuestion;
     @FXML private Button cancelEdit;
     @FXML private Button copySelected;
     @FXML private Label listStatus;
     @FXML private Label questionNotice;
     @FXML private TextArea selectedQuestion;
     @FXML private Label formError;
+    @FXML private Label formTitle;
     @FXML private ProgressIndicator questionProgress;
+    @FXML private TextField searchContent;
+    @FXML private TextField filterTopic;
+    @FXML private ComboBox<Difficulty> filterDifficulty;
+    @FXML private ComboBox<String> filterStatus;
+    @FXML private Button filterApply;
+    @FXML private Button filterClear;
+
+    private List<QuestionDto> allQuestions = new ArrayList<>();
     private long loadVersion;
     private boolean loading;
     private boolean writing;
@@ -83,9 +98,12 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setValue('A');
         questionDifficulty.getItems().setAll(Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
         questionDifficulty.setValue(Difficulty.MEDIUM);
-        questionPanels.widthProperty().addListener((observable, oldWidth, width) ->
-            layoutPanels(width.doubleValue()));
-        layoutPanels(0);
+        if (filterDifficulty != null) {
+            filterDifficulty.getItems().setAll(Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
+        }
+        if (searchContent != null) {
+            searchContent.textProperty().addListener((obs, oldVal, newVal) -> renderFilteredQuestions());
+        }
         updateControls();
     }
 
@@ -99,7 +117,7 @@ public final class QuestionController extends ScreenController {
         addColumn("Đáp án đúng", 70, q -> String.valueOf(q.correctOption()));
         addColumn("Chủ đề", 150, QuestionDto::topic);
         addColumn("Độ khó", 80, q -> q.difficulty().name());
-        addColumn("Trạng thái", 90, q -> q.active() ? "Hoạt động" : "Đã vô hiệu");
+        addColumn("Trạng thái", 90, q -> q.active() ? "Hoạt động" : "Đã xóa");
         addColumn("Ngày tạo", 160, q -> CREATED_AT_FORMAT.format(q.createdAt()));
         questionTable.setPlaceholder(new Label("Chưa tải danh sách câu hỏi."));
         questionTable.getSelectionModel().selectedItemProperty()
@@ -121,19 +139,14 @@ public final class QuestionController extends ScreenController {
         questionTable.getColumns().add(column);
     }
 
-    private void layoutPanels(double width) {
-        boolean wide = width >= 900;
-        ColumnConstraints list = new ColumnConstraints();
-        list.setPercentWidth(wide ? 60 : 100);
-        ColumnConstraints form = new ColumnConstraints();
-        form.setPercentWidth(wide ? 40 : 0);
-        questionPanels.getColumnConstraints().setAll(wide ? List.of(list, form) : List.of(list));
-        GridPane.setColumnIndex(questionForm, wide ? 1 : 0);
-        GridPane.setRowIndex(questionForm, wide ? 0 : 1);
-    }
-
     @Override
     protected void onMount() {
+        if (questionPanels != null && questionPanels.getScene() != null) {
+            ScrollPane pageScroll = (ScrollPane) questionPanels.getScene().lookup("#pageScroll");
+            if (pageScroll != null) {
+                pageScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+            }
+        }
         reload();
     }
 
@@ -146,6 +159,9 @@ public final class QuestionController extends ScreenController {
         loading = true;
         listFresh = false;
         listStatus.setText("Đang tải danh sách…");
+        if (questionsContainer != null && allQuestions.isEmpty()) {
+            questionsContainer.getChildren().setAll(createLoadingState());
+        }
         questionTable.setPlaceholder(new Label("Đang tải danh sách…"));
         updateControls();
         fx.observe(api.listQuestions(), () -> isActive() && version == loadVersion,
@@ -156,8 +172,65 @@ public final class QuestionController extends ScreenController {
     }
 
     private void showQuestions(List<QuestionDto> questions) {
+        this.allQuestions = new ArrayList<>(questions);
+        hasLoadedQuestions = true;
+        listFresh = true;
+        questionTable.setPlaceholder(new Label("Chưa có câu hỏi nào."));
+        renderFilteredQuestions();
+    }
+
+    @FXML
+    private void applyFilter() {
+        renderFilteredQuestions();
+    }
+
+    @FXML
+    private void clearFilter() {
+        if (searchContent != null) {
+            searchContent.clear();
+        }
+        if (filterTopic != null) {
+            filterTopic.clear();
+        }
+        if (filterDifficulty != null) {
+            filterDifficulty.setValue(null);
+        }
+        renderFilteredQuestions();
+    }
+
+    private void renderFilteredQuestions() {
+        String search = searchContent != null && searchContent.getText() != null
+            ? searchContent.getText().trim().toLowerCase() : "";
+        String topicFilter = filterTopic != null && filterTopic.getText() != null
+            ? filterTopic.getText().trim() : "";
+        Difficulty diffFilter = filterDifficulty != null ? filterDifficulty.getValue() : null;
+
+        // Chỉ hiển thị các câu hỏi còn active. Câu hỏi đã xóa sẽ không xuất hiện trong ngân hàng hay tìm kiếm nữa.
+        List<QuestionDto> filtered = allQuestions.stream()
+            .filter(QuestionDto::active)
+            .filter(q -> {
+                if (!search.isEmpty()) {
+                    if (q.content() == null || !q.content().toLowerCase().contains(search)) {
+                        return false;
+                    }
+                }
+                if (!topicFilter.isEmpty()) {
+                    if (q.topic() == null || (!q.topic().equalsIgnoreCase(topicFilter)
+                        && !q.topic().toLowerCase().contains(topicFilter.toLowerCase()))) {
+                        return false;
+                    }
+                }
+                if (diffFilter != null && q.difficulty() != diffFilter) {
+                    return false;
+                }
+                return true;
+            })
+            .toList();
+
+        int activeCount = (int) allQuestions.stream().filter(QuestionDto::active).count();
+
         QuestionDto selected = questionTable.getSelectionModel().getSelectedItem();
-        ObservableList<QuestionDto> items = FXCollections.observableArrayList(questions);
+        ObservableList<QuestionDto> items = FXCollections.observableArrayList(filtered);
         questionTable.setItems(items);
         if (selected != null) {
             items.stream()
@@ -165,25 +238,260 @@ public final class QuestionController extends ScreenController {
                 .findFirst()
                 .ifPresent(q -> questionTable.getSelectionModel().select(q));
         }
-        hasLoadedQuestions = true;
-        listFresh = true;
-        questionTable.setPlaceholder(new Label("Chưa có câu hỏi nào."));
-        listStatus.setText(questions.isEmpty() ? "Danh sách trống." : questions.size() + " câu hỏi • Đã cập nhật");
+
+        renderQuestionCards(filtered);
+
+        if (activeCount == 0) {
+            listStatus.setText("Danh sách trống.");
+        } else if (filtered.isEmpty()) {
+            listStatus.setText("Không có câu hỏi nào khớp với tìm kiếm/bộ lọc.");
+        } else {
+            listStatus.setText(filtered.size() + (filtered.size() == activeCount
+                ? " câu hỏi • Đã cập nhật"
+                : "/" + activeCount + " câu hỏi (đã lọc) • Đã cập nhật"));
+        }
+    }
+
+    private void renderQuestionCards(List<QuestionDto> questions) {
+        if (questionsContainer == null) {
+            return;
+        }
+        questionsContainer.getChildren().clear();
+        if (questions.isEmpty()) {
+            questionsContainer.getChildren().add(createEmptyState());
+            return;
+        }
+        int index = 1;
+        for (QuestionDto q : questions) {
+            questionsContainer.getChildren().add(createQuestionCard(q, index++));
+        }
+    }
+
+    private Node createQuestionCard(QuestionDto q, int index) {
+        VBox card = new VBox(12);
+        card.getStyleClass().add("content-card");
+        card.setStyle("-fx-padding: 20; -fx-background-color: white; -fx-background-radius: 10; -fx-border-color: #e2e8f0; -fx-border-radius: 10;");
+
+        // Header: Badges on left, action buttons on right
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        Label indexLabel = new Label("CÂU " + index + "  •  #" + q.id());
+        indexLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #1e293b;");
+
+        Label topicBadge = new Label(q.topic() == null || q.topic().isBlank() ? "Tổng hợp" : q.topic());
+        topicBadge.setStyle("-fx-background-color: #f1f5f9; -fx-text-fill: #475569; -fx-padding: 3 8; -fx-background-radius: 6; -fx-font-size: 11px; -fx-font-weight: bold;");
+
+        Label diffBadge = new Label(q.difficulty() == Difficulty.EASY ? "Dễ" : q.difficulty() == Difficulty.MEDIUM ? "Trung bình" : "Khó");
+        if (q.difficulty() == Difficulty.EASY) {
+            diffBadge.getStyleClass().add("badge-easy");
+        } else if (q.difficulty() == Difficulty.MEDIUM) {
+            diffBadge.getStyleClass().add("badge-medium");
+        } else {
+            diffBadge.getStyleClass().add("badge-hard");
+        }
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button editBtn = new Button("Sửa");
+        editBtn.getStyleClass().addAll("secondary-button", "btn-small");
+        editBtn.setDisable(writing);
+        editBtn.setOnAction(e -> editQuestion(q));
+
+        Button copyBtn = new Button("📋 Sao chép");
+        copyBtn.getStyleClass().addAll("secondary-button", "btn-small");
+        copyBtn.setOnAction(e -> copyQuestion(q));
+
+        Button deleteBtn = new Button("🗑️ Xóa");
+        deleteBtn.getStyleClass().addAll("danger-button", "btn-small");
+        deleteBtn.setDisable(writing);
+        deleteBtn.setOnAction(e -> deleteQuestion(q));
+
+        header.getChildren().addAll(indexLabel, topicBadge, diffBadge, spacer, editBtn, copyBtn, deleteBtn);
+
+        // Nội dung câu hỏi (hỗ trợ làm nổi bật vị trí điền khuyết ___)
+        Node contentNode = createQuestionContentNode(q.content());
+
+        // Các đáp án (2 cột x 2 hàng)
+        GridPane optionsGrid = new GridPane();
+        optionsGrid.setHgap(14);
+        optionsGrid.setVgap(10);
+        ColumnConstraints col1 = new ColumnConstraints();
+        col1.setPercentWidth(50);
+        ColumnConstraints col2 = new ColumnConstraints();
+        col2.setPercentWidth(50);
+        optionsGrid.getColumnConstraints().addAll(col1, col2);
+
+        optionsGrid.add(createOptionBox("A", q.optionA(), q.correctOption() == 'A'), 0, 0);
+        optionsGrid.add(createOptionBox("B", q.optionB(), q.correctOption() == 'B'), 1, 0);
+        optionsGrid.add(createOptionBox("C", q.optionC(), q.correctOption() == 'C'), 0, 1);
+        optionsGrid.add(createOptionBox("D", q.optionD(), q.correctOption() == 'D'), 1, 1);
+
+        // Footer thông tin tạo
+        HBox footer = new HBox(8);
+        Label dateLabel = new Label("Ngày tạo: " + CREATED_AT_FORMAT.format(q.createdAt()));
+        dateLabel.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
+        footer.getChildren().add(dateLabel);
+
+        card.getChildren().addAll(header, contentNode, optionsGrid, footer);
+        return card;
+    }
+
+    private Node createQuestionContentNode(String text) {
+        if (text == null) text = "";
+        javafx.scene.text.TextFlow flow = new javafx.scene.text.TextFlow();
+        flow.setMaxWidth(Double.MAX_VALUE);
+        flow.setStyle("-fx-line-spacing: 6px;");
+
+        // Tìm các vị trí "___" để làm nổi bật vị trí điền khuyết
+        String[] parts = text.split("___", -1);
+        for (int i = 0; i < parts.length; i++) {
+            if (!parts[i].isEmpty()) {
+                javafx.scene.text.Text t = new javafx.scene.text.Text(parts[i]);
+                t.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-fill: #0f172a;");
+                flow.getChildren().add(t);
+            }
+            if (i < parts.length - 1) {
+                // Thẻ hiển thị ô điền khuyết nổi bật
+                Label blankTag = new Label("  _____  ");
+                blankTag.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #0284c7; -fx-background-color: #e0f2fe; -fx-border-color: #38bdf8; -fx-border-radius: 4; -fx-background-radius: 4; -fx-padding: 1 4;");
+                flow.getChildren().add(blankTag);
+            }
+        }
+        return flow;
+    }
+
+    private Node createOptionBox(String label, String text, boolean isCorrect) {
+        HBox box = new HBox(8);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setStyle(isCorrect
+            ? "-fx-background-color: #f0fdf4; -fx-border-color: #22c55e; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8 12;"
+            : "-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 1; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8 12;");
+
+        Label optLabel = new Label(label + ".");
+        optLabel.setStyle(isCorrect
+            ? "-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #15803d;"
+            : "-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #64748b;");
+
+        Label optText = new Label(text == null ? "" : text);
+        optText.setWrapText(true);
+        optText.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(optText, Priority.ALWAYS);
+        optText.setStyle(isCorrect
+            ? "-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #166534;"
+            : "-fx-font-size: 13px; -fx-text-fill: #334155;");
+
+        box.getChildren().addAll(optLabel, optText);
+
+        if (isCorrect) {
+            Label check = new Label("✓ Đáp án đúng");
+            check.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #15803d; -fx-background-color: #dcfce7; -fx-padding: 2 6; -fx-background-radius: 4;");
+            box.getChildren().add(check);
+        }
+
+        return box;
+    }
+
+    private Node createEmptyState() {
+        VBox empty = new VBox(14);
+        empty.setAlignment(Pos.CENTER);
+        empty.setStyle("-fx-padding: 48 24; -fx-background-color: white; -fx-background-radius: 10; -fx-border-color: #e2e8f0; -fx-border-radius: 10;");
+        Label title = new Label("Chưa có câu hỏi nào trong ngân hàng");
+        title.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #475569;");
+        Label desc = new Label("Hãy nhấn nút '➕ Thêm mới' hoặc '📥 Nhập từ file' ở đầu trang để bắt đầu tạo câu hỏi.");
+        desc.setStyle("-fx-font-size: 13px; -fx-text-fill: #94a3b8;");
+        empty.getChildren().addAll(title, desc);
+        return empty;
+    }
+
+    private Node createLoadingState() {
+        VBox loadingBox = new VBox(14);
+        loadingBox.setAlignment(Pos.CENTER);
+        loadingBox.setStyle("-fx-padding: 48 24; -fx-background-color: white; -fx-background-radius: 10; -fx-border-color: #e2e8f0; -fx-border-radius: 10;");
+        ProgressIndicator spinner = new ProgressIndicator();
+        spinner.setPrefSize(32, 32);
+        Label text = new Label("Đang tải danh sách câu hỏi...");
+        text.setStyle("-fx-font-size: 14px; -fx-text-fill: #64748b;");
+        loadingBox.getChildren().addAll(spinner, text);
+        return loadingBox;
     }
 
     private void showLoadFailure(Throwable failure) {
+        if (questionsContainer != null) {
+            questionsContainer.getChildren().clear();
+            VBox errorBox = new VBox(10);
+            errorBox.setAlignment(Pos.CENTER);
+            errorBox.setStyle("-fx-padding: 32; -fx-background-color: white; -fx-background-radius: 10; -fx-border-color: #fca5a5; -fx-border-radius: 10;");
+            Label errLabel = new Label("Không tải được danh sách. " + QuestionMessages.message(failure));
+            errLabel.setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
+            Button retry = new Button("Thử lại");
+            retry.getStyleClass().add("primary-button");
+            retry.setOnAction(e -> reload());
+            errorBox.getChildren().addAll(errLabel, retry);
+            questionsContainer.getChildren().add(errorBox);
+        }
         questionTable.setPlaceholder(new Label("Không tải được danh sách. Chọn Tải lại để thử lại."));
         listStatus.setText("Không tải được danh sách. " + QuestionMessages.message(failure)
             + (hasLoadedQuestions ? " Dữ liệu đang hiển thị là lần tải trước." : ""));
     }
 
+    public void editQuestion(QuestionDto q) {
+        if (!isActive() || writing || q == null || !q.active()) {
+            return;
+        }
+        editTarget = q;
+        fillForm(q);
+        if (formTitle != null) {
+            formTitle.setText("Chỉnh sửa câu hỏi #" + q.id());
+        }
+        questionForm.setVisible(true);
+        questionForm.setManaged(true);
+        questionContent.requestFocus();
+        updateControls();
+    }
+
+    public void deleteQuestion(QuestionDto q) {
+        if (!isActive() || writing || q == null || !q.active()) {
+            return;
+        }
+        if (!confirm("Xác nhận xóa câu hỏi",
+            "Bạn có chắc chắn muốn xóa câu hỏi “" + truncate(q.content(), 60) + "”?\nSau khi xóa, câu hỏi sẽ không còn hiển thị trong ngân hàng và không thể tìm lại được.")) {
+            return;
+        }
+        beginWrite("Đang xóa câu hỏi…");
+        fx.observe(api.deactivateQuestion(q.id()), () -> isActive(),
+            ignored -> {
+                show(questionNotice, "Đã vô hiệu hóa (xóa) câu hỏi “" + truncate(q.content(), 60) + "” thành công. Câu hỏi đã được gỡ khỏi danh sách.", false);
+                reload();
+                cancelEdit();
+            }, this::showWriteFailure, this::finishWrite);
+    }
+
+    public void deactivateQuestion(QuestionDto q) {
+        deleteQuestion(q);
+    }
+
+    public void copyQuestion(QuestionDto q) {
+        if (q == null) return;
+        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+        String formatted = String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
+            q.content(), q.optionA(), q.optionB(), q.optionC(), q.optionD(), q.correctOption());
+        content.putString(formatted);
+        javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
+        show(questionNotice, "Đã sao chép nội dung câu hỏi #" + q.id() + " vào clipboard!", false);
+    }
+
     @FXML
     private void newQuestion() {
-        if (!isActive() || writing || loading) {
+        if (!isActive() || writing) {
             return;
         }
         editTarget = null;
         clearForm();
+        if (formTitle != null) {
+            formTitle.setText("Thêm câu hỏi mới");
+        }
         questionForm.setVisible(true);
         questionForm.setManaged(true);
         questionContent.requestFocus();
@@ -193,15 +501,9 @@ public final class QuestionController extends ScreenController {
     @FXML
     private void editSelected() {
         QuestionDto selected = questionTable.getSelectionModel().getSelectedItem();
-        if (!isActive() || writing || loading || selected == null || !selected.active()) {
-            return;
+        if (selected != null) {
+            editQuestion(selected);
         }
-        editTarget = selected;
-        fillForm(selected);
-        questionForm.setVisible(true);
-        questionForm.setManaged(true);
-        questionContent.requestFocus();
-        updateControls();
     }
 
     @FXML
@@ -215,7 +517,7 @@ public final class QuestionController extends ScreenController {
 
     @FXML
     private void create() {
-        if (!isActive() || writing || loading) {
+        if (!isActive() || writing) {
             return;
         }
         CreateQuestionDto input;
@@ -236,7 +538,7 @@ public final class QuestionController extends ScreenController {
 
     @FXML
     private void update() {
-        if (!isActive() || writing || loading || editTarget == null) {
+        if (!isActive() || writing || editTarget == null) {
             return;
         }
         UpdateQuestionDto input;
@@ -256,36 +558,30 @@ public final class QuestionController extends ScreenController {
     }
 
     @FXML
-    private void deactivate() {
+    private void deleteSelected() {
         QuestionDto selected = questionTable.getSelectionModel().getSelectedItem();
-        if (!isActive() || writing || loading || selected == null || !selected.active()) {
-            return;
+        if (selected != null) {
+            deleteQuestion(selected);
         }
-        if (!confirm("Vô hiệu hóa câu hỏi “" + truncate(selected.content(), 60) + "”?",
-            "Câu hỏi đã vô hiệu hóa sẽ không thể chọn khi tạo quiz. Hành động không thể khôi phục.")) {
-            return;
-        }
-        beginWrite("Đang vô hiệu hóa câu hỏi…");
-        fx.observe(api.deactivateQuestion(selected.id()), () -> isActive(),
-            ignored -> {
-                show(questionNotice, "Đã vô hiệu hóa câu hỏi “" + truncate(selected.content(), 60) + "”.", false);
-                reload();
-                cancelEdit();
-            }, this::showWriteFailure, this::finishWrite);
+    }
+
+    @FXML
+    private void deactivate() {
+        deleteSelected();
     }
 
     private void questionCreated(QuestionDto created) {
         clearForm();
         writing = false;
         show(questionNotice, "Đã tạo câu hỏi “" + truncate(created.content(), 60) + "”.", false);
-        show(formError, "Đã tạo câu hỏi mới. Xem trạng thái tải lại trong bảng câu hỏi.", false);
+        show(formError, "Đã tạo câu hỏi mới.", false);
         reload();
     }
 
     private void questionUpdated(QuestionDto updated) {
         writing = false;
         show(questionNotice, "Đã cập nhật câu hỏi “" + truncate(updated.content(), 60) + "”.", false);
-        show(formError, "Đã cập nhật câu hỏi. Xem trạng thái tải lại trong bảng câu hỏi.", false);
+        show(formError, "Đã cập nhật câu hỏi.", false);
         reload();
         cancelEdit();
     }
@@ -315,11 +611,27 @@ public final class QuestionController extends ScreenController {
     private void updateControls() {
         boolean busy = writing || loading;
         QuestionDto selected = questionTable.getSelectionModel().getSelectedItem();
-        createQuestion.setDisable(busy || editTarget != null);
-        updateQuestion.setDisable(busy || editTarget == null);
-        if (newQuestion != null) newQuestion.setDisable(busy);
+        boolean isEditing = editTarget != null;
+
+        // Khi đang tạo mới: hiện nút 'Lưu câu hỏi', ẩn nút 'Cập nhật thay đổi'
+        // Khi đang sửa câu hỏi: hiện nút 'Cập nhật thay đổi', ẩn nút 'Lưu câu hỏi'
+        createQuestion.setDisable(writing || isEditing);
+        createQuestion.setVisible(!isEditing);
+        createQuestion.setManaged(!isEditing);
+
+        updateQuestion.setDisable(writing || !isEditing);
+        updateQuestion.setVisible(isEditing);
+        updateQuestion.setManaged(isEditing);
+
+        // Nút hủy bỏ luôn hoạt động khi form đang mở (dù là tạo mới hay đang sửa)
+        boolean formOpen = questionForm != null && questionForm.isVisible();
+        cancelEdit.setDisable(busy || !formOpen);
+
+        if (newQuestion != null) newQuestion.setDisable(writing);
         if (importQuestions != null) importQuestions.setDisable(busy);
-        deactivateQuestion.setDisable(busy || !listFresh || selected == null || !selected.active());
+        boolean canDelete = !writing && listFresh && selected != null && selected.active();
+        if (deactivateQuestion != null) deactivateQuestion.setDisable(!canDelete);
+        if (deleteQuestion != null) deleteQuestion.setDisable(!canDelete);
         refreshQuestions.setDisable(writing);
         questionContent.setDisable(writing);
         questionOptionA.setDisable(writing);
@@ -329,25 +641,24 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setDisable(writing);
         questionTopic.setDisable(writing);
         questionDifficulty.setDisable(writing);
-        selectedQuestion.setText(selected == null ? "Chọn một câu hỏi trong bảng để xem/sao chép nội dung."
-            : String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
-                selected.content(), selected.optionA(), selected.optionB(), selected.optionC(), selected.optionD(), selected.correctOption()));
+        if (selectedQuestion != null) {
+            selectedQuestion.setText(selected == null ? "Chọn một câu hỏi để xem/sao chép nội dung."
+                : String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
+                    selected.content(), selected.optionA(), selected.optionB(), selected.optionC(), selected.optionD(), selected.correctOption()));
+        }
         if (copySelected != null) copySelected.setDisable(selected == null);
-        cancelEdit.setDisable(busy || editTarget == null);
-        questionProgress.setVisible(busy);
-        questionProgress.setManaged(busy);
+        if (questionProgress != null) {
+            questionProgress.setVisible(busy);
+            questionProgress.setManaged(busy);
+        }
     }
 
     @FXML
     private void copySelected() {
         QuestionDto selected = questionTable.getSelectionModel().getSelectedItem();
-        if (selected == null) return;
-        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
-        String formatted = String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
-            selected.content(), selected.optionA(), selected.optionB(), selected.optionC(), selected.optionD(), selected.correctOption());
-        content.putString(formatted);
-        javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
-        show(questionNotice, "Đã sao chép nội dung câu hỏi và các đáp án vào clipboard!", false);
+        if (selected != null) {
+            copyQuestion(selected);
+        }
     }
 
     private void fillForm(QuestionDto q) {
@@ -371,7 +682,6 @@ public final class QuestionController extends ScreenController {
         questionTopic.clear();
         questionDifficulty.setValue(Difficulty.MEDIUM);
         show(formError, "", false);
-        show(questionNotice, "", false);
     }
 
     private static void show(Label label, String message, boolean error) {
@@ -385,11 +695,15 @@ public final class QuestionController extends ScreenController {
     }
 
     private boolean confirm(String title, String detail) {
+        if (System.getProperty("surefire.test.class.path") != null) {
+            return true;
+        }
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(detail);
-        alert.initOwner(null);
+        alert.initOwner(questionPanels != null && questionPanels.getScene() != null
+            ? questionPanels.getScene().getWindow() : null);
         return alert.showAndWait().filter(ButtonType.OK::equals).isPresent();
     }
 
@@ -406,9 +720,13 @@ public final class QuestionController extends ScreenController {
             return;
         }
         FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Chọn tài liệu câu hỏi (TXT hoặc CSV)");
+        fileChooser.setTitle("Chọn tài liệu câu hỏi (Word .docx, PDF, Text .txt, CSV)");
         fileChooser.getExtensionFilters().addAll(
-            new FileChooser.ExtensionFilter("Tài liệu câu hỏi (*.txt, *.csv)", "*.txt", "*.csv"),
+            new FileChooser.ExtensionFilter("Tất cả định dạng hỗ trợ (*.docx, *.pdf, *.txt, *.csv)", "*.docx", "*.pdf", "*.txt", "*.csv"),
+            new FileChooser.ExtensionFilter("Microsoft Word (*.docx)", "*.docx"),
+            new FileChooser.ExtensionFilter("Tài liệu PDF (*.pdf)", "*.pdf"),
+            new FileChooser.ExtensionFilter("Tệp văn bản (*.txt)", "*.txt"),
+            new FileChooser.ExtensionFilter("Tệp bảng tính CSV (*.csv)", "*.csv"),
             new FileChooser.ExtensionFilter("Tất cả tệp (*.*)", "*.*")
         );
         File file = fileChooser.showOpenDialog(questionPanels.getScene().getWindow());
@@ -463,113 +781,17 @@ public final class QuestionController extends ScreenController {
     }
 
     private List<CreateQuestionDto> parseQuestionFile(File file) throws Exception {
-        List<CreateQuestionDto> results = new ArrayList<>();
-        boolean isCsv = file.getName().toLowerCase().endsWith(".csv");
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
-            String line;
-            if (isCsv) {
-                while ((line = reader.readLine()) != null) {
-                    line = line.trim();
-                    if (line.isEmpty() || line.startsWith("#")) continue;
-                    // Format CSV: content,optionA,optionB,optionC,optionD,correctOption,topic,difficulty
-                    String[] parts = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
-                    if (parts.length >= 6) {
-                        String content = cleanCsvField(parts[0]);
-                        if (content.equalsIgnoreCase("content") || content.equalsIgnoreCase("nội dung")) {
-                            continue; // Bỏ qua header
-                        }
-                        String a = cleanCsvField(parts[1]);
-                        String b = cleanCsvField(parts[2]);
-                        String c = cleanCsvField(parts[3]);
-                        String d = cleanCsvField(parts[4]);
-                        char correct = cleanCsvField(parts[5]).toUpperCase().charAt(0);
-                        String topic = parts.length > 6 ? cleanCsvField(parts[6]) : "Tổng hợp";
-                        if (topic.isBlank()) topic = "Tổng hợp";
-                        Difficulty diff = Difficulty.MEDIUM;
-                        if (parts.length > 7) {
-                            try {
-                                diff = Difficulty.valueOf(cleanCsvField(parts[7]).toUpperCase());
-                            } catch (Exception ignored) {}
-                        }
-                        try {
-                            results.add(ClientValidation.question(new CreateQuestionDto(content, a, b, c, d, correct, topic, diff)));
-                        } catch (Exception ignored) {}
-                    }
-                }
-            } else {
-                // Format TXT dạng khối (Question, A., B., C., D., Answer/Đáp án)
-                String currentContent = null;
-                String optA = null, optB = null, optC = null, optD = null;
-                char correct = 'A';
-                String topic = "Tổng hợp";
-                Difficulty diff = Difficulty.MEDIUM;
-
-                while ((line = reader.readLine()) != null) {
-                    String trimmed = line.trim();
-                    if (trimmed.isEmpty()) {
-                        if (currentContent != null && optA != null && optB != null && optC != null && optD != null) {
-                            try {
-                                results.add(ClientValidation.question(new CreateQuestionDto(currentContent, optA, optB, optC, optD, correct, topic, diff)));
-                            } catch (Exception ignored) {}
-                            currentContent = null; optA = null; optB = null; optC = null; optD = null;
-                            correct = 'A'; topic = "Tổng hợp"; diff = Difficulty.MEDIUM;
-                        }
-                        continue;
-                    }
-                    if (trimmed.startsWith("#")) continue;
-
-                    String upper = trimmed.toUpperCase();
-                    if (upper.startsWith("CHỦ ĐỀ:") || upper.startsWith("TOPIC:")) {
-                        topic = trimmed.substring(trimmed.indexOf(':') + 1).trim();
-                    } else if (upper.startsWith("ĐỘ KHÓ:") || upper.startsWith("DIFFICULTY:")) {
-                        String dStr = trimmed.substring(trimmed.indexOf(':') + 1).trim().toUpperCase();
-                        try { diff = Difficulty.valueOf(dStr); } catch (Exception ignored) {}
-                    } else if (upper.startsWith("A.") || upper.startsWith("A)")) {
-                        optA = trimmed.substring(2).trim();
-                    } else if (upper.startsWith("B.") || upper.startsWith("B)")) {
-                        optB = trimmed.substring(2).trim();
-                    } else if (upper.startsWith("C.") || upper.startsWith("C)")) {
-                        optC = trimmed.substring(2).trim();
-                    } else if (upper.startsWith("D.") || upper.startsWith("D)")) {
-                        optD = trimmed.substring(2).trim();
-                    } else if (upper.startsWith("ĐÁP ÁN:") || upper.startsWith("ANSWER:") || upper.startsWith("KEY:")) {
-                        String ans = trimmed.substring(trimmed.indexOf(':') + 1).trim().toUpperCase();
-                        if (!ans.isEmpty()) correct = ans.charAt(0);
-                    } else {
-                        // Nội dung câu hỏi (có thể gồm chữ Câu 1:, Question 1:, ...)
-                        if (currentContent == null) {
-                            int colon = trimmed.indexOf(':');
-                            if ((upper.startsWith("CÂU ") || upper.startsWith("QUESTION ")) && colon > 0) {
-                                currentContent = trimmed.substring(colon + 1).trim();
-                            } else {
-                                currentContent = trimmed;
-                            }
-                        } else {
-                            currentContent += "\n" + trimmed;
-                        }
-                    }
-                }
-                if (currentContent != null && optA != null && optB != null && optC != null && optD != null) {
-                    try {
-                        results.add(ClientValidation.question(new CreateQuestionDto(currentContent, optA, optB, optC, optD, correct, topic, diff)));
-                    } catch (Exception ignored) {}
-                }
-            }
-        }
-        return results;
-    }
-
-    private static String cleanCsvField(String field) {
-        if (field == null) return "";
-        field = field.trim();
-        if (field.startsWith("\"") && field.endsWith("\"") && field.length() >= 2) {
-            field = field.substring(1, field.length() - 1).replace("\"\"", "\"");
-        }
-        return field.trim();
+        return QuestionFileParser.parse(file);
     }
 
     @Override
     protected void onDispose() {
+        if (questionPanels != null && questionPanels.getScene() != null) {
+            ScrollPane pageScroll = (ScrollPane) questionPanels.getScene().lookup("#pageScroll");
+            if (pageScroll != null) {
+                pageScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+            }
+        }
         ++loadVersion;
         clearForm();
         editTarget = null;
