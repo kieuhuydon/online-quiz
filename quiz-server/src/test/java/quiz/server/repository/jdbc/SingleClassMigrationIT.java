@@ -23,24 +23,105 @@ class SingleClassMigrationIT {
                 }
                 // Keep both source scripts inside this fixture transaction so every object is rolled back.
                 execute(connection, insideFixtureTransaction("schema.sql"));
+                // IDs deliberately do not start at 1: the seed must resolve all relationships.
+                execute(connection, "ALTER SEQUENCE users_id_seq RESTART WITH 101");
+                execute(connection, "ALTER SEQUENCE classes_id_seq RESTART WITH 201");
+                execute(connection, "ALTER SEQUENCE questions_id_seq RESTART WITH 301");
+                execute(connection, "ALTER SEQUENCE quizzes_id_seq RESTART WITH 401");
+                execute(connection, "SELECT set_config('quiz.allow_demo_seed', 'off', true)");
+                var optInCheck = connection.setSavepoint();
+                assertThrows(SQLException.class, () -> execute(connection, insideFixtureTransaction("seed.sql")));
+                connection.rollback(optInCheck);
+                assertEquals(0, scalar(connection, "SELECT count(*) FROM users"));
                 execute(connection, "SELECT set_config('quiz.allow_demo_seed', 'on', true)");
                 execute(connection, insideFixtureTransaction("seed.sql"));
-                assertEquals(50, count(connection));
+                assertEquals(45, count(connection));
                 try (var statement = connection.prepareStatement("SELECT count(DISTINCT student_id) FROM class_members");
                      var rows = statement.executeQuery()) {
                     assertTrue(rows.next());
-                    assertEquals(50, rows.getLong(1));
+                    assertEquals(45, rows.getLong(1));
                 }
-                try (var statement = connection.prepareStatement("SELECT class_id, count(*) FROM class_members GROUP BY class_id ORDER BY class_id");
+                try (var statement = connection.prepareStatement("SELECT c.name, count(*) FROM class_members cm JOIN classes c ON c.id = cm.class_id GROUP BY c.id, c.name ORDER BY c.id");
                      var rows = statement.executeQuery()) {
                     for (int classId = 1; classId <= 3; classId++) {
                         assertTrue(rows.next());
-                        assertEquals(classId, rows.getLong(1));
-                        assertEquals(classId == 3 ? 10 : 20, rows.getLong(2));
+                        assertEquals(new String[]{"ENG-B1-01", "ENG-B2-01", "TOEIC-650"}[classId - 1], rows.getString(1));
+                        assertEquals(new int[]{20, 15, 10}[classId - 1], rows.getLong(2));
                     }
                     assertFalse(rows.next());
                 }
+                assertSeedConsistency(connection);
+                var repeatCheck = connection.setSavepoint();
+                assertThrows(SQLException.class, () -> execute(connection, insideFixtureTransaction("seed.sql")));
+                connection.rollback(repeatCheck);
+                assertEquals(53, scalar(connection, "SELECT count(*) FROM users"));
             } finally { connection.rollback(); }
+        }
+    }
+
+    private static void assertSeedConsistency(Connection connection) throws SQLException {
+        assertEquals(53, scalar(connection, "SELECT count(*) FROM users"));
+        assertEquals(1, scalar(connection, "SELECT count(*) FROM users WHERE NOT active AND username = 'student50'"));
+        assertEquals(4, scalar(connection, "SELECT count(*) FROM users u WHERE role = 'STUDENT' AND active AND NOT EXISTS (SELECT 1 FROM class_members cm WHERE cm.student_id = u.id)"));
+        assertEquals(60, scalar(connection, "SELECT count(*) FROM questions"));
+        assertEquals(10, scalar(connection, "SELECT count(*) FROM quizzes"));
+        assertEquals(5, scalar(connection, "SELECT count(*) FROM quizzes WHERE status = 'OPEN' AND pin IN ('123456', '234567', '345678', '678901', '789012')"));
+        assertEquals(3, scalar(connection, "SELECT count(*) FROM quizzes WHERE status = 'DRAFT' AND pin IS NULL"));
+        assertEquals(105, scalar(connection, "SELECT count(*) FROM quiz_questions"));
+        assertEquals(7, scalar(connection, "SELECT count(*) FROM quiz_assignments"));
+        assertEquals(0, scalar(connection, """
+            SELECT count(*) FROM quizzes q
+            WHERE NOT EXISTS (SELECT 1 FROM quiz_questions qq WHERE qq.quiz_id = q.id)
+               OR (q.status = 'OPEN' AND NOT EXISTS (SELECT 1 FROM quiz_assignments qa WHERE qa.quiz_id = q.id))
+            """));
+        assertEquals(0, scalar(connection, """
+            SELECT count(*) FROM quiz_questions mock JOIN quizzes mq ON mq.id = mock.quiz_id
+            JOIN quiz_questions practice ON practice.question_id = mock.question_id
+            JOIN quizzes pq ON pq.id = practice.quiz_id
+            WHERE mq.title LIKE '%Mock Exam' AND pq.title LIKE '%Practice' AND mq.category = pq.category
+            """));
+        assertEquals(8, scalar(connection, "SELECT count(*) FROM attempts WHERE status = 'SUBMITTED'"));
+        assertEquals(80, scalar(connection, "SELECT count(*) FROM attempt_answers"));
+        assertEquals(8, scalar(connection, "SELECT count(*) FROM results"));
+        assertEquals(6, scalar(connection, "SELECT count(*) FROM anticheat_events"));
+        assertEquals(2, scalar(connection, "SELECT count(*) FROM anticheat_events WHERE action_taken = 'AUTO_SUBMITTED' AND violation_count_after = 3"));
+        assertEquals(0, scalar(connection, """
+            SELECT count(*) FROM attempts a JOIN quizzes q ON q.id = a.quiz_id
+            WHERE q.status <> 'CLOSED' OR a.submitted_at < a.started_at
+               OR a.submitted_at > a.deadline_at OR a.submitted_at > q.closed_at
+               OR NOT EXISTS (SELECT 1 FROM quiz_assignments qa JOIN class_members cm ON cm.class_id = qa.class_id
+                              WHERE qa.quiz_id = a.quiz_id AND cm.student_id = a.student_id)
+            """));
+        assertEquals(0, scalar(connection, """
+            SELECT count(*) FROM results r
+            JOIN attempts a ON a.id = r.attempt_id JOIN quizzes q ON q.id = a.quiz_id
+            JOIN (SELECT aa.attempt_id, count(*) AS total,
+                         count(*) FILTER (WHERE aa.selected_option = question.correct_option) AS correct
+                  FROM attempt_answers aa JOIN questions question ON question.id = aa.question_id
+                  GROUP BY aa.attempt_id) answers ON answers.attempt_id = a.id
+            WHERE r.correct_count <> answers.correct OR r.total_questions <> answers.total
+               OR r.score <> round(answers.correct * 10.0 / answers.total, 2)
+               OR r.passed <> (answers.correct * 100.0 / answers.total >= q.pass_score)
+            """));
+        assertEquals(0, scalar(connection, """
+            SELECT count(*) FROM attempt_answers aa JOIN questions q ON q.id = aa.question_id
+            WHERE aa.is_correct <> (aa.selected_option = q.correct_option)
+            """));
+        try (var statement = connection.prepareStatement("SELECT password_hash FROM users WHERE username IN ('admin', 'teacher1', 'student01', 'student50')");
+             var rows = statement.executeQuery()) {
+            int checked = 0;
+            while (rows.next()) {
+                assertTrue(quiz.server.security.PasswordHasher.checkPassword("password123", rows.getString(1)));
+                checked++;
+            }
+            assertEquals(4, checked);
+        }
+    }
+
+    private static long scalar(Connection connection, String query) throws SQLException {
+        try (var statement = connection.prepareStatement(query); var rows = statement.executeQuery()) {
+            assertTrue(rows.next());
+            return rows.getLong(1);
         }
     }
 
