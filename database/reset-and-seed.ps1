@@ -2,13 +2,13 @@
 .SYNOPSIS
 Replace all Online Quiz data in a local database with database/seed.sql.
 .EXAMPLE
-.\database\reset-and-seed.ps1
+.\database\reset-and-seed.bat
 .EXAMPLE
-.\database\reset-and-seed.ps1 -Config .\server-local.properties -PsqlPath 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
+.\database\reset-and-seed.bat -Config .\server-local.properties -PsqlPath 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
 #>
 [CmdletBinding()]
 param(
-    [string]$Config = (Join-Path $PSScriptRoot '..\server-local.properties'),
+    [string]$Config,
     [string]$PsqlPath,
     [ValidatePattern('^[a-zA-Z_][a-zA-Z0-9_]*$')]
     [string]$Schema = 'public'
@@ -17,7 +17,18 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$projectRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($Config)) {
+    $Config = [IO.Path]::Combine($projectRoot, 'server-local.properties')
+    if (-not (Test-Path -LiteralPath $Config -PathType Leaf)) {
+        $Config = [IO.Path]::Combine($projectRoot, 'quiz-server', 'src', 'main', 'resources', 'server.properties')
+    }
+}
+if (-not (Test-Path -LiteralPath $Config -PathType Leaf)) {
+    throw "Configuration file not found: $Config. Run reset-and-seed.bat -Config <path-to-properties>. No data was changed."
+}
 $configPath = (Resolve-Path -LiteralPath $Config).Path
+Write-Host "Using configuration: $configPath"
 $properties = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-StringData
 foreach ($setting in @(@('db.url', 'DB_URL'), @('db.user', 'DB_USER'), @('db.password', 'DB_PASSWORD'))) {
     $override = [Environment]::GetEnvironmentVariable($setting[1])
@@ -31,14 +42,30 @@ $databaseHostName = $Matches[1]
 $databasePort = [int]$Matches[2]
 $databaseName = $Matches[3]
 if ($databasePort -lt 1 -or $databasePort -gt 65535) { throw 'Invalid database port.' }
-if ([string]::IsNullOrWhiteSpace($properties['db.user']) -or [string]::IsNullOrWhiteSpace($properties['db.password'])) {
-    throw 'Set db.user/db.password in the local config or DB_USER/DB_PASSWORD.'
+if ([string]::IsNullOrWhiteSpace($properties['db.user'])) {
+    throw 'Set db.user in the config or DB_USER.'
+}
+if ([string]::IsNullOrWhiteSpace($properties['db.password'])) {
+    $databasePassword = Read-Host "PostgreSQL password for $($properties['db.user']) at $databaseHostName/$databaseName" -AsSecureString
+    $properties['db.password'] = (New-Object Net.NetworkCredential('', $databasePassword)).Password
+    if ([string]::IsNullOrWhiteSpace($properties['db.password'])) { throw 'Database password cannot be empty.' }
 }
 
 if ([string]::IsNullOrWhiteSpace($PsqlPath)) {
     $psqlCommand = Get-Command psql.exe -ErrorAction SilentlyContinue
     if ($null -ne $psqlCommand) { $PsqlPath = $psqlCommand.Source }
-    else { $PsqlPath = Join-Path $env:ProgramFiles 'PostgreSQL\18\bin\psql.exe' }
+    else {
+        $installRoot = Join-Path $env:ProgramFiles 'PostgreSQL'
+        $installation = Get-ChildItem -LiteralPath $installRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+(\.\d+)*$' } |
+            Sort-Object { [version]($_.Name + '.0') } -Descending |
+            Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'bin\psql.exe') -PathType Leaf } |
+            Select-Object -First 1
+        if ($null -ne $installation) { $PsqlPath = Join-Path $installation.FullName 'bin\psql.exe' }
+    }
+}
+if ([string]::IsNullOrWhiteSpace($PsqlPath) -or -not (Test-Path -LiteralPath $PsqlPath -PathType Leaf)) {
+    throw 'psql.exe was not found. Install PostgreSQL or pass -PsqlPath <path-to-psql.exe>. No data was changed.'
 }
 $PsqlPath = (Resolve-Path -LiteralPath $PsqlPath).Path
 $seed = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'seed.sql'), [Text.Encoding]::UTF8)
