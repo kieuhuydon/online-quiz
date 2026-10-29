@@ -15,6 +15,9 @@ $testHostName = $Matches[1]
 $testPort = $Matches[2]
 $schema = 'seed_reset_' + [guid]::NewGuid().ToString('N')
 $databaseDirectory = Split-Path -Parent $PSScriptRoot
+$resetLauncher = Join-Path $databaseDirectory 'reset-and-seed.bat'
+$resetConfigArguments = @('-Config', $configPath)
+$fixtureRoot = $null
 $savedEnvironment = @{}
 foreach ($key in @('PGPASSWORD', 'PGCLIENTENCODING', 'PGCONNECT_TIMEOUT', 'DB_URL', 'DB_USER', 'DB_PASSWORD')) {
     $savedEnvironment[$key] = [Environment]::GetEnvironmentVariable($key)
@@ -36,10 +39,9 @@ function Assert-Value([string]$Expected, [string]$Actual, [string]$Description) 
 }
 
 function Invoke-Reset([bool]$ExpectSuccess) {
-    # Exercise the actual script in Windows PowerShell 5.1, including native process failures.
+    # The .bat launches Windows PowerShell 5.1; check its propagated exit status too.
     $ErrorActionPreference = 'Continue'
-    $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $databaseDirectory 'reset-and-seed.ps1') `
-        -Config $configPath -PsqlPath $PsqlPath -Schema $schema 2>&1
+    $output = & $resetLauncher @resetConfigArguments -PsqlPath $PsqlPath -Schema $schema 2>&1
     $code = $LASTEXITCODE
     if (($code -eq 0) -ne $ExpectSuccess) { throw "Unexpected reset exit code $code : $($output -join ' ')" }
 }
@@ -88,11 +90,54 @@ SELECT (SELECT count(*) FROM $schema.users) || '|' ||
     (SELECT count(*) FROM $schema.results);
 "@) 'Failed seed restores the old accounts and results'
     Assert-Value $sequenceBefore (Invoke-Sql "SELECT last_value FROM $schema.users_id_seq;") 'Failed seed restores the identity sequence'
-    Write-Host 'PASS: replacement, identity reset, repeated reset, and rollback of data/sequences on seed failure.'
+    Invoke-Sql "DROP TRIGGER fail_seed ON $schema.users;" | Out-Null
+
+    # Reproduce a checkout in a path containing spaces, launched from a different directory.
+    $targetRoot = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $databaseDirectory) 'target'))
+    $fixtureRoot = Join-Path $targetRoot ('reset launcher ' + [guid]::NewGuid().ToString('N'))
+    $fixtureDatabase = Join-Path $fixtureRoot 'database'
+    $fixtureResources = [IO.Path]::Combine($fixtureRoot, 'quiz-server', 'src', 'main', 'resources')
+    New-Item -ItemType Directory -Path $fixtureDatabase, $fixtureResources -Force | Out-Null
+    foreach ($file in @('reset-and-seed.bat', 'reset-and-seed.ps1', 'seed.sql')) {
+        Copy-Item -LiteralPath (Join-Path $databaseDirectory $file) -Destination (Join-Path $fixtureDatabase $file)
+    }
+    $fixtureLocalConfig = Join-Path $fixtureRoot 'server-local.properties'
+    $fixtureResourceConfig = Join-Path $fixtureResources 'server.properties'
+    $fixtureExplicitConfig = Join-Path $fixtureRoot 'explicit config with spaces.properties'
+    Copy-Item -LiteralPath $configPath -Destination $fixtureLocalConfig
+    Copy-Item -LiteralPath $configPath -Destination $fixtureExplicitConfig
+    # A bad fallback must not be selected while the local config exists.
+    [IO.File]::WriteAllText($fixtureResourceConfig, 'not-valid-properties')
+    $resetLauncher = Join-Path $fixtureDatabase 'reset-and-seed.bat'
+    $resetConfigArguments = @('-Config', $fixtureExplicitConfig)
+    Invoke-Reset $true
+    $resetConfigArguments = @()
+    Invoke-Reset $true
+    Remove-Item -LiteralPath $fixtureLocalConfig -Force
+    Copy-Item -LiteralPath $configPath -Destination $fixtureResourceConfig -Force
+    Invoke-Reset $true
+    Assert-Value '53' (Invoke-Sql "SELECT count(*) FROM $schema.users;") 'Fallback config works from a different directory'
+
+    Invoke-Sql "INSERT INTO $schema.users (username, password_hash, full_name, role) VALUES ('keep_bad_config', 'hash', 'Keep me', 'STUDENT');" | Out-Null
+    $resetConfigArguments = @('-Config', (Join-Path $fixtureRoot 'missing.properties'))
+    Invoke-Reset $false
+    Assert-Value '1' (Invoke-Sql "SELECT count(*) FROM $schema.users WHERE username = 'keep_bad_config';") 'Missing config does not reset data'
+    Write-Host 'PASS: batch launcher, paths with spaces, config discovery/fallback, exit codes, reset, and rollback of data/sequences.'
 } finally {
     try {
         if ($created) { Invoke-Sql "DROP SCHEMA $schema CASCADE;" | Out-Null }
     } finally {
-        foreach ($key in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($key, $savedEnvironment[$key]) }
+        try {
+            if ($null -ne $fixtureRoot -and (Test-Path -LiteralPath $fixtureRoot)) {
+                $resolvedFixture = [IO.Path]::GetFullPath($fixtureRoot)
+                if (-not $resolvedFixture.StartsWith($targetRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
+                    (Split-Path -Leaf $resolvedFixture) -notmatch '^reset launcher [a-f0-9]{32}$') {
+                    throw 'Refusing to remove an unexpected test fixture path.'
+                }
+                Remove-Item -LiteralPath $resolvedFixture -Recurse -Force
+            }
+        } finally {
+            foreach ($key in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($key, $savedEnvironment[$key]) }
+        }
     }
 }

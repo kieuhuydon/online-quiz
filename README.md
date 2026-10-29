@@ -752,12 +752,12 @@ Giữ `quizdb_test` **không có seed demo** để integration test tạo fixtur
 **Xóa dữ liệu cũ và nạp lại seed trên máy phát triển:** dừng server/client, rồi chạy từ thư mục project:
 
 ```powershell
-.\database\reset-and-seed.ps1
-# Nếu PowerShell chặn thực thi script:
-powershell -NoProfile -ExecutionPolicy Bypass -File .\database\reset-and-seed.ps1
+.\database\reset-and-seed.bat
+# Chọn file cấu hình khác (đặt đường dẫn có dấu cách trong dấu ngoặc kép):
+.\database\reset-and-seed.bat -Config "D:\WorkSpace\Online Quiz\server-local.properties"
 ```
 
-Script đọc `server-local.properties`; biến `DB_URL`, `DB_USER`, `DB_PASSWORD` có ưu tiên cao hơn file giống cấu hình server. Chỉ nhận PostgreSQL trên localhost/127.0.0.1. Có thể chọn config bằng `-Config .\server-local.properties` và đường dẫn PostgreSQL bằng `-PsqlPath 'C:\Program Files\PostgreSQL\18\bin\psql.exe'`. Script hiển thị DB/schema đích và chạy ngay, không hỏi xác nhận. Nó **xóa toàn bộ dữ liệu trong 11 bảng Online Quiz**, đặt lại sequence ID rồi nạp nội dung hiện tại của `database/seed.sql`. Tài khoản, lớp, đề thi, bài làm, điểm và nhật ký cũ được thay bằng dữ liệu demo. Không tạo lại cấu trúc bảng; DB phải có schema hiện hành. `TRUNCATE` không dùng `CASCADE` để tránh lan sang bảng ngoài danh sách. Toàn bộ reset/seed chạy trong một transaction: lỗi SQL hoặc timeout chờ khóa sẽ rollback dữ liệu và sequence. Không chạy reset vào DB có dữ liệu cần giữ. Tham số `-Schema` dành cho schema demo/kiểm thử riêng; mặc định là `public`.
+File `.bat` là điểm chạy trên Windows, tự gọi `reset-and-seed.ps1` cùng thư mục; giữ cả hai file và `seed.sql`. Đường dẫn mặc định được tính theo vị trí script, không phụ thuộc thư mục terminal đang đứng. Script ưu tiên `server-local.properties` ở gốc project; nếu không có thì dùng `quiz-server/src/main/resources/server.properties` và in rõ đường dẫn đã chọn. Biến `DB_URL`, `DB_USER`, `DB_PASSWORD` có ưu tiên cao hơn file giống cấu hình server; nếu mật khẩu chưa được cấu hình, script hỏi mật khẩu PostgreSQL và không hiển thị ký tự nhập. Chỉ nhận PostgreSQL trên localhost/127.0.0.1. Có thể chọn config bằng `-Config .\server-local.properties` và đường dẫn PostgreSQL bằng `-PsqlPath "C:\Program Files\PostgreSQL\18\bin\psql.exe"`; nếu không truyền, tự tìm psql trên PATH hoặc trong các thư mục cài PostgreSQL. Script hiển thị DB/schema đích và chạy ngay, không hỏi xác nhận. Nó **xóa toàn bộ dữ liệu trong 11 bảng Online Quiz**, đặt lại sequence ID rồi nạp nội dung hiện tại của `database/seed.sql`. Tài khoản, lớp, đề thi, bài làm, điểm và nhật ký cũ được thay bằng dữ liệu demo. Không tạo lại cấu trúc bảng; DB phải có schema hiện hành. `TRUNCATE` không dùng `CASCADE` để tránh lan sang bảng ngoài danh sách. Toàn bộ reset/seed chạy trong một transaction: lỗi SQL hoặc timeout chờ khóa sẽ rollback dữ liệu và sequence. Không chạy reset vào DB có dữ liệu cần giữ. Tham số `-Schema` dành cho schema demo/kiểm thử riêng; mặc định là `public`.
 
 Kiểm thử riêng script bằng `.\database\tests\reset-and-seed.test.ps1`: đọc `db-test-local.properties`, chỉ nhận `quizdb_test`/role `quiz_test`, tạo schema UUID riêng rồi dọn sau khi kiểm tra reset thành công, chạy lại, và rollback dữ liệu/sequence khi seed cố ý gặp lỗi. Không reset schema `public` của DB test.
 
