@@ -50,6 +50,7 @@ CREATE TABLE questions (
     correct_option CHAR(1) NOT NULL CHECK (correct_option IN ('A', 'B', 'C', 'D')),
     topic          VARCHAR(100) NOT NULL,
     difficulty     VARCHAR(10)  NOT NULL CHECK (difficulty IN ('EASY', 'MEDIUM', 'HARD')),
+    question_type  VARCHAR(20)  NOT NULL DEFAULT 'MULTIPLE_CHOICE' CHECK (question_type IN ('MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_BLANK', 'SHORT_ANSWER')),
     active         BOOLEAN NOT NULL DEFAULT TRUE,          -- Soft-delete (BR-05)
     created_by     BIGINT NOT NULL REFERENCES users(id),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),

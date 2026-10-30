@@ -25,6 +25,7 @@ import quiz.common.dto.*;
 import quiz.common.enums.AntiCheatEventType;
 import quiz.common.enums.AntiCheatPolicyType;
 import quiz.common.enums.Difficulty;
+import quiz.common.enums.QuestionType;
 import quiz.common.enums.QuizStatus;
 import quiz.common.enums.SubmitReason;
 import quiz.common.protocol.ErrorCode;
@@ -105,6 +106,10 @@ public final class TeacherController extends ScreenController {
     @FXML private Label lblHardCount;
     @FXML private Label lblAutoDistributionSummary;
     @FXML private Label lblAutoPercentageError;
+    @FXML private CheckBox chkTypeMultipleChoice;
+    @FXML private CheckBox chkTypeTrueFalse;
+    @FXML private CheckBox chkTypeFillBlank;
+    @FXML private CheckBox chkTypeShortAnswer;
     @FXML private Button btnConfirmAutoGenerate;
 
     // Question Selection Panel
@@ -428,11 +433,32 @@ public final class TeacherController extends ScreenController {
         // Hard tự tính = 40 (100 - 30 - 30), không cần set thủ công
         updateAutoDistribution();
 
+        if (chkTypeMultipleChoice != null) chkTypeMultipleChoice.setSelected(true);
+        if (chkTypeTrueFalse != null) chkTypeTrueFalse.setSelected(true);
+        if (chkTypeFillBlank != null) chkTypeFillBlank.setSelected(true);
+        if (chkTypeShortAnswer != null) chkTypeShortAnswer.setSelected(true);
+
         autoQuizError.setVisible(false);
         lblAutoDurationError.setVisible(false);
         autoQuizPanel.setVisible(true);
         autoQuizPanel.setManaged(true);
         scrollToBottom();
+    }
+
+    @FXML
+    private void onSelectAllQuestionTypes() {
+        if (chkTypeMultipleChoice != null) chkTypeMultipleChoice.setSelected(true);
+        if (chkTypeTrueFalse != null) chkTypeTrueFalse.setSelected(true);
+        if (chkTypeFillBlank != null) chkTypeFillBlank.setSelected(true);
+        if (chkTypeShortAnswer != null) chkTypeShortAnswer.setSelected(true);
+    }
+
+    @FXML
+    private void onDeselectAllQuestionTypes() {
+        if (chkTypeMultipleChoice != null) chkTypeMultipleChoice.setSelected(false);
+        if (chkTypeTrueFalse != null) chkTypeTrueFalse.setSelected(false);
+        if (chkTypeFillBlank != null) chkTypeFillBlank.setSelected(false);
+        if (chkTypeShortAnswer != null) chkTypeShortAnswer.setSelected(false);
     }
 
     @FXML
@@ -617,10 +643,21 @@ public final class TeacherController extends ScreenController {
         int medCount = (int) Math.round(totalQuestions * (medPct / 100.0));
         int hardCount = Math.max(0, totalQuestions - easyCount - medCount);
 
+        Set<QuestionType> selectedTypes = new HashSet<>();
+        if (chkTypeMultipleChoice != null && chkTypeMultipleChoice.isSelected()) selectedTypes.add(QuestionType.MULTIPLE_CHOICE);
+        if (chkTypeTrueFalse != null && chkTypeTrueFalse.isSelected()) selectedTypes.add(QuestionType.TRUE_FALSE);
+        if (chkTypeFillBlank != null && chkTypeFillBlank.isSelected()) selectedTypes.add(QuestionType.FILL_BLANK);
+        if (chkTypeShortAnswer != null && chkTypeShortAnswer.isSelected()) selectedTypes.add(QuestionType.SHORT_ANSWER);
+
+        if (selectedTypes.isEmpty()) {
+            showAutoQuizError("Vui lòng tích chọn ít nhất 1 loại câu hỏi để cho vào đề thi!");
+            return;
+        }
+
         btnConfirmAutoGenerate.setDisable(true);
         setQuizLoading(true);
 
-        // Lấy câu hỏi từ ngân hàng câu hỏi và bốc ngẫu nhiên theo tỷ lệ độ khó
+        // Lấy câu hỏi từ ngân hàng câu hỏi và bốc ngẫu nhiên theo tỷ lệ độ khó và loại câu hỏi
         api.listQuestions().whenComplete((allQuestions, err) -> fx.run(() -> {
             if (err != null) {
                 setQuizLoading(false);
@@ -629,11 +666,23 @@ public final class TeacherController extends ScreenController {
                 return;
             }
 
-            // Lọc câu hỏi theo chủ đề nếu có nhập
-            List<QuestionDto> candidateQuestions = allQuestions;
+            // 1. Lọc theo các loại câu hỏi giáo viên đã tích chọn
+            List<QuestionDto> typeFiltered = allQuestions.stream()
+                .filter(q -> selectedTypes.contains(q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE))
+                .toList();
+
+            if (typeFiltered.isEmpty()) {
+                setQuizLoading(false);
+                btnConfirmAutoGenerate.setDisable(false);
+                showAutoQuizError("Không tìm thấy câu hỏi nào trong ngân hàng thuộc các loại câu hỏi đã chọn!");
+                return;
+            }
+
+            // 2. Lọc câu hỏi theo chủ đề nếu có nhập
+            List<QuestionDto> candidateQuestions = typeFiltered;
             if (category != null && !category.strip().isBlank()) {
                 String catLower = category.strip().toLowerCase();
-                List<QuestionDto> filtered = allQuestions.stream()
+                List<QuestionDto> filtered = typeFiltered.stream()
                     .filter(q -> q.topic() != null && q.topic().toLowerCase().contains(catLower))
                     .toList();
                 if (filtered.size() >= totalQuestions) {
@@ -860,6 +909,27 @@ public final class TeacherController extends ScreenController {
         colStt.setPrefWidth(45);
         colStt.setCellValueFactory(r -> new SimpleStringProperty(String.valueOf(detailQuestionRows.indexOf(r.getValue()) + 1)));
 
+        TableColumn<DetailQuestionRow, String> colType = new TableColumn<>("Loại câu hỏi");
+        colType.setPrefWidth(110);
+        colType.setCellValueFactory(r -> new SimpleStringProperty(
+            formatQuestionTypeName(r.getValue().getQuestion().questionType())
+        ));
+        colType.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                    setText(null);
+                } else {
+                    DetailQuestionRow row = getTableRow() != null ? getTableRow().getItem() : null;
+                    QuestionType qt = row != null && row.getQuestion() != null ? row.getQuestion().questionType() : QuestionType.MULTIPLE_CHOICE;
+                    setGraphic(createQuestionTypeBadge(qt));
+                    setText(null);
+                }
+            }
+        });
+
         TableColumn<DetailQuestionRow, String> colDiff = new TableColumn<>("Độ khó");
         colDiff.setPrefWidth(85);
         colDiff.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().getQuestion().difficulty().name()));
@@ -962,7 +1032,7 @@ public final class TeacherController extends ScreenController {
             return row;
         });
 
-        detailQuestionTable.getColumns().setAll(List.of(colStt, colDiff, colTopic, colContent, colOptions, colActions));
+        detailQuestionTable.getColumns().setAll(List.of(colStt, colType, colDiff, colTopic, colContent, colOptions, colActions));
         detailQuestionTable.setItems(detailQuestionRows);
         detailQuestionTable.setPlaceholder(new Label("Đề kiểm tra này chưa có câu hỏi nào. Bấm '+ Thêm Câu Hỏi Từ Ngân Hàng' bên trên."));
     }
@@ -971,6 +1041,27 @@ public final class TeacherController extends ScreenController {
         TableColumn<QuestionDto, String> colId = new TableColumn<>("ID");
         colId.setPrefWidth(45);
         colId.setCellValueFactory(d -> new SimpleStringProperty(String.valueOf(d.getValue().id())));
+
+        TableColumn<QuestionDto, String> colType = new TableColumn<>("Loại câu hỏi");
+        colType.setPrefWidth(110);
+        colType.setCellValueFactory(d -> new SimpleStringProperty(
+            formatQuestionTypeName(d.getValue().questionType())
+        ));
+        colType.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                    setText(null);
+                } else {
+                    QuestionDto q = getTableRow() != null ? getTableRow().getItem() : null;
+                    QuestionType qt = q != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
+                    setGraphic(createQuestionTypeBadge(qt));
+                    setText(null);
+                }
+            }
+        });
 
         TableColumn<QuestionDto, String> colDiff = new TableColumn<>("Độ khó");
         colDiff.setPrefWidth(85);
@@ -1007,13 +1098,36 @@ public final class TeacherController extends ScreenController {
         colCorrect.setPrefWidth(65);
         colCorrect.setCellValueFactory(d -> new SimpleStringProperty(String.valueOf(d.getValue().correctOption())));
 
-        pickerTable.getColumns().setAll(List.of(colId, colDiff, colTopic, colContent, colCorrect));
+        pickerTable.getColumns().setAll(List.of(colId, colType, colDiff, colTopic, colContent, colCorrect));
         pickerTable.setItems(pickerQuestionRows);
         pickerTable.getSelectionModel().selectedItemProperty().addListener((obs, o, n) ->
             btnConfirmPicker.setDisable(n == null)
         );
         pickerTable.getSelectionModel().selectedItemProperty().addListener((obs, oldQuestion, question) ->
             pickerPreview.setText(question == null ? "" : formatQuestionPreview(question)));
+    }
+
+    public static String formatQuestionTypeName(QuestionType type) {
+        if (type == null) return "Trắc nghiệm";
+        return switch (type) {
+            case MULTIPLE_CHOICE -> "Trắc nghiệm";
+            case TRUE_FALSE -> "Đúng / Sai";
+            case FILL_BLANK -> "Điền ô trống";
+            case SHORT_ANSWER -> "Trả lời ngắn";
+        };
+    }
+
+    public static Label createQuestionTypeBadge(QuestionType type) {
+        if (type == null) type = QuestionType.MULTIPLE_CHOICE;
+        Label badge = new Label(formatQuestionTypeName(type));
+        badge.getStyleClass().add("badge");
+        switch (type) {
+            case MULTIPLE_CHOICE -> badge.getStyleClass().add("badge-type-mc");
+            case TRUE_FALSE -> badge.getStyleClass().add("badge-type-tf");
+            case FILL_BLANK -> badge.getStyleClass().add("badge-type-fb");
+            case SHORT_ANSWER -> badge.getStyleClass().add("badge-type-sa");
+        }
+        return badge;
     }
 
     @FXML
@@ -1654,6 +1768,27 @@ public final class TeacherController extends ScreenController {
         colId.setPrefWidth(50);
         colId.setCellValueFactory(f -> new SimpleStringProperty(String.valueOf(f.getValue().getQuestion().id())));
 
+        TableColumn<QuestionRow, String> colType = new TableColumn<>("Loại câu");
+        colType.setPrefWidth(110);
+        colType.setCellValueFactory(f -> new SimpleStringProperty(
+            formatQuestionTypeName(f.getValue().getQuestion().questionType())
+        ));
+        colType.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                    setText(null);
+                } else {
+                    QuestionRow row = getTableRow() != null ? getTableRow().getItem() : null;
+                    QuestionType qt = row != null && row.getQuestion() != null ? row.getQuestion().questionType() : QuestionType.MULTIPLE_CHOICE;
+                    setGraphic(createQuestionTypeBadge(qt));
+                    setText(null);
+                }
+            }
+        });
+
         TableColumn<QuestionRow, String> colContent = new TableColumn<>("Nội dung câu hỏi");
         colContent.setPrefWidth(280);
         colContent.setCellValueFactory(f -> new SimpleStringProperty(f.getValue().getQuestion().content()));
@@ -1667,7 +1802,7 @@ public final class TeacherController extends ScreenController {
         colDiff.setPrefWidth(85);
         colDiff.setCellValueFactory(f -> new SimpleStringProperty(f.getValue().getQuestion().difficulty().name()));
 
-        questionTable.getColumns().setAll(List.of(colCheck, colId, colContent, colTopic, colDiff));
+        questionTable.getColumns().setAll(List.of(colCheck, colId, colType, colContent, colTopic, colDiff));
         questionTable.setEditable(true);
         questionTable.setItems(questionRows);
         questionTable.getSelectionModel().selectedItemProperty().addListener((obs, oldRow, row) ->
