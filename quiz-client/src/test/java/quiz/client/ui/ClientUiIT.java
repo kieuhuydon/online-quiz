@@ -312,6 +312,8 @@ class ClientUiIT {
             assertEquals(Screen.home(role), navigator.currentScreen().orElseThrow());
             assertEquals(Screen.roleLabel(role), label("roleLabel").getText());
             assertEquals("Nguyễn Việt — phiên kiểm thử", label("sessionFullName").getText());
+            assertEquals(role == Role.ADMIN, stage.getScene().lookup("#adminNavigation").isVisible());
+            assertEquals(role == Role.TEACHER, stage.getScene().lookup("#teacherNavigation").isVisible());
             saveSnapshot(role.name().toLowerCase());
             stage.setWidth(900); stage.setHeight(620);
             return null;

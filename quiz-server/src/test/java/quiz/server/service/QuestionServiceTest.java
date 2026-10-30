@@ -180,4 +180,29 @@ class QuestionServiceTest {
         assertEquals(ErrorCode.NOT_FOUND, assertThrows(NotFoundException.class,
             () -> service.getQuestion(1, ADMIN_ID)).getErrorCode());
     }
+
+    @Test
+    void updateActiveQuestionAndDtoHelperOverloadsSucceed() {
+        activeActor(TEACHER_ID, Role.TEACHER);
+        Question existing = Question.restore(1, "Cũ?", "A", "B", "C", "D", 'A',
+            "T", Difficulty.EASY, true, TEACHER_ID, TS, TS);
+        Question updated = Question.restore(1, "Mới?", "A1", "B1", "C1", "D1", 'B',
+            "T2", Difficulty.MEDIUM, true, TEACHER_ID, TS, TS);
+        when(questions.findById(null, 1L)).thenReturn(Optional.of(existing), Optional.of(updated));
+        when(questions.update(eq(null), any(Question.class))).thenReturn(true);
+
+        var dto = new UpdateQuestionDto(1, "Mới?", "A1", "B1", "C1", "D1", 'b', "T2", Difficulty.MEDIUM);
+        Question result = service.updateQuestion(dto, TEACHER_ID);
+        assertEquals("Mới?", result.content());
+        assertEquals('B', result.correctOption());
+
+        when(questions.findActive()).thenReturn(List.of(updated));
+        assertEquals(1, service.listActiveQuestions(TEACHER_ID).size());
+
+        when(questions.findAllActive()).thenReturn(List.of(updated));
+        assertEquals(1, service.listQuestions().size());
+
+        when(questions.findById(1L)).thenReturn(Optional.of(updated));
+        assertEquals("Mới?", service.getQuestion(1L).content());
+    }
 }

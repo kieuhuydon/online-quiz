@@ -105,4 +105,33 @@ class ClassHandlerTest {
         assertEquals(quiz.common.protocol.ErrorCode.INVALID_REQUEST, error.getErrorCode());
         verify(classService, times(1)).listUnenrolledStudents(admin);
     }
+
+    @Test
+    void removeMemberListMembersAndListMyClassesDispatchToService() {
+        assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(MessageType.REMOVE_CLASS_MEMBER));
+        assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.LIST_CLASS_MEMBERS));
+        assertEquals(Set.of(Role.STUDENT), handler.allowedRoles(MessageType.LIST_MY_CLASSES));
+        assertThrows(IllegalArgumentException.class, () -> handler.allowedRoles(MessageType.LOGIN));
+
+        var admin = new UserSession(1, Role.ADMIN, "admin");
+        var student = new UserSession(5, Role.STUDENT, "student1");
+
+        AddClassMemberDto removeDto = new AddClassMemberDto(10L, 5L);
+        var removeRes = handler.handle(new Request(11, MessageType.REMOVE_CLASS_MEMBER, "token", removeDto), admin);
+        assertTrue(removeRes.success());
+        assertNull(removeRes.payload());
+        verify(classService).removeClassMember(10L, 5L, admin);
+
+        when(classService.listClassMembers(10L, teacherSession)).thenReturn(new ArrayList<>());
+        var membersRes = handler.handle(new Request(12, MessageType.LIST_CLASS_MEMBERS, "token", 10L), teacherSession);
+        assertTrue(membersRes.success());
+        assertInstanceOf(ArrayList.class, membersRes.payload());
+        verify(classService).listClassMembers(10L, teacherSession);
+
+        when(classService.listStudentClasses(student)).thenReturn(new ArrayList<>());
+        var myClassesRes = handler.handle(new Request(13, MessageType.LIST_MY_CLASSES, "token", null), student);
+        assertTrue(myClassesRes.success());
+        assertInstanceOf(ArrayList.class, myClassesRes.payload());
+        verify(classService).listStudentClasses(student);
+    }
 }

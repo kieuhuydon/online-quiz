@@ -34,8 +34,7 @@ public final class WorkspaceController extends ScreenController {
         adminClasses.pseudoClassStateChanged(current, route == Screen.ADMIN_CLASSES);
         adminNavigation.setVisible(session.role() == quiz.common.enums.Role.ADMIN);
         adminNavigation.setManaged(session.role() == quiz.common.enums.Role.ADMIN);
-        boolean isTeacher = session.role() == quiz.common.enums.Role.TEACHER
-            || session.role() == quiz.common.enums.Role.ADMIN;
+        boolean isTeacher = session.role() == quiz.common.enums.Role.TEACHER;
         teacherNavigation.setVisible(isTeacher);
         teacherNavigation.setManaged(isTeacher);
         teacherDashboard.pseudoClassStateChanged(current, route == Screen.TEACHER_DASHBOARD);

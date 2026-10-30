@@ -56,10 +56,28 @@ class ExceptionsTest {
     }
 
     @Test
-    @DisplayName("ConflictException should have CONFLICT code")
+    @DisplayName("ConflictException should have CONFLICT code and support dedicated conflict codes")
     void testConflictException() {
         ConflictException ex = new ConflictException("Username already exists");
         assertEquals(ErrorCode.CONFLICT, ex.getErrorCode());
         assertEquals("Username already exists", ex.getMessage());
+
+        Throwable cause = new RuntimeException("Unique constraint");
+        ConflictException withCause = new ConflictException("Conflict with cause", cause);
+        assertEquals(ErrorCode.CONFLICT, withCause.getErrorCode());
+        assertEquals(cause, withCause.getCause());
+
+        for (ErrorCode validCode : new ErrorCode[]{
+            ErrorCode.CONFLICT,
+            ErrorCode.USERNAME_ALREADY_EXISTS,
+            ErrorCode.EMAIL_ALREADY_EXISTS,
+            ErrorCode.STUDENT_ALREADY_ENROLLED
+        }) {
+            ConflictException specific = new ConflictException(validCode, "Conflict detail");
+            assertEquals(validCode, specific.getErrorCode());
+        }
+
+        assertThrows(IllegalArgumentException.class,
+            () -> new ConflictException(ErrorCode.NOT_FOUND, "Not a conflict code"));
     }
 }

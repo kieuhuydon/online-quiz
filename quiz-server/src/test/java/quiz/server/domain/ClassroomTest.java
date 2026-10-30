@@ -37,4 +37,18 @@ class ClassroomTest {
     void rejectsInvalidTeacherId() {
         assertThrows(IllegalArgumentException.class, () -> Classroom.createNew("Class", "desc", 0));
     }
+
+    @Test
+    void validatesIdTimestampAndLengthBoundaries() {
+        Instant now = Instant.now();
+        assertThrows(IllegalArgumentException.class, () -> new Classroom(-1, "Class", null, 2, null));
+        assertThrows(IllegalArgumentException.class, () -> new Classroom(0, "Class", null, 2, now));
+        assertThrows(IllegalArgumentException.class, () -> new Classroom(1, "Class", null, 2, null));
+        assertThrows(IllegalArgumentException.class, () -> Classroom.createNew("x".repeat(101), null, 2));
+        assertThrows(IllegalArgumentException.class, () -> Classroom.createNew("Class", "d".repeat(256), 2));
+
+        Classroom blankDesc = Classroom.createNew("  ENG-01  ", "   ", 2);
+        assertEquals("ENG-01", blankDesc.name());
+        assertNull(blankDesc.description());
+    }
 }

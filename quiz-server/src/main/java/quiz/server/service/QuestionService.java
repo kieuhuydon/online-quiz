@@ -84,7 +84,7 @@ public final class QuestionService {
             Question updated = new Question(existing.id(), validated.content(), validated.optionA(),
                 validated.optionB(), validated.optionC(), validated.optionD(),
                 validated.correctOption(), validated.topic(), validated.difficulty(),
-                existing.active(), existing.createdBy(), existing.createdAt(), null);
+                existing.active(), existing.createdBy(), existing.createdAt(), existing.updatedAt());
             boolean ok = questions.update(connection, updated);
             if (!ok) {
                 throw new NotFoundException("Question not found");
