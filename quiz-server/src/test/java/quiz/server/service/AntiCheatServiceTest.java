@@ -144,19 +144,25 @@ class AntiCheatServiceTest {
     }
 
     @Test
-    @DisplayName("Giáo viên và Admin được phép xem danh sách vi phạm của một lượt làm bài")
+    @DisplayName("Giáo viên sở hữu đề và Admin được phép xem danh sách vi phạm; giáo viên khác bị từ chối")
     void listAttemptEvents_AuthorizedForTeacherAndAdmin() {
         when(attemptRepo.findById(attemptId)).thenReturn(Optional.of(createMockAttempt(AttemptStatus.SUBMITTED)));
+        when(quizRepo.findById(quizId)).thenReturn(Optional.of(createMockQuiz(AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3)));
         List<AntiCheatEventDto> mockEvents = List.of(
             new AntiCheatEventDto(1, attemptId, AntiCheatEventType.FOCUS_LOST, "Alt+Tab", now, now, 1, "WARNED")
         );
         when(antiCheatRepo.findEventsByAttemptId(attemptId)).thenReturn(mockEvents);
 
-        UserSession teacherSession = new UserSession(2L, Role.TEACHER, "teacher");
-        List<AntiCheatEventDto> result = service.listAttemptEvents(attemptId, teacherSession);
-
+        UserSession ownerTeacher = new UserSession(1L, Role.TEACHER, "owner");
+        List<AntiCheatEventDto> result = service.listAttemptEvents(attemptId, ownerTeacher);
         assertEquals(1, result.size());
         assertEquals(AntiCheatEventType.FOCUS_LOST, result.get(0).eventType());
+
+        UserSession otherTeacher = new UserSession(99L, Role.TEACHER, "other");
+        assertThrows(ForbiddenException.class, () -> service.listAttemptEvents(attemptId, otherTeacher));
+
+        UserSession adminSession = new UserSession(50L, Role.ADMIN, "admin");
+        assertEquals(1, service.listAttemptEvents(attemptId, adminSession).size());
     }
 
     @Test

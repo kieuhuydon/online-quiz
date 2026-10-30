@@ -146,6 +146,12 @@ class AttemptServiceTest {
         assertEquals(1500L, state.remainingSeconds());
         assertEquals(1, state.questions().size());
         assertEquals('B', state.savedAnswers().get(101L));
+
+        // Tiếp tục được attempt IN_PROGRESS ngay cả khi giáo viên đã đóng đề (CLOSED) nhưng chưa quá deadline
+        when(quizRepo.findById(quizId)).thenReturn(Optional.of(closedQuiz()));
+        AttemptStateDto resumedAfterClose = service.startAttempt(quizId, null, studentId);
+        assertEquals(attemptId, resumedAfterClose.attemptId());
+        assertEquals(1500L, resumedAfterClose.remainingSeconds());
         verify(attemptRepo, never()).create(any(), any());
     }
 

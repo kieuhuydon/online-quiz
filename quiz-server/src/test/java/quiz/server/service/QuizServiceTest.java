@@ -305,7 +305,8 @@ class QuizServiceTest {
         assertEquals(1, list.size());
         assertEquals("English Test", list.get(0).title());
         assertEquals(20, list.get(0).questionCount());
-        assertEquals("123456", list.get(0).pin());
+        assertNull(list.get(0).pin());
+        assertTrue(list.get(0).pinRequired());
     }
 
     @Test
