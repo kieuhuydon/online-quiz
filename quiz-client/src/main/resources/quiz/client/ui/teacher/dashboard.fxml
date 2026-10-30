@@ -159,6 +159,23 @@
                         <TextField fx:id="txtAutoQuizMaxViolations" promptText="3" GridPane.rowIndex="3" GridPane.columnIndex="3"/>
                     </GridPane>
 
+                    <!-- Question Type Selection Section -->
+                    <VBox spacing="10" style="-fx-background-color: #f8fafc; -fx-padding: 14; -fx-border-color: #e2e8f0; -fx-border-radius: 8; -fx-background-radius: 8;">
+                        <HBox alignment="CENTER_LEFT" spacing="12">
+                            <Label text="CHỌN LOẠI CÂU HỎI CHO VÀO ĐỀ:" style="-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #0f172a;"/>
+                            <Label text="Tích chọn các dạng câu hỏi được phép xuất hiện trong đề" styleClass="muted" style="-fx-font-size: 11px;"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Chọn tất cả" onAction="#onSelectAllQuestionTypes" styleClass="preset-chip"/>
+                            <Button text="Bỏ chọn tất cả" onAction="#onDeselectAllQuestionTypes" styleClass="preset-chip"/>
+                        </HBox>
+                        <FlowPane hgap="20" vgap="10">
+                            <CheckBox fx:id="chkTypeMultipleChoice" text="Trắc nghiệm 4 đáp án" selected="true" style="-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #1d4ed8;"/>
+                            <CheckBox fx:id="chkTypeTrueFalse" text="Đúng / Sai" selected="true" style="-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #7e22ce;"/>
+                            <CheckBox fx:id="chkTypeFillBlank" text="Điền vào ô trống" selected="true" style="-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #b45309;"/>
+                            <CheckBox fx:id="chkTypeShortAnswer" text="Trả lời ngắn" selected="true" style="-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #15803d;"/>
+                        </FlowPane>
+                    </VBox>
+
                     <!-- Difficulty Input Section -->
                     <VBox spacing="10" style="-fx-background-color: #f8fafc; -fx-padding: 14; -fx-border-color: #e2e8f0; -fx-border-radius: 8; -fx-background-radius: 8;">
                         <HBox alignment="CENTER_LEFT" spacing="12">

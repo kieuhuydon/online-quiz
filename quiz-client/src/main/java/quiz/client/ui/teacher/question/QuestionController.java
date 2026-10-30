@@ -14,11 +14,13 @@ import quiz.client.api.ClientValidation;
 import quiz.client.api.QuizApi;
 import quiz.client.ui.SceneNavigator;
 import quiz.client.ui.ScreenController;
+import quiz.client.ui.teacher.TeacherController;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.CreateQuestionDto;
 import quiz.common.dto.QuestionDto;
 import quiz.common.dto.UpdateQuestionDto;
 import quiz.common.enums.Difficulty;
+import quiz.common.enums.QuestionType;
 import quiz.common.protocol.ErrorCode;
 
 import java.io.BufferedReader;
@@ -110,6 +112,7 @@ public final class QuestionController extends ScreenController {
     private void configureTable() {
         addColumn("ID", 55, q -> Long.toString(q.id()));
         addColumn("Nội dung câu hỏi", 260, QuestionDto::content);
+        addColumn("Loại câu hỏi", 110, q -> TeacherController.formatQuestionTypeName(q.questionType()));
         addColumn("Đáp án A", 120, QuestionDto::optionA);
         addColumn("Đáp án B", 120, QuestionDto::optionB);
         addColumn("Đáp án C", 120, QuestionDto::optionC);
@@ -291,6 +294,8 @@ public final class QuestionController extends ScreenController {
             diffBadge.getStyleClass().add("badge-hard");
         }
 
+        Label typeBadge = TeacherController.createQuestionTypeBadge(q.questionType());
+
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
@@ -308,7 +313,7 @@ public final class QuestionController extends ScreenController {
         deleteBtn.setDisable(writing);
         deleteBtn.setOnAction(e -> deleteQuestion(q));
 
-        header.getChildren().addAll(indexLabel, topicBadge, diffBadge, spacer, editBtn, copyBtn, deleteBtn);
+        header.getChildren().addAll(indexLabel, typeBadge, topicBadge, diffBadge, spacer, editBtn, copyBtn, deleteBtn);
 
         // Nội dung câu hỏi (hỗ trợ làm nổi bật vị trí điền khuyết ___)
         Node contentNode = createQuestionContentNode(q.content());
