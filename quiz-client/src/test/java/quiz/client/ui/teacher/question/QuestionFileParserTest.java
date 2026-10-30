@@ -177,4 +177,71 @@ class QuestionFileParserTest {
         assertEquals("The letter was written by ___ .",
             QuestionFileParser.normalizeBlanks("The letter was written by"));
     }
+
+    @Test
+    void parseCsvFileHandlesHeadersQuotesAndDefaults() throws Exception {
+        String csv = """
+            # Comment line
+            Content,OptionA,OptionB,OptionC,OptionD,Correct,Topic,Difficulty
+            "If I had time, I ___ go with you.",would,will,did,am,A,,HARD
+            "She enjoys ___ books in her free time.",reading,to read,read,reads,a,Gerund,INVALID_DIFF
+            """;
+        File csvFile = tempDir.resolve("questions.csv").toFile();
+        Files.writeString(csvFile.toPath(), csv);
+
+        List<CreateQuestionDto> list = QuestionFileParser.parse(csvFile);
+        assertEquals(2, list.size());
+
+        CreateQuestionDto q1 = list.get(0);
+        assertTrue(q1.content().contains("If I had time, I ___ go with you."));
+        assertEquals('A', q1.correctOption());
+        assertTrue(q1.topic().contains("Câu điều kiện"));
+        assertEquals(quiz.common.enums.Difficulty.HARD, q1.difficulty());
+
+        CreateQuestionDto q2 = list.get(1);
+        assertEquals('A', q2.correctOption());
+        assertEquals("Gerund", q2.topic());
+        assertEquals(quiz.common.enums.Difficulty.MEDIUM, q2.difficulty());
+    }
+
+    @Test
+    void parseInlineOptionsAndExplicitHeadersAndDetectDifficulty() throws Exception {
+        String txt = """
+            Chủ đề: Từ vựng chuyên ngành
+            Độ khó: Khó
+
+            Câu 1: Choose the synonym of rapid?
+            A. fast   B. slow   C. late   D. weak
+            Đáp án: A
+
+            Câu 2: She ___ to school every day.
+            A. go   B. goes
+            C. went   D. gone
+            Answer: B
+            """;
+        File txtFile = tempDir.resolve("inline.txt").toFile();
+        Files.writeString(txtFile.toPath(), txt);
+
+        List<CreateQuestionDto> list = QuestionFileParser.parse(txtFile);
+        assertEquals(2, list.size());
+        assertEquals("Từ vựng chuyên ngành", list.get(0).topic());
+        assertEquals(quiz.common.enums.Difficulty.HARD, list.get(0).difficulty());
+        assertEquals("fast", list.get(0).optionA());
+        assertEquals("weak", list.get(0).optionD());
+
+        assertEquals("goes", list.get(1).optionB());
+        assertEquals("gone", list.get(1).optionD());
+        assertEquals('B', list.get(1).correctOption());
+
+        assertEquals(quiz.common.enums.Difficulty.EASY,
+            QuestionFileParser.detectDifficulty("Short?", "A", "B", "C", "D"));
+        assertEquals(quiz.common.enums.Difficulty.MEDIUM,
+            QuestionFileParser.detectDifficulty("x".repeat(130), "A", "B", "C", "D"));
+        assertEquals(quiz.common.enums.Difficulty.HARD,
+            QuestionFileParser.detectDifficulty("x".repeat(300), "A", "B", "C", "D"));
+
+        assertThrows(IllegalArgumentException.class, () -> QuestionFileParser.parse(null));
+        assertThrows(IllegalArgumentException.class,
+            () -> QuestionFileParser.parse(tempDir.resolve("missing.txt").toFile()));
+    }
 }

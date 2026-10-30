@@ -68,15 +68,15 @@ class JdbcQuizRepositoryIT {
     void cleanup() throws SQLException {
         if (creatorId > 0) {
             try (Connection connection = dataSource.getConnection()) {
-                // Xóa câu hỏi do creator tạo trước (ràng buộc FK)
+                // Xóa quiz trước để cascade xóa quiz_questions, tránh lỗi FK tới questions
                 try (PreparedStatement statement = connection.prepareStatement(
-                    "DELETE FROM questions WHERE created_by = ?")) {
+                    "DELETE FROM quizzes WHERE created_by = ?")) {
                     statement.setLong(1, creatorId);
                     statement.executeUpdate();
                 }
-                // Xóa quiz do creator tạo (ràng buộc FK)
+                // Xóa câu hỏi do creator tạo
                 try (PreparedStatement statement = connection.prepareStatement(
-                    "DELETE FROM quizzes WHERE created_by = ?")) {
+                    "DELETE FROM questions WHERE created_by = ?")) {
                     statement.setLong(1, creatorId);
                     statement.executeUpdate();
                 }
@@ -120,11 +120,17 @@ class JdbcQuizRepositoryIT {
         Quiz q2 = repository.save(Quiz.createNew("Quiz 2", null, null, 30, 60.0,
             AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3, creatorId));
 
-        List<Quiz> all = repository.findAll();
-        List<Quiz> drafts = repository.findByStatus(QuizStatus.DRAFT);
+        List<Quiz> all = repository.findAll().stream()
+            .filter(q -> q.createdBy() == creatorId)
+            .toList();
+        List<Quiz> drafts = repository.findByStatus(QuizStatus.DRAFT).stream()
+            .filter(q -> q.createdBy() == creatorId)
+            .toList();
 
         assertEquals(2, all.size());
         assertEquals(2, drafts.size());
+        assertEquals(q1.id(), all.get(0).id());
+        assertEquals(q2.id(), all.get(1).id());
         assertTrue(all.get(0).id() < all.get(1).id());
     }
 
@@ -152,9 +158,12 @@ class JdbcQuizRepositoryIT {
     }
 
     @Test
-    void setQuestionsOnMissingQuizReturnsFalse() {
+    void setQuestionsOnMissingQuizReturnsFalse() throws SQLException {
+        creatorId = createCreator();
         JdbcQuizRepository repository = repository();
-        assertFalse(repository.setQuestions(999999L, List.of(1L)));
+        JdbcQuestionRepository qRepo = new JdbcQuestionRepository(dataSource);
+        Long q1 = createQuestion(qRepo, creatorId, "Câu hỏi kiểm tra?", "A", "B", "C", "D", 'A');
+        assertFalse(repository.setQuestions(999999L, List.of(q1)));
     }
 
     private long createCreator() throws SQLException {

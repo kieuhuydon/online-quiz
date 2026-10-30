@@ -98,4 +98,55 @@ class MessageCodecTest {
         assertEquals("student_new", decodedDto.username());
         assertEquals(Role.STUDENT, decodedDto.role());
     }
+
+    @Test
+    void testResponseOverloadsAndClassQuizResultsDto() throws Exception {
+        java.time.Instant now = java.time.Instant.parse("2026-10-30T00:00:00Z");
+        quiz.common.dto.QuizDto quizDto = new quiz.common.dto.QuizDto(
+            1L, "Java Basics", "Desc", "Java", 30, 50.0,
+            quiz.common.enums.QuizStatus.OPEN, "123456",
+            quiz.common.enums.AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3,
+            2L, now, now, null
+        );
+        quiz.common.dto.ResultDto resultDto = new quiz.common.dto.ResultDto(
+            10L, 1L, "Java Basics", "Student A", 8.5, 17, 20, true,
+            quiz.common.enums.SubmitReason.MANUAL, now
+        );
+
+        java.util.List<quiz.common.dto.QuizDto> mutableQuizzes = new java.util.ArrayList<>();
+        mutableQuizzes.add(quizDto);
+        java.util.List<quiz.common.dto.ResultDto> mutableResults = new java.util.ArrayList<>();
+        mutableResults.add(resultDto);
+
+        quiz.common.dto.ClassQuizResultsDto classResults =
+            new quiz.common.dto.ClassQuizResultsDto(mutableQuizzes, mutableResults);
+        mutableQuizzes.clear();
+        mutableResults.clear();
+
+        assertEquals(1, classResults.quizzes().size());
+        assertEquals(1, classResults.results().size());
+        assertThrows(UnsupportedOperationException.class, () -> classResults.quizzes().add(quizDto));
+        assertThrows(UnsupportedOperationException.class, () -> classResults.results().add(resultDto));
+        assertThrows(NullPointerException.class, () -> new quiz.common.dto.ClassQuizResultsDto(null, java.util.List.of()));
+        assertThrows(NullPointerException.class, () -> new quiz.common.dto.ClassQuizResultsDto(java.util.List.of(), null));
+
+        Response successWithMessage = Response.success(404L, "Loaded class results", classResults);
+        assertFalse(successWithMessage.isPush());
+        assertEquals("Loaded class results", successWithMessage.message());
+
+        byte[] bytes = MessageCodec.serialize(successWithMessage);
+        Response decoded = (Response) MessageCodec.deserialize(bytes);
+        assertEquals(404L, decoded.requestId());
+        assertEquals("Loaded class results", decoded.message());
+        quiz.common.dto.ClassQuizResultsDto decodedPayload =
+            assertInstanceOf(quiz.common.dto.ClassQuizResultsDto.class, decoded.payload());
+        assertEquals(1, decodedPayload.quizzes().size());
+        assertEquals(1, decodedPayload.results().size());
+
+        Response pushTwoArg = Response.push(MessageType.PUSH_FORCE_SUBMITTED, resultDto);
+        assertTrue(pushTwoArg.isPush());
+        assertEquals(0L, pushTwoArg.requestId());
+        assertNull(pushTwoArg.message());
+        assertEquals(resultDto, pushTwoArg.payload());
+    }
 }

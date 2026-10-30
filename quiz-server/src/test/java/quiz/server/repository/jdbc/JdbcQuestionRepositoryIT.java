@@ -113,8 +113,12 @@ class JdbcQuestionRepositoryIT {
             "T2", Difficulty.HARD, creatorId));
         repository.deactivate(q2.id());
 
-        List<Question> all = repository.findAll();
-        List<Question> active = repository.findActive();
+        List<Question> all = repository.findAll().stream()
+            .filter(q -> q.createdBy() == creatorId)
+            .toList();
+        List<Question> active = repository.findActive().stream()
+            .filter(q -> q.createdBy() == creatorId)
+            .toList();
 
         assertEquals(2, all.size());
         assertEquals(1, active.size());
@@ -126,20 +130,28 @@ class JdbcQuestionRepositoryIT {
     void findByFilterTopicAndDifficulty() throws SQLException {
         creatorId = createCreator();
         JdbcQuestionRepository repository = repository();
+        String grammarTopic = "Ngữ pháp " + creatorId;
+        String vocabTopic = "Từ vựng " + creatorId;
 
         repository.save(Question.createNew("Câu ngữ pháp dễ?", "A", "B", "C", "D", 'A',
-            "Ngữ pháp", Difficulty.EASY, creatorId));
+            grammarTopic, Difficulty.EASY, creatorId));
         repository.save(Question.createNew("Câu từ vựng khó?", "A", "B", "C", "D", 'B',
-            "Từ vựng", Difficulty.HARD, creatorId));
+            vocabTopic, Difficulty.HARD, creatorId));
 
-        List<Question> byTopic = repository.findByFilter("Ngữ pháp", null);
-        List<Question> byDiff = repository.findByFilter(null, Difficulty.HARD);
-        List<Question> byBoth = repository.findByFilter("Từ vựng", Difficulty.HARD);
+        List<Question> byTopic = repository.findByFilter(grammarTopic, null).stream()
+            .filter(q -> q.createdBy() == creatorId)
+            .toList();
+        List<Question> byDiff = repository.findByFilter(null, Difficulty.HARD).stream()
+            .filter(q -> q.createdBy() == creatorId)
+            .toList();
+        List<Question> byBoth = repository.findByFilter(vocabTopic, Difficulty.HARD).stream()
+            .filter(q -> q.createdBy() == creatorId)
+            .toList();
 
         assertEquals(1, byTopic.size());
         assertEquals(1, byDiff.size());
         assertEquals(1, byBoth.size());
-        assertEquals("Ngữ pháp", byTopic.get(0).topic());
+        assertEquals(grammarTopic, byTopic.get(0).topic());
         assertEquals(Difficulty.HARD, byDiff.get(0).difficulty());
     }
 
@@ -194,8 +206,8 @@ class JdbcQuestionRepositoryIT {
         Question reread = repository.findById(saved.id()).orElseThrow();
         assertFalse(reread.active());
         assertNotNull(reread.updatedAt());
-        assertEquals(1, repository.findAll().size());
-        assertEquals(0, repository.findActive().size());
+        assertEquals(1, repository.findAll().stream().filter(q -> q.createdBy() == creatorId).count());
+        assertEquals(0, repository.findActive().stream().filter(q -> q.createdBy() == creatorId).count());
     }
 
     @Test

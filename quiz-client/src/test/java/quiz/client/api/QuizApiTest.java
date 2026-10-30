@@ -232,4 +232,243 @@ class QuizApiTest {
     private static void assertProtocol(Throwable failure) {
         assertEquals(TransportException.Kind.PROTOCOL, assertInstanceOf(TransportException.class, failure).kind());
     }
+
+    @Test void resetLoginConnectionDisconnectsUnauthenticatedButRejectsAuthenticatedSession() throws Exception {
+        try (var server = new SocketFixture(); var transport = new ServerConnection(server.config()); var api = new QuizApi(transport)) {
+            long gen1 = api.connect().get(3, TimeUnit.SECONDS);
+            var peer1 = server.take();
+            assertTrue(transport.isConnected(gen1));
+            api.resetLoginConnection();
+            assertFalse(transport.isConnected(gen1));
+
+            api.connect().get(3, TimeUnit.SECONDS);
+            var peer2 = server.take();
+            login(api, peer2, Role.ADMIN);
+            assertCode(ErrorCode.CONFLICT, assertThrows(ApiException.class, api::resetLoginConnection));
+        }
+    }
+
+    @Test void classQuestionQuizAttemptAndAntiCheatContractsRoundTrip() throws Exception {
+        try (var server = new SocketFixture(); var transport = new ServerConnection(server.config()); var api = new QuizApi(transport)) {
+            api.connect().get(3, TimeUnit.SECONDS);
+            var peer = server.take();
+            login(api, peer, Role.ADMIN);
+
+            Instant now = Instant.EPOCH;
+
+            // 1. Class contracts
+            ClassDto classDto = new ClassDto(10L, "ENG-01", "Desc", 2L, "Teacher", now);
+            var createClass = api.createClass(new CreateClassDto("ENG-01", "Desc", 2L));
+            Request req = peer.read();
+            assertEquals(MessageType.CREATE_CLASS, req.type());
+            peer.success(req, classDto);
+            assertEquals(classDto, createClass.get(3, TimeUnit.SECONDS));
+
+            var listClasses = api.listClasses();
+            req = peer.read();
+            assertEquals(MessageType.LIST_CLASSES, req.type());
+            peer.success(req, new ArrayList<>(List.of(classDto)));
+            assertEquals(List.of(classDto), listClasses.get(3, TimeUnit.SECONDS));
+
+            var listMyClasses = api.listMyClasses();
+            req = peer.read();
+            assertEquals(MessageType.LIST_MY_CLASSES, req.type());
+            peer.success(req, new ArrayList<>(List.of(classDto)));
+            assertEquals(List.of(classDto), listMyClasses.get(3, TimeUnit.SECONDS));
+
+            var addMember = api.addClassMember(10L, 8L);
+            req = peer.read();
+            assertEquals(MessageType.ADD_CLASS_MEMBER, req.type());
+            peer.success(req, null);
+            assertNull(addMember.get(3, TimeUnit.SECONDS));
+
+            var removeMember = api.removeClassMember(10L, 8L);
+            req = peer.read();
+            assertEquals(MessageType.REMOVE_CLASS_MEMBER, req.type());
+            peer.success(req, null);
+            assertNull(removeMember.get(3, TimeUnit.SECONDS));
+
+            ClassMemberDto memberDto = new ClassMemberDto(10L, 8L, "student", "Student", now);
+            var listMembers = api.listClassMembers(10L);
+            req = peer.read();
+            assertEquals(MessageType.LIST_CLASS_MEMBERS, req.type());
+            peer.success(req, new ArrayList<>(List.of(memberDto)));
+            assertEquals(List.of(memberDto), listMembers.get(3, TimeUnit.SECONDS));
+
+            var listUnenrolled = api.listUnenrolledStudents();
+            req = peer.read();
+            assertEquals(MessageType.LIST_UNENROLLED_STUDENTS, req.type());
+            peer.success(req, new ArrayList<>(List.of(ACCOUNT)));
+            assertEquals(List.of(ACCOUNT), listUnenrolled.get(3, TimeUnit.SECONDS));
+
+            var delClass = api.deleteClass(10L);
+            req = peer.read();
+            assertEquals(MessageType.DELETE_CLASS, req.type());
+            peer.success(req, null);
+            assertNull(delClass.get(3, TimeUnit.SECONDS));
+
+            // 2. Question contracts
+            QuestionDto qDto = new QuestionDto(5L, "Q?", "A", "B", "C", "D", 'A', "Topic", quiz.common.enums.Difficulty.EASY, true, 1L, now);
+            var createQ = api.createQuestion(new CreateQuestionDto("Q?", "A", "B", "C", "D", 'A', "Topic", quiz.common.enums.Difficulty.EASY));
+            req = peer.read();
+            assertEquals(MessageType.CREATE_QUESTION, req.type());
+            peer.success(req, qDto);
+            assertEquals(qDto, createQ.get(3, TimeUnit.SECONDS));
+
+            var getQ = api.getQuestion(5L);
+            req = peer.read();
+            assertEquals(MessageType.GET_QUESTION, req.type());
+            peer.success(req, qDto);
+            assertEquals(qDto, getQ.get(3, TimeUnit.SECONDS));
+
+            var listQ = api.listQuestions();
+            req = peer.read();
+            assertEquals(MessageType.LIST_QUESTIONS, req.type());
+            peer.success(req, new ArrayList<>(List.of(qDto)));
+            assertEquals(List.of(qDto), listQ.get(3, TimeUnit.SECONDS));
+
+            var updateQ = api.updateQuestion(new UpdateQuestionDto(5L, "Q?", "A", "B", "C", "D", 'B', "Topic", quiz.common.enums.Difficulty.MEDIUM));
+            req = peer.read();
+            assertEquals(MessageType.UPDATE_QUESTION, req.type());
+            peer.success(req, qDto);
+            assertEquals(qDto, updateQ.get(3, TimeUnit.SECONDS));
+
+            var deactQ = api.deactivateQuestion(5L);
+            req = peer.read();
+            assertEquals(MessageType.DEACTIVATE_QUESTION, req.type());
+            peer.success(req, null);
+            assertNull(deactQ.get(3, TimeUnit.SECONDS));
+
+            // 3. Quiz contracts
+            QuizDto quizDto = new QuizDto(1L, "Quiz", "Desc", "Cat", 30, 50.0, quiz.common.enums.QuizStatus.OPEN, "123456",
+                quiz.common.enums.AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3, 1L, now, now, null);
+            var createQuiz = api.createQuiz(new CreateQuizDto("Quiz", "Desc", "Cat", 30, 50.0, quiz.common.enums.AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3));
+            req = peer.read();
+            assertEquals(MessageType.CREATE_QUIZ, req.type());
+            peer.success(req, quizDto);
+            assertEquals(quizDto, createQuiz.get(3, TimeUnit.SECONDS));
+
+            var updateQuiz = api.updateQuiz(new UpdateQuizDto(1L, "Quiz", "Desc", "Cat", 30, 50.0, quiz.common.enums.AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3));
+            req = peer.read();
+            assertEquals(MessageType.UPDATE_QUIZ, req.type());
+            peer.success(req, quizDto);
+            assertEquals(quizDto, updateQuiz.get(3, TimeUnit.SECONDS));
+
+            QuizDetailDto detailDto = new QuizDetailDto(quizDto, List.of(qDto), List.of(10L));
+            var getQuiz = api.getQuiz(1L);
+            req = peer.read();
+            assertEquals(MessageType.GET_QUIZ, req.type());
+            peer.success(req, detailDto);
+            assertEquals(detailDto, getQuiz.get(3, TimeUnit.SECONDS));
+
+            var listQuizzes = api.listQuizzes();
+            req = peer.read();
+            assertEquals(MessageType.LIST_QUIZZES, req.type());
+            peer.success(req, new ArrayList<>(List.of(quizDto)));
+            assertEquals(List.of(quizDto), listQuizzes.get(3, TimeUnit.SECONDS));
+
+            var setQs = api.setQuizQuestions(1L, List.of(5L));
+            req = peer.read();
+            assertEquals(MessageType.SET_QUIZ_QUESTIONS, req.type());
+            peer.success(req, null);
+            assertNull(setQs.get(3, TimeUnit.SECONDS));
+
+            var openQuiz = api.openQuiz(1L);
+            req = peer.read();
+            assertEquals(MessageType.OPEN_QUIZ, req.type());
+            peer.success(req, quizDto);
+            assertEquals(quizDto, openQuiz.get(3, TimeUnit.SECONDS));
+
+            var closeQuiz = api.closeQuiz(1L);
+            req = peer.read();
+            assertEquals(MessageType.CLOSE_QUIZ, req.type());
+            peer.success(req, quizDto);
+            assertEquals(quizDto, closeQuiz.get(3, TimeUnit.SECONDS));
+
+            var assignQuiz = api.assignQuiz(1L, 10L);
+            req = peer.read();
+            assertEquals(MessageType.ASSIGN_QUIZ, req.type());
+            peer.success(req, null);
+            assertNull(assignQuiz.get(3, TimeUnit.SECONDS));
+
+            ResultDto resDto = new ResultDto(100L, 1L, "Quiz", "Student", 9.0, 9, 10, true, quiz.common.enums.SubmitReason.MANUAL, now);
+            var listQuizResults = api.listQuizResults(1L);
+            req = peer.read();
+            assertEquals(MessageType.LIST_QUIZ_RESULTS, req.type());
+            peer.success(req, new ArrayList<>(List.of(resDto)));
+            assertEquals(List.of(resDto), listQuizResults.get(3, TimeUnit.SECONDS));
+
+            ClassQuizResultsDto classQuizResults = new ClassQuizResultsDto(List.of(quizDto), List.of(resDto));
+            var getClassResults = api.getClassQuizResults(10L);
+            req = peer.read();
+            assertEquals(MessageType.GET_CLASS_QUIZ_RESULTS, req.type());
+            peer.success(req, classQuizResults);
+            assertEquals(classQuizResults, getClassResults.get(3, TimeUnit.SECONDS));
+
+            // 4. Student Attempt & Result contracts
+            QuizInfoDto infoDto = new QuizInfoDto(1L, "Quiz", "Desc", "Cat", 30, 50.0, 1, quiz.common.enums.QuizStatus.OPEN, "123456", true, now, null);
+            var listAssigned = api.listAssignedQuizzes();
+            req = peer.read();
+            assertEquals(MessageType.LIST_ASSIGNED_QUIZZES, req.type());
+            peer.success(req, new ArrayList<>(List.of(infoDto)));
+            assertEquals(List.of(infoDto), listAssigned.get(3, TimeUnit.SECONDS));
+
+            var getInfo = api.getQuizInfo(1L);
+            req = peer.read();
+            assertEquals(MessageType.GET_QUIZ_INFO, req.type());
+            peer.success(req, infoDto);
+            assertEquals(infoDto, getInfo.get(3, TimeUnit.SECONDS));
+
+            AttemptStateDto stateDto = new AttemptStateDto(100L, 1L, "Quiz", 1800L, List.of(), Map.of());
+            var startAtt = api.startAttempt(1L, "123456");
+            req = peer.read();
+            assertEquals(MessageType.START_ATTEMPT, req.type());
+            peer.success(req, stateDto);
+            assertEquals(stateDto, startAtt.get(3, TimeUnit.SECONDS));
+
+            var saveAns = api.saveAnswer(100L, 5L, 'A');
+            req = peer.read();
+            assertEquals(MessageType.SAVE_ANSWER, req.type());
+            peer.success(req, null);
+            assertNull(saveAns.get(3, TimeUnit.SECONDS));
+
+            var getState = api.getAttemptState(100L);
+            req = peer.read();
+            assertEquals(MessageType.GET_ATTEMPT_STATE, req.type());
+            peer.success(req, stateDto);
+            assertEquals(stateDto, getState.get(3, TimeUnit.SECONDS));
+
+            var submitAtt = api.submitAttempt(100L);
+            req = peer.read();
+            assertEquals(MessageType.SUBMIT_ATTEMPT, req.type());
+            peer.success(req, resDto);
+            assertEquals(resDto, submitAtt.get(3, TimeUnit.SECONDS));
+
+            var getMyRes = api.getMyResult(100L);
+            req = peer.read();
+            assertEquals(MessageType.GET_MY_RESULT, req.type());
+            peer.success(req, resDto);
+            assertEquals(resDto, getMyRes.get(3, TimeUnit.SECONDS));
+
+            var listHist = api.listMyHistory();
+            req = peer.read();
+            assertEquals(MessageType.LIST_MY_HISTORY, req.type());
+            peer.success(req, new ArrayList<>(List.of(resDto)));
+            assertEquals(List.of(resDto), listHist.get(3, TimeUnit.SECONDS));
+
+            // 5. Anti-cheat contracts
+            var reportAc = api.reportAntiCheat(new ReportAntiCheatDto(100L, quiz.common.enums.AntiCheatEventType.FOCUS_LOST, "blur", now));
+            req = peer.read();
+            assertEquals(MessageType.REPORT_ANTICHEAT_EVENT, req.type());
+            peer.success(req, null);
+            assertNull(reportAc.get(3, TimeUnit.SECONDS));
+
+            AntiCheatEventDto acEvent = new AntiCheatEventDto(1L, 100L, quiz.common.enums.AntiCheatEventType.FOCUS_LOST, "blur", now, now, 1, "WARNED");
+            var listAc = api.listAttemptEvents(100L);
+            req = peer.read();
+            assertEquals(MessageType.LIST_ATTEMPT_EVENTS, req.type());
+            peer.success(req, new ArrayList<>(List.of(acEvent)));
+            assertEquals(List.of(acEvent), listAc.get(3, TimeUnit.SECONDS));
+        }
+    }
 }

@@ -64,4 +64,18 @@ class AntiCheatHandlerTest {
         assertEquals(456L, response.requestId());
         assertNotNull(response.payload());
     }
+
+    @Test
+    void rejectsUnauthenticatedOrInvalidPayloads() {
+        assertThrows(quiz.server.exception.UnauthorizedException.class, () -> handler.handle(
+            new Request(1L, MessageType.LIST_ATTEMPT_EVENTS, null, 1L), null
+        ));
+        assertThrows(quiz.server.exception.QuizException.class, () -> handler.handle(
+            new Request(2L, MessageType.REPORT_ANTICHEAT_EVENT, "t", "bad"), studentSession
+        ));
+        assertThrows(quiz.server.exception.QuizException.class, () -> handler.handle(
+            new Request(3L, MessageType.LIST_ATTEMPT_EVENTS, "t", "bad"), teacherSession
+        ));
+        assertThrows(IllegalArgumentException.class, () -> handler.allowedRoles(MessageType.LOGIN));
+    }
 }

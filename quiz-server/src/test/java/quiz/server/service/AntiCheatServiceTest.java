@@ -180,4 +180,30 @@ class AntiCheatServiceTest {
         verify(antiCheatRepo).recordEvent(any(), eq(attemptId), eq(AntiCheatEventType.PROHIBITED_PROCESS), eq(detail), eq(now), eq(now), eq(1), eq("WARNED"));
         verify(connectionRegistry).sendToUser(eq(studentId), argThat(r -> r.pushType() == MessageType.PUSH_ANTICHEAT_WARNING));
     }
+
+    @Test
+    @DisplayName("Cắt chuỗi detail vượt quá 255 ký tự, gán clientTime mặc định nếu null và kiểm tra NotFoundException")
+    void reportEvent_TruncatesLongDetailAndHandlesMissingAttempt() {
+        when(attemptRepo.findById(attemptId)).thenReturn(Optional.of(createMockAttempt(AttemptStatus.IN_PROGRESS)));
+        when(quizRepo.findById(quizId)).thenReturn(Optional.of(createMockQuiz(AntiCheatPolicyType.LOG_ONLY, 3)));
+        when(antiCheatRepo.countViolations(any(), eq(attemptId))).thenReturn(0);
+
+        String overlongDetail = "X".repeat(300);
+        ReportAntiCheatDto dto = new ReportAntiCheatDto(attemptId, AntiCheatEventType.FOCUS_LOST, overlongDetail, null);
+        service.reportEvent(dto, studentId);
+
+        verify(antiCheatRepo).recordEvent(
+            any(), eq(attemptId), eq(AntiCheatEventType.FOCUS_LOST),
+            argThat(d -> d != null && d.length() == 255),
+            eq(now), eq(now), eq(1), eq("NONE")
+        );
+
+        when(attemptRepo.findById(999L)).thenReturn(Optional.empty());
+        assertThrows(NotFoundException.class, () -> service.reportEvent(
+            new ReportAntiCheatDto(999L, AntiCheatEventType.FOCUS_LOST, "detail", now), studentId
+        ));
+        assertThrows(NotFoundException.class, () -> service.listAttemptEvents(
+            999L, new UserSession(2L, Role.TEACHER, "teacher")
+        ));
+    }
 }

@@ -330,4 +330,69 @@ class QuizServiceTest {
         assertNotNull(list);
         verify(quizzes).findResultsByQuizId(1);
     }
+
+    @Test
+    void getClassQuizResultsEnforcesRoleAndClassOwnership() {
+        Instant now = Instant.now();
+        Classroom ownClass = Classroom.restore(10, "ENG-01", "Desc", 2, now);
+        Quiz assignedQuiz = Quiz.restore(1, "Quiz 1", "Desc", "Grammar", 30, 50.0,
+            QuizStatus.OPEN, "123456", AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3, 2, now, now, null);
+        quiz.common.dto.ResultDto resultDto = new quiz.common.dto.ResultDto(
+            100, 1, "Quiz 1", "Student A", 8.0, 8, 10, true, quiz.common.enums.SubmitReason.MANUAL, now
+        );
+
+        when(classRepo.findById(10)).thenReturn(Optional.of(ownClass));
+        when(quizzes.findAssignedQuizzesForClass(10)).thenReturn(List.of(assignedQuiz));
+        when(quizzes.findResultsByQuizAndClass(1, 10)).thenReturn(List.of(resultDto));
+
+        var teacherResult = service.getClassQuizResults(10, teacherSession);
+        assertEquals(1, teacherResult.quizzes().size());
+        assertEquals(1, teacherResult.results().size());
+
+        UserSession adminSession = new UserSession(1, Role.ADMIN, "admin");
+        var adminResult = service.getClassQuizResults(10, adminSession);
+        assertEquals(1, adminResult.quizzes().size());
+
+        assertThrows(ForbiddenException.class, () -> service.getClassQuizResults(10, otherTeacherSession));
+        assertThrows(ForbiddenException.class,
+            () -> service.getClassQuizResults(10, new UserSession(5, Role.STUDENT, "student")));
+
+        when(classRepo.findById(99)).thenReturn(Optional.empty());
+        assertThrows(NotFoundException.class, () -> service.getClassQuizResults(99, adminSession));
+    }
+
+    @Test
+    void getQuizDetailSetQuizQuestionsGetQuizInfoAndListQuizzesBySession() {
+        Instant now = Instant.now();
+        Quiz draft = Quiz.restore(1, "Quiz 1", "Desc", "Grammar", 30, 50.0,
+            QuizStatus.DRAFT, null, AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3, 2, now, null, null);
+        quiz.server.domain.Question q1 = quiz.server.domain.Question.restore(
+            10L, "Q1?", "A", "B", "C", "D", 'A', "Grammar", quiz.common.enums.Difficulty.EASY, true, 2L, now, now
+        );
+
+        when(quizzes.findById(1L)).thenReturn(Optional.of(draft));
+        when(questions.findQuestionsByQuizId(1L)).thenReturn(List.of(q1));
+        when(quizzes.findAssignedClassIds(1L)).thenReturn(List.of(10L));
+
+        var detail = service.getQuizDetail(1L);
+        assertEquals(1L, detail.quiz().id());
+        assertEquals(1, detail.questions().size());
+        assertEquals(List.of(10L), detail.assignedClassIds());
+
+        when(questions.findByIds(List.of(10L))).thenReturn(List.of(q1));
+        service.setQuizQuestions(1L, List.of(10L), teacherSession);
+        verify(quizzes).setQuestions(1L, List.of(10L));
+
+        when(questions.findByIds(List.of(10L, 99L))).thenReturn(List.of(q1));
+        assertThrows(ValidationException.class, () -> service.setQuizQuestions(1L, List.of(10L, 99L), teacherSession));
+
+        when(quizzes.countQuestions(1L)).thenReturn(5);
+        QuizInfoDto info = service.getQuizInfo(1L, 5L);
+        assertEquals(5, info.questionCount());
+
+        when(quizzes.findByCreator(2L)).thenReturn(List.of(draft));
+        assertEquals(1, service.listQuizzes(teacherSession).size());
+        when(quizzes.findAll()).thenReturn(List.of(draft));
+        assertEquals(1, service.listQuizzes(new UserSession(1, Role.ADMIN, "admin")).size());
+    }
 }

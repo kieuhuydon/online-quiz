@@ -168,4 +168,35 @@ class ClassServiceTest {
         assertThrows(quiz.server.exception.UnauthorizedException.class, () -> service.listUnenrolledStudents(null));
         verify(userRepo, times(1)).findUnenrolledStudents();
     }
+
+    @Test
+    void listStudentClassesRemoveMemberAndListMembersHappyPaths() {
+        Instant now = Instant.now();
+        Classroom c = Classroom.restore(10, "ENG-B1-01", "Desc", 2, now);
+        User teacher = User.restore(2, "teacher1", "hash", "Teacher One", null, Role.TEACHER, true, 1L, now);
+        UserSession studentSession = new UserSession(5, Role.STUDENT, "student1");
+
+        when(userRepo.findAll()).thenReturn(List.of(teacher));
+        when(classRepo.findClassIdsForStudent(5)).thenReturn(List.of(10L));
+        when(classRepo.findById(10)).thenReturn(Optional.of(c));
+
+        List<ClassDto> studentClasses = service.listStudentClasses(studentSession);
+        assertEquals(1, studentClasses.size());
+        assertEquals("Teacher One", studentClasses.get(0).teacherName());
+        assertThrows(ForbiddenException.class, () -> service.listStudentClasses(teacherSession));
+        assertThrows(ForbiddenException.class, () -> service.listStudentClasses(null));
+
+        // removeClassMember
+        service.removeClassMember(10, 5, adminSession);
+        verify(classRepo).removeMember(10, 5);
+        when(classRepo.findById(99)).thenReturn(Optional.empty());
+        assertThrows(quiz.server.exception.NotFoundException.class, () -> service.removeClassMember(99, 5, adminSession));
+
+        // listClassMembers
+        ClassMemberDto memberDto = new ClassMemberDto(10, 5, "student1", "Student One", now);
+        when(classRepo.findMembers(10)).thenReturn(List.of(memberDto));
+        assertEquals(1, service.listClassMembers(10, teacherSession).size());
+        assertEquals(1, service.listClassMembers(10, adminSession).size());
+        assertThrows(quiz.server.exception.NotFoundException.class, () -> service.listClassMembers(99, adminSession));
+    }
 }
