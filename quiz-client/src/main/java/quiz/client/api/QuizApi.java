@@ -378,15 +378,17 @@ public final class QuizApi implements AutoCloseable {
     }
 
     public CompletableFuture<AttemptStateDto> startAttempt(long quizId, String pin) {
+        return withStudentIp(ip -> protectedCall(MessageType.START_ATTEMPT,
+            new StartAttemptRequestDto(quizId,pin,ip),QuizApi::decodeAttemptState));
+    }
+
+    private <T> CompletableFuture<T> withStudentIp(java.util.function.Function<String,CompletableFuture<T>> send) {
         final long operation;
         synchronized(lock) { operation=sessionRevision; }
-        return CompletableFuture.supplyAsync(() -> {
-            try { return java.net.InetAddress.getLocalHost().getHostAddress(); }
-            catch(java.net.UnknownHostException e) { return null; }
-        }).thenCompose(ip -> {
+        return CompletableFuture.supplyAsync(() -> quiz.client.network.StudentIpResolver.resolve(connection.localAddress())).thenCompose(ip -> {
             synchronized(lock) {
                 if(operation!=sessionRevision) return CompletableFuture.failedFuture(new TransportException(CONNECTION_LOST));
-                return protectedCall(MessageType.START_ATTEMPT, new StartAttemptRequestDto(quizId, pin,ip), QuizApi::decodeAttemptState);
+                return send.apply(ip);
             }
         });
     }
@@ -396,7 +398,8 @@ public final class QuizApi implements AutoCloseable {
         return protectedCall(MessageType.LIST_EXAM_SESSIONS,quizId,p->typedList(p,ExamSession.class));
     }
     public CompletableFuture<ExamSession> getExamSession(long id) {
-        return protectedCall(MessageType.GET_EXAM_SESSION,id,QuizApi::decodeExamSession);
+        return withStudentIp(ip -> protectedCall(MessageType.GET_EXAM_SESSION,
+            new ExamSessionRequestDto(id,ip),QuizApi::decodeExamSession));
     }
     public CompletableFuture<ExamSession> applyMonitoringPenalty(ApplyPenaltyDto p) {
         return protectedCall(MessageType.APPLY_MONITORING_PENALTY,p,QuizApi::decodeExamSession);

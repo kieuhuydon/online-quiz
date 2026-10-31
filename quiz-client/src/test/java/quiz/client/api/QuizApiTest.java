@@ -423,6 +423,8 @@ class QuizApiTest {
             var startAtt = api.startAttempt(1L, "123456");
             req = peer.read();
             assertEquals(MessageType.START_ATTEMPT, req.type());
+            String startIp=assertInstanceOf(StartAttemptRequestDto.class,req.payload()).ipAddress();
+            assertNotNull(startIp);assertFalse(startIp.isBlank());
             peer.success(req, stateDto);
             assertEquals(stateDto, startAtt.get(3, TimeUnit.SECONDS));
 

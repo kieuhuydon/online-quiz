@@ -375,8 +375,44 @@ public final class QuestionController extends ScreenController {
         // Nội dung câu hỏi (hỗ trợ làm nổi bật vị trí điền khuyết ___)
         Node contentNode = createQuestionContentNode(q.content());
 
-        // Các đáp án (2 cột x 2 hàng)
-        Node answersNode = createAnswersDisplayNode(q);
+        // Các đáp án hiển thị thông minh theo loại câu hỏi
+        Node optionsNode;
+        QuestionType qType = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
+        if (qType == QuestionType.TRUE_FALSE) {
+            GridPane optionsGrid = new GridPane();
+            optionsGrid.setHgap(14);
+            optionsGrid.setVgap(10);
+            ColumnConstraints col1 = new ColumnConstraints();
+            col1.setPercentWidth(50);
+            ColumnConstraints col2 = new ColumnConstraints();
+            col2.setPercentWidth(50);
+            optionsGrid.getColumnConstraints().addAll(col1, col2);
+            String optA = (q.optionA() != null && !q.optionA().isBlank()) ? q.optionA() : "Đúng";
+            String optB = (q.optionB() != null && !q.optionB().isBlank()) ? q.optionB() : "Sai";
+            optionsGrid.add(createOptionBox("A", optA, q.correctOption() == 'A'), 0, 0);
+            optionsGrid.add(createOptionBox("B", optB, q.correctOption() == 'B'), 1, 0);
+            optionsNode = optionsGrid;
+        } else if (qType == QuestionType.SHORT_ANSWER) {
+            String ans = TeacherController.getCorrectOptionText(q);
+            optionsNode = createSingleAnswerBox("Đáp án mẫu / chuẩn:", ans);
+        } else if (qType == QuestionType.FILL_BLANK) {
+            String ans = TeacherController.getCorrectOptionText(q);
+            optionsNode = createSingleAnswerBox("Từ / cụm từ cần điền (Đáp án đúng):", ans);
+        } else {
+            GridPane optionsGrid = new GridPane();
+            optionsGrid.setHgap(14);
+            optionsGrid.setVgap(10);
+            ColumnConstraints col1 = new ColumnConstraints();
+            col1.setPercentWidth(50);
+            ColumnConstraints col2 = new ColumnConstraints();
+            col2.setPercentWidth(50);
+            optionsGrid.getColumnConstraints().addAll(col1, col2);
+            optionsGrid.add(createOptionBox("A", q.optionA(), q.correctOption() == 'A'), 0, 0);
+            optionsGrid.add(createOptionBox("B", q.optionB(), q.correctOption() == 'B'), 1, 0);
+            optionsGrid.add(createOptionBox("C", q.optionC(), q.correctOption() == 'C'), 0, 1);
+            optionsGrid.add(createOptionBox("D", q.optionD(), q.correctOption() == 'D'), 1, 1);
+            optionsNode = optionsGrid;
+        }
 
         // Footer thông tin tạo
         HBox footer = new HBox(8);
@@ -384,19 +420,7 @@ public final class QuestionController extends ScreenController {
         dateLabel.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
         footer.getChildren().add(dateLabel);
 
-        if (q.explanation() != null && !q.explanation().isBlank()) {
-            VBox expBox = new VBox(4);
-            expBox.setStyle("-fx-background-color: #fffbeb; -fx-border-color: #fbbf24; -fx-border-width: 1; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 10 14;");
-            Label expTitle = new Label("💡 Giải thích đáp án:");
-            expTitle.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #92400e;");
-            Label expText = new Label(q.explanation());
-            expText.setWrapText(true);
-            expText.setStyle("-fx-font-size: 13px; -fx-text-fill: #451a03;");
-            expBox.getChildren().addAll(expTitle, expText);
-            card.getChildren().addAll(header, contentNode, answersNode, expBox, footer);
-        } else {
-            card.getChildren().addAll(header, contentNode, answersNode, footer);
-        }
+        card.getChildren().addAll(header, contentNode, optionsNode, footer);
         return card;
     }
 
@@ -460,134 +484,25 @@ public final class QuestionController extends ScreenController {
         return box;
     }
 
-    
-    private Node createAnswersDisplayNode(QuestionDto q) {
-        QuestionType type = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
-        return switch (type) {
-            case TRUE_FALSE -> createTrueFalseAnswersNode(q);
-            case FILL_BLANK -> createFillBlankAnswersNode(q);
-            case SHORT_ANSWER -> createShortAnswerNode(q);
-            default -> createMultipleChoiceGrid(q);
-        };
-    }
-
-        private Node createTrueFalseAnswersNode(QuestionDto q) {
-        HBox box = new HBox(16);
+    private Node createSingleAnswerBox(String label, String text) {
+        HBox box = new HBox(8);
         box.setAlignment(Pos.CENTER_LEFT);
-        boolean isA = (q.correctOption() == 'A');
-        boolean isB = (q.correctOption() == 'B');
+        box.setStyle("-fx-background-color: #f0fdf4; -fx-border-color: #22c55e; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8 12;");
 
-        HBox trueBox = new HBox(10);
-        trueBox.setAlignment(Pos.CENTER_LEFT);
-        trueBox.setStyle(isA
-            ? "-fx-background-color: #ecfdf5; -fx-border-color: #10b981; -fx-border-width: 1.5; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 10 18;"
-            : "-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 10 18;");
-        Label trueBadge = new Label("ĐÚNG");
-        trueBadge.setStyle(isA ? "-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #047857;" : "-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #64748b;");
-        trueBox.getChildren().add(trueBadge);
-        if (isA) {
-            Region r = new Region();
-            HBox.setHgrow(r, Priority.ALWAYS);
-            Label check = new Label("✓ Đáp án đúng");
-            check.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #047857; -fx-background-color: #d1fae5; -fx-padding: 3 8; -fx-background-radius: 4;");
-            trueBox.getChildren().addAll(r, check);
-        }
+        Label optLabel = new Label(label);
+        optLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #15803d;");
 
-        HBox falseBox = new HBox(10);
-        falseBox.setAlignment(Pos.CENTER_LEFT);
-        falseBox.setStyle(isB
-            ? "-fx-background-color: #ecfdf5; -fx-border-color: #10b981; -fx-border-width: 1.5; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 10 18;"
-            : "-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 10 18;");
-        Label falseBadge = new Label("SAI");
-        falseBadge.setStyle(isB ? "-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #047857;" : "-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #64748b;");
-        falseBox.getChildren().add(falseBadge);
-        if (isB) {
-            Region r = new Region();
-            HBox.setHgrow(r, Priority.ALWAYS);
-            Label check = new Label("✓ Đáp án đúng");
-            check.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #047857; -fx-background-color: #d1fae5; -fx-padding: 3 8; -fx-background-radius: 4;");
-            falseBox.getChildren().addAll(r, check);
-        }
+        Label optText = new Label(text == null ? "" : text);
+        optText.setWrapText(true);
+        optText.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(optText, Priority.ALWAYS);
+        optText.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #166534;");
 
-        HBox.setHgrow(trueBox, Priority.ALWAYS);
-        HBox.setHgrow(falseBox, Priority.ALWAYS);
-        box.getChildren().addAll(trueBox, falseBox);
+        Label check = new Label("✓ Đáp án đúng");
+        check.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #15803d; -fx-background-color: #dcfce7; -fx-padding: 2 6; -fx-background-radius: 4;");
+
+        box.getChildren().addAll(optLabel, optText, check);
         return box;
-    }
-
-    private Node createFillBlankAnswersNode(QuestionDto q) {
-        VBox container = new VBox(10);
-        container.setStyle("-fx-background-color: #f0fdf4; -fx-border-color: #86efac; -fx-border-width: 1.2; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 12 16;");
-
-        Label title = new Label("📝 Từ cần điền chính xác vào chỗ trống:");
-        title.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #166534;");
-        container.getChildren().add(title);
-
-        FlowPane blanks = new FlowPane();
-        blanks.setHgap(16);
-        blanks.setVgap(8);
-
-        HBox b1 = new HBox(8);
-        b1.setAlignment(Pos.CENTER_LEFT);
-        b1.setStyle("-fx-background-color: white; -fx-border-color: #22c55e; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 6 14;");
-        Label tag1 = new Label("Vị trí 1:");
-        tag1.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #15803d;");
-        Label val1 = new Label(q.optionA() != null && !q.optionA().isBlank() ? q.optionA() : "-");
-        val1.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #0f172a;");
-        b1.getChildren().addAll(tag1, val1);
-        blanks.getChildren().add(b1);
-
-        boolean hasBlank2 = q.optionB() != null && !q.optionB().isBlank() && !"-".equals(q.optionB().trim());
-        if (hasBlank2) {
-            HBox b2 = new HBox(8);
-            b2.setAlignment(Pos.CENTER_LEFT);
-            b2.setStyle("-fx-background-color: white; -fx-border-color: #22c55e; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 6 14;");
-            Label tag2 = new Label("Vị trí 2:");
-            tag2.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #15803d;");
-            Label val2 = new Label(q.optionB());
-            val2.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #0f172a;");
-            b2.getChildren().addAll(tag2, val2);
-            blanks.getChildren().add(b2);
-        }
-
-        container.getChildren().add(blanks);
-        return container;
-    }
-
-    private Node createShortAnswerNode(QuestionDto q) {
-        VBox container = new VBox(8);
-        container.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-width: 1.2; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 12 16;");
-
-        Label title = new Label("✍️ Câu trả lời mẫu / Đáp án chính xác:");
-        title.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #334155;");
-
-        HBox ansBox = new HBox(10);
-        ansBox.setAlignment(Pos.CENTER_LEFT);
-        ansBox.setStyle("-fx-background-color: white; -fx-border-color: #3b82f6; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 10 16;");
-        Label ansText = new Label(q.optionA() != null ? q.optionA() : "");
-        ansText.setWrapText(true);
-        ansText.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1d4ed8;");
-        ansBox.getChildren().add(ansText);
-
-        container.getChildren().addAll(title, ansBox);
-        return container;
-    }
-
-    private Node createMultipleChoiceGrid(QuestionDto q) {
-        GridPane grid = new GridPane();
-        grid.setHgap(14);
-        grid.setVgap(10);
-        ColumnConstraints col1 = new ColumnConstraints();
-        col1.setPercentWidth(50);
-        ColumnConstraints col2 = new ColumnConstraints();
-        col2.setPercentWidth(50);
-        grid.getColumnConstraints().addAll(col1, col2);
-
-        grid.add(createOptionBox("A", q.optionA(), q.correctOption() == 'A'), 0, 0);
-        grid.add(createOptionBox("B", q.optionB(), q.correctOption() == 'B'), 1, 0);
-        grid.add(createOptionBox("C", q.optionC(), q.correctOption() == 'C'), 0, 1);
-        grid.add(createOptionBox("D", q.optionD(), q.correctOption() == 'D'), 1, 1);
-        return grid;
     }
 
     private Node createEmptyState() {

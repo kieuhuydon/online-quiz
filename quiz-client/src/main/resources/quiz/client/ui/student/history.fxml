@@ -4,8 +4,18 @@
 <?import javafx.scene.layout.*?>
 <VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.HistoryController" spacing="14">
     <padding><Insets top="18" right="22" bottom="20" left="22"/></padding>
-    <HBox alignment="CENTER_LEFT" spacing="12"><HBox alignment="CENTER_LEFT" spacing="8"><Hyperlink text="Bài thi" onAction="#exams" styleClass="breadcrumb-link"/><Label text="›" styleClass="muted"/><Label text="Lịch sử làm bài" styleClass="muted"/></HBox><Region HBox.hgrow="ALWAYS"/><ProgressIndicator fx:id="progress" visible="false" prefWidth="24" prefHeight="24"/><Button text="Tải lại" onAction="#reload" styleClass="secondary-button"/></HBox>
-    <VBox spacing="4"><Label text="KẾT QUẢ CỦA BẠN" styleClass="eyebrow"/><Label text="Lịch sử làm bài" styleClass="page-heading"/><Label text="Chọn Xem review bên cạnh bài thi để xem câu đúng, câu sai và giải thích." styleClass="muted"/></VBox>
+    <HBox alignment="CENTER_LEFT" spacing="12">
+        <Button text="← Quay lại" onAction="#exams" styleClass="secondary-button"/>
+        <HBox alignment="CENTER_LEFT" spacing="8">
+            <Hyperlink text="Bài thi" onAction="#exams" styleClass="breadcrumb-link"/>
+            <Label text="›" styleClass="muted"/>
+            <Label text="Lịch sử làm bài" styleClass="muted"/>
+        </HBox>
+        <Region HBox.hgrow="ALWAYS"/>
+        <ProgressIndicator fx:id="progress" visible="false" prefWidth="24" prefHeight="24"/>
+        <Button text="Tải lại" onAction="#reload" styleClass="secondary-button"/>
+    </HBox>
+    <VBox spacing="4"><Label text="KẾT QUẢ CỦA BẠN" styleClass="eyebrow"/><Label text="Lịch sử làm bài" styleClass="page-heading"/></VBox>
     <Label fx:id="notice" visible="false" managed="false" styleClass="error-notice" wrapText="true"/>
     <TableView fx:id="table" VBox.vgrow="ALWAYS" styleClass="account-card"/>
 </VBox>
