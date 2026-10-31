@@ -46,7 +46,7 @@ public final class QuestionService {
         Question input = Question.createNew(validated.content(), validated.optionA(),
             validated.optionB(), validated.optionC(), validated.optionD(),
             validated.correctOption(), validated.topic(), validated.difficulty(),
-            validated.questionType(), actorId);
+            validated.questionType(), validated.explanation(), actorId);
         return transactions.executeInTransaction(connection -> {
             requireTeacherOrAdmin(connection, actorId);
             return questions.save(connection, input);
@@ -86,7 +86,7 @@ public final class QuestionService {
             Question updated = new Question(existing.id(), validated.content(), validated.optionA(),
                 validated.optionB(), validated.optionC(), validated.optionD(),
                 validated.correctOption(), validated.topic(), validated.difficulty(),
-                validated.questionType(),
+                validated.questionType(), validated.explanation(),
                 existing.active(), existing.createdBy(), existing.createdAt(), existing.updatedAt());
             boolean ok = questions.update(connection, updated);
             if (!ok) {
@@ -134,7 +134,7 @@ public final class QuestionService {
     private static QuestionDto toDto(Question q) {
         return new QuestionDto(
             q.id(), q.content(), q.optionA(), q.optionB(), q.optionC(), q.optionD(),
-            q.correctOption(), q.topic(), q.difficulty(), q.questionType(), q.active(), q.createdBy(), q.createdAt()
+            q.correctOption(), q.topic(), q.difficulty(), q.questionType(), q.explanation(), q.active(), q.createdBy(), q.createdAt()
         );
     }
 
@@ -153,8 +153,9 @@ public final class QuestionService {
             throw new ValidationException("Difficulty is required");
         }
         QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
+        String explanation = dto.explanation();
         return new CreateQuestionDto(content, optionA, optionB, optionC, optionD,
-            correctOption, topic, dto.difficulty(), questionType);
+            correctOption, topic, dto.difficulty(), questionType, explanation);
     }
 
     private UpdateQuestionDto validateUpdate(UpdateQuestionDto dto) {
@@ -173,8 +174,9 @@ public final class QuestionService {
             throw new ValidationException("Difficulty is required");
         }
         QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
+        String explanation = dto.explanation();
         return new UpdateQuestionDto(dto.id(), content, optionA, optionB, optionC, optionD,
-            correctOption, topic, dto.difficulty(), questionType);
+            correctOption, topic, dto.difficulty(), questionType, explanation);
     }
 
     private static char normalizeCorrectOption(char correctOption) {
@@ -202,3 +204,5 @@ public final class QuestionService {
         }
     }
 }
+
+

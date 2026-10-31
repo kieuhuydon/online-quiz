@@ -85,6 +85,12 @@ public final class QuestionFileParser {
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 
+    // Pattern nhan dien dong giai thich dap an
+    private static final Pattern EXPLICIT_EXPLANATION = Pattern.compile(
+        "^(?:gi\u1ea3i\\\\s*th\u00edch|l\u1eddi\\\\s*gi\u1ea3i|h\u01b0\u1edbng\\\\s*d\u1eabn|explanation|explain)\\\\s*[\\\\:\\\\=\\\\-]\\\\s*(.+)$",
+        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
     // Từ điển nhận diện chủ đề bài học tiếng Anh thông minh
     private static final Map<String, Pattern[]> ENGLISH_TOPICS = new LinkedHashMap<>();
 
@@ -332,7 +338,8 @@ public final class QuestionFileParser {
                     }
 
                     try {
-                        results.add(ClientValidation.question(new CreateQuestionDto(content, a, b, c, d, correct, topic, diff)));
+                        quiz.common.enums.QuestionType csvType = detectQuestionType(content, a, b, c, d);
+                    results.add(ClientValidation.question(new CreateQuestionDto(content, a, b, c, d, correct, topic, diff, csvType, null)));
                     } catch (Exception ignored) {}
                 }
             }
@@ -372,6 +379,13 @@ public final class QuestionFileParser {
             }
 
             if (line.startsWith("#") || line.startsWith("//")) {
+                continue;
+            }
+
+            // Kiem tra dong giai thich dap an
+            Matcher expMatch = EXPLICIT_EXPLANATION.matcher(line);
+            if (expMatch.matches()) {
+                current.explanation = expMatch.group(1).trim();
                 continue;
             }
 
@@ -617,9 +631,10 @@ public final class QuestionFileParser {
             diff = detectDifficulty(finalContent, a, bText, c, d);
         }
 
+        quiz.common.enums.QuestionType qType = detectQuestionType(finalContent, a, bText, c, d);
         try {
             CreateQuestionDto validated = ClientValidation.question(
-                new CreateQuestionDto(finalContent, a, bText, c, d, correct, topic, diff)
+                new CreateQuestionDto(finalContent, a, bText, c, d, correct, topic, diff, qType, b.explanation)
             );
             list.add(validated);
         } catch (Exception ignored) {
@@ -631,8 +646,9 @@ public final class QuestionFileParser {
                 String safeC = c.length() > 250 ? c.substring(0, 250) : c;
                 String safeD = d.length() > 250 ? d.substring(0, 250) : d;
                 String safeTopic = topic.length() > 95 ? topic.substring(0, 95) : topic;
+                String safeExp = b.explanation != null && b.explanation.length() > 1950 ? b.explanation.substring(0, 1950) : b.explanation;
                 list.add(ClientValidation.question(
-                    new CreateQuestionDto(safeContent, safeA, safeB, safeC, safeD, correct, safeTopic, diff)
+                    new CreateQuestionDto(safeContent, safeA, safeB, safeC, safeD, correct, safeTopic, diff, qType, safeExp)
                 ));
             } catch (Exception ignored2) {}
         }
@@ -684,7 +700,32 @@ public final class QuestionFileParser {
         return Difficulty.MEDIUM;
     }
 
-    private static String cleanOptionText(String opt) {
+    public static quiz.common.enums.QuestionType detectQuestionType(String content, String a, String b, String c, String d) {
+        if (content != null && (content.contains("___") || content.toLowerCase(Locale.ROOT).contains("[blank]"))) {
+            return quiz.common.enums.QuestionType.FILL_BLANK;
+        }
+        if (isTrueFalse(a) && isTrueFalse(b)) {
+            return quiz.common.enums.QuestionType.TRUE_FALSE;
+        }
+        if (isDashOrEmpty(c) && isDashOrEmpty(d)) {
+            return quiz.common.enums.QuestionType.SHORT_ANSWER;
+        }
+        return quiz.common.enums.QuestionType.MULTIPLE_CHOICE;
+    }
+
+    private static boolean isTrueFalse(String s) {
+        if (s == null) return false;
+        String t = s.trim().toLowerCase(Locale.ROOT);
+        return t.equals("dung") || t.equals("sai") || t.equals("true") || t.equals("false");
+    }
+
+    private static boolean isDashOrEmpty(String s) {
+        if (s == null) return true;
+        String t = s.trim();
+        return t.isEmpty() || t.equals("-") || t.equals("--") || t.equalsIgnoreCase("none");
+    }
+
+        private static String cleanOptionText(String opt) {
         if (opt == null) return "";
         return opt.trim().replaceAll("^[\\.\\:\\-\\)]\\s*", "");
     }
@@ -698,6 +739,7 @@ public final class QuestionFileParser {
         char correctOption = 'A';
         String explicitTopic;
         Difficulty explicitDifficulty;
+        String explanation;
 
         boolean isEmpty() {
             return content == null && optA == null && optB == null && optC == null && optD == null;

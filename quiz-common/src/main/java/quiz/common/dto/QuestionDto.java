@@ -6,7 +6,7 @@ import java.io.Serializable;
 import java.time.Instant;
 
 /**
- * DTO câu hỏi đầy đủ (dành cho Giáo viên / Admin, có correctOption).
+ * DTO câu hỏi đầy đủ (dành cho Giáo viên / Admin, có correctOption và explanation).
  */
 public record QuestionDto(
     long id,
@@ -19,6 +19,7 @@ public record QuestionDto(
     String topic,
     Difficulty difficulty,
     QuestionType questionType,
+    String explanation,
     boolean active,
     long createdBy,
     Instant createdAt
@@ -31,9 +32,17 @@ public record QuestionDto(
 
     public QuestionDto(long id, String content, String optionA, String optionB,
                        String optionC, String optionD, char correctOption,
+                       String topic, Difficulty difficulty, QuestionType questionType,
+                       boolean active, long createdBy, Instant createdAt) {
+        this(id, content, optionA, optionB, optionC, optionD, correctOption,
+             topic, difficulty, questionType, null, active, createdBy, createdAt);
+    }
+
+    public QuestionDto(long id, String content, String optionA, String optionB,
+                       String optionC, String optionD, char correctOption,
                        String topic, Difficulty difficulty, boolean active,
                        long createdBy, Instant createdAt) {
         this(id, content, optionA, optionB, optionC, optionD, correctOption,
-             topic, difficulty, QuestionType.MULTIPLE_CHOICE, active, createdBy, createdAt);
+             topic, difficulty, QuestionType.MULTIPLE_CHOICE, null, active, createdBy, createdAt);
     }
 }

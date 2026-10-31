@@ -44,7 +44,7 @@ public final class ClientValidation {
         return new CreateQuestionDto(text(input.content(), 1000),
             text(input.optionA(), 255), text(input.optionB(), 255),
             text(input.optionC(), 255), text(input.optionD(), 255),
-            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty());
+            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), input.questionType(), optionalText(input.explanation(), 2000));
     }
 
     public static UpdateQuestionDto updateQuestion(UpdateQuestionDto input) {
@@ -55,7 +55,7 @@ public final class ClientValidation {
         return new UpdateQuestionDto(input.id(), text(input.content(), 1000),
             text(input.optionA(), 255), text(input.optionB(), 255),
             text(input.optionC(), 255), text(input.optionD(), 255),
-            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty());
+            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), input.questionType(), optionalText(input.explanation(), 2000));
 
     }
 
@@ -127,7 +127,18 @@ public final class ClientValidation {
         return value;
     }
 
+    private static String optionalText(String input, int limit) {
+        if (input == null) return null;
+        String value = input.strip();
+        if (value.isEmpty()) return null;
+        if (value.codePointCount(0, value.length()) > limit) {
+            throw invalid();
+        }
+        return value;
+    }
+
     private static ApiException invalid() {
         return new ApiException(ErrorCode.VALIDATION_ERROR);
     }
 }
+
