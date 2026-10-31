@@ -46,7 +46,7 @@ public final class QuestionService {
         Question input = Question.createNew(validated.content(), validated.optionA(),
             validated.optionB(), validated.optionC(), validated.optionD(),
             validated.correctOption(), validated.topic(), validated.difficulty(),
-            validated.questionType(), actorId, validated.answerKey(), validated.explanation());
+            validated.questionType(), validated.explanation(), actorId);
         return transactions.executeInTransaction(connection -> {
             requireTeacherOrAdmin(connection, actorId);
             return questions.save(connection, input);
@@ -86,8 +86,8 @@ public final class QuestionService {
             Question updated = new Question(existing.id(), validated.content(), validated.optionA(),
                 validated.optionB(), validated.optionC(), validated.optionD(),
                 validated.correctOption(), validated.topic(), validated.difficulty(),
-                validated.questionType(),
-                existing.active(), existing.createdBy(), existing.createdAt(), existing.updatedAt(), validated.answerKey(), validated.explanation());
+                validated.questionType(), validated.explanation(),
+                existing.active(), existing.createdBy(), existing.createdAt(), existing.updatedAt());
             boolean ok = questions.update(connection, updated);
             if (!ok) {
                 throw new NotFoundException("Question not found");
@@ -134,7 +134,7 @@ public final class QuestionService {
     private static QuestionDto toDto(Question q) {
         return new QuestionDto(
             q.id(), q.content(), q.optionA(), q.optionB(), q.optionC(), q.optionD(),
-            q.correctOption(), q.topic(), q.difficulty(), q.questionType(), q.active(), q.createdBy(), q.createdAt(), q.answerKey(), q.explanation()
+            q.correctOption(), q.topic(), q.difficulty(), q.questionType(), q.explanation(), q.active(), q.createdBy(), q.createdAt()
         );
     }
 
@@ -156,8 +156,10 @@ public final class QuestionService {
         if (dto.difficulty() == null) {
             throw new ValidationException("Difficulty is required");
         }
+        QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
+        String explanation = dto.explanation();
         return new CreateQuestionDto(content, optionA, optionB, optionC, optionD,
-            correctOption, topic, dto.difficulty(), questionType, answerKey, explanation);
+            correctOption, topic, dto.difficulty(), questionType, explanation);
     }
 
     private UpdateQuestionDto validateUpdate(UpdateQuestionDto dto) {
@@ -179,33 +181,10 @@ public final class QuestionService {
         if (dto.difficulty() == null) {
             throw new ValidationException("Difficulty is required");
         }
+        QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
+        String explanation = dto.explanation();
         return new UpdateQuestionDto(dto.id(), content, optionA, optionB, optionC, optionD,
-            correctOption, topic, dto.difficulty(), questionType, answerKey, explanation);
-    }
-
-    private static String validateAnswerKey(String key, QuestionType type) {
-        String value = key == null ? "" : key.strip();
-        if (type == QuestionType.MULTIPLE_CHOICE) return "";
-        if (value.isBlank() || value.length() > 1000) throw new ValidationException("Answer key is required and must be at most 1000 characters");
-        if (type == QuestionType.FILL_BLANK && value.split("\\s*\\|\\s*", -1).length == 0) throw new ValidationException("Fill blank answer is invalid");
-        if (type == QuestionType.TRUE_FALSE && !List.of("true", "false", "đúng", "sai").contains(value.toLowerCase())) throw new ValidationException("True/false answer must be True or False");
-        return value;
-    }
-
-    private static void validateBlankCount(String content, String key, QuestionType type) {
-        if (type == QuestionType.FILL_BLANK) {
-            if (java.util.Arrays.stream(key.split("\\s*\\|\\s*", -1)).anyMatch(word -> word.isBlank() || word.matches(".*\\s+.*")))
-                throw new ValidationException("Enter exactly one word for each blank, separated with | ");
-            int blanks = content.split("___", -1).length - 1;
-            int answers = key.split("\\s*\\|\\s*", -1).length;
-            if (blanks < 1 || blanks != answers) throw new ValidationException("Each ___ blank needs exactly one answer separated by | ");
-        }
-    }
-
-    private static String optionValue(String input, QuestionType type, String fallback) {
-        return type == QuestionType.MULTIPLE_CHOICE
-            ? ServiceValidation.requiredText(input, "Option", 255)
-            : (input == null || input.isBlank() ? fallback : ServiceValidation.requiredText(input, "Option", 255));
+            correctOption, topic, dto.difficulty(), questionType, explanation);
     }
 
     private static char normalizeCorrectOption(char correctOption) {
@@ -233,3 +212,5 @@ public final class QuestionService {
         }
     }
 }
+
+

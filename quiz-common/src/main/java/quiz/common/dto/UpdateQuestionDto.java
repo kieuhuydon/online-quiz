@@ -5,8 +5,7 @@ import quiz.common.enums.QuestionType;
 import java.io.Serializable;
 
 /**
- * DTO để cập nhật câu hỏi hiện có (dành cho Giáo viên / Admin).
- * Chỉ cho phép sửa khi câu hỏi chưa bị dùng trong quiz nào (active=true).
+ * DTO để cập nhật câu hỏi đã có (dành cho Giáo viên / Admin).
  */
 public record UpdateQuestionDto(
     long id,
@@ -19,7 +18,6 @@ public record UpdateQuestionDto(
     String topic,
     Difficulty difficulty,
     QuestionType questionType,
-    String answerKey,
     String explanation
 ) implements Serializable {
     public UpdateQuestionDto {
@@ -30,12 +28,15 @@ public record UpdateQuestionDto(
 
     public UpdateQuestionDto(long id, String content, String optionA, String optionB,
                              String optionC, String optionD, char correctOption,
+                             String topic, Difficulty difficulty, QuestionType questionType) {
+        this(id, content, optionA, optionB, optionC, optionD, correctOption,
+             topic, difficulty, questionType, null);
+    }
+
+    public UpdateQuestionDto(long id, String content, String optionA, String optionB,
+                             String optionC, String optionD, char correctOption,
                              String topic, Difficulty difficulty) {
         this(id, content, optionA, optionB, optionC, optionD, correctOption,
-             topic, difficulty, QuestionType.MULTIPLE_CHOICE, null, null);
-    }
-    public UpdateQuestionDto(long id, String content, String optionA, String optionB, String optionC, String optionD,
-                             char correctOption, String topic, Difficulty difficulty, QuestionType questionType) {
-        this(id, content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty, questionType, null, null);
+             topic, difficulty, QuestionType.MULTIPLE_CHOICE, null);
     }
 }

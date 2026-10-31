@@ -18,7 +18,6 @@ public record CreateQuestionDto(
     String topic,
     Difficulty difficulty,
     QuestionType questionType,
-    String answerKey,
     String explanation
 ) implements Serializable {
     public CreateQuestionDto {
@@ -29,12 +28,15 @@ public record CreateQuestionDto(
 
     public CreateQuestionDto(String content, String optionA, String optionB,
                              String optionC, String optionD, char correctOption,
+                             String topic, Difficulty difficulty, QuestionType questionType) {
+        this(content, optionA, optionB, optionC, optionD, correctOption,
+             topic, difficulty, questionType, null);
+    }
+
+    public CreateQuestionDto(String content, String optionA, String optionB,
+                             String optionC, String optionD, char correctOption,
                              String topic, Difficulty difficulty) {
         this(content, optionA, optionB, optionC, optionD, correctOption,
-             topic, difficulty, QuestionType.MULTIPLE_CHOICE, null, null);
-    }
-    public CreateQuestionDto(String content, String optionA, String optionB, String optionC, String optionD,
-                             char correctOption, String topic, Difficulty difficulty, QuestionType questionType) {
-        this(content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty, questionType, null, null);
+             topic, difficulty, QuestionType.MULTIPLE_CHOICE, null);
     }
 }

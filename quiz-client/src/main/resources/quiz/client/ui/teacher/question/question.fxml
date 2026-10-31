@@ -17,7 +17,7 @@
             <VBox spacing="4" HBox.hgrow="ALWAYS">
                 <Label text="NGÂN HÀNG CÂU HỎI" styleClass="eyebrow"/>
                 <Label text="Quản lý câu hỏi" styleClass="page-heading" wrapText="true"/>
-                <Label text="Tạo, xem, tìm kiếm, sửa và xóa câu hỏi trắc nghiệm." styleClass="muted" wrapText="true"/>
+                <Label text="Tạo, xem, tìm kiếm, sửa và xóa câu hỏi trắc nghiệm, đúng/sai, điền khuyết." styleClass="muted" wrapText="true"/>
             </VBox>
             <HBox spacing="10" alignment="CENTER_RIGHT">
                 <ProgressIndicator fx:id="questionProgress" prefWidth="26" prefHeight="26" maxWidth="26" maxHeight="26" visible="false" managed="false"/>
@@ -31,11 +31,12 @@
 
         <Separator/>
 
-        <!-- Thanh tìm kiếm & lọc: Tìm kiếm theo nội dung, chủ đề, độ khó -->
+        <!-- Thanh tìm kiếm & lọc: Tìm kiếm theo nội dung, loại câu hỏi, chủ đề, độ khó -->
         <HBox spacing="10" alignment="CENTER_LEFT">
-            <TextField fx:id="searchContent" promptText="🔍 Tìm kiếm nội dung câu hỏi..." prefWidth="240" HBox.hgrow="ALWAYS"/>
-            <TextField fx:id="filterTopic" promptText="Chủ đề..." prefWidth="140"/>
-            <ComboBox fx:id="filterDifficulty" promptText="Độ khó" prefWidth="130"/>
+            <TextField fx:id="searchContent" promptText="🔍 Tìm kiếm nội dung câu hỏi..." prefWidth="220" HBox.hgrow="ALWAYS"/>
+            <ComboBox fx:id="filterQuestionType" promptText="Loại câu hỏi" prefWidth="150"/>
+            <TextField fx:id="filterTopic" promptText="Chủ đề..." prefWidth="130"/>
+            <ComboBox fx:id="filterDifficulty" promptText="Độ khó" prefWidth="120"/>
             <Button fx:id="filterApply" text="🔍 Lọc" onAction="#applyFilter" styleClass="secondary-button"/>
             <Button fx:id="filterClear" text="Đặt lại" onAction="#clearFilter" styleClass="secondary-button"/>
             <Label fx:id="listStatus" styleClass="status-label"/>
@@ -50,63 +51,61 @@
                 <Label text="Các trường có dấu * là bắt buộc" styleClass="muted"/>
             </HBox>
 
+            <HBox spacing="16" alignment="CENTER_LEFT">
+                <VBox spacing="4" prefWidth="240">
+                    <Label text="Dạng câu hỏi *" styleClass="field-label"/>
+                    <ComboBox fx:id="questionType" maxWidth="Infinity"/>
+                </VBox>
+                <Label fx:id="questionTypeHint" text="" styleClass="muted" wrapText="true" HBox.hgrow="ALWAYS"/>
+            </HBox>
+
             <VBox spacing="6">
                 <Label text="Nội dung câu hỏi *" styleClass="field-label"/>
-                <TextArea fx:id="questionContent" promptText="Nhập nội dung câu hỏi..." wrapText="true" prefRowCount="3"/>
+                <TextArea fx:id="questionContent" promptText="Nhập nội dung câu hỏi (Dùng '___' để làm vị trí điền khuyết)..." wrapText="true" prefRowCount="3"/>
             </VBox>
 
-            <GridPane hgap="16" vgap="10">
+            <GridPane fx:id="optionsGridContainer" hgap="16" vgap="10">
                 <columnConstraints>
                     <ColumnConstraints percentWidth="50"/>
                     <ColumnConstraints percentWidth="50"/>
                 </columnConstraints>
-                <VBox spacing="4" GridPane.columnIndex="0" GridPane.rowIndex="0">
-                    <Label text="Đáp án A *" styleClass="field-label"/>
+                <VBox fx:id="boxOptionA" spacing="4" GridPane.columnIndex="0" GridPane.rowIndex="0">
+                    <Label fx:id="labelOptionA" text="Đáp án A *" styleClass="field-label"/>
                     <TextField fx:id="questionOptionA" promptText="Nội dung đáp án A"/>
                 </VBox>
-                <VBox spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="0">
-                    <Label text="Đáp án B *" styleClass="field-label"/>
+                <VBox fx:id="boxOptionB" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                    <Label fx:id="labelOptionB" text="Đáp án B *" styleClass="field-label"/>
                     <TextField fx:id="questionOptionB" promptText="Nội dung đáp án B"/>
                 </VBox>
-                <VBox spacing="4" GridPane.columnIndex="0" GridPane.rowIndex="1">
-                    <Label text="Đáp án C *" styleClass="field-label"/>
+                <VBox fx:id="boxOptionC" spacing="4" GridPane.columnIndex="0" GridPane.rowIndex="1">
+                    <Label fx:id="labelOptionC" text="Đáp án C *" styleClass="field-label"/>
                     <TextField fx:id="questionOptionC" promptText="Nội dung đáp án C"/>
                 </VBox>
-                <VBox spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="1">
-                    <Label text="Đáp án D *" styleClass="field-label"/>
+                <VBox fx:id="boxOptionD" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                    <Label fx:id="labelOptionD" text="Đáp án D *" styleClass="field-label"/>
                     <TextField fx:id="questionOptionD" promptText="Nội dung đáp án D"/>
                 </VBox>
             </GridPane>
 
             <HBox spacing="16" alignment="CENTER_LEFT">
-                <VBox spacing="4" prefWidth="200">
-                    <Label text="Dạng câu hỏi *" styleClass="field-label"/>
-                    <ComboBox fx:id="questionType" maxWidth="Infinity"/>
-                </VBox>
-                <VBox spacing="4" HBox.hgrow="ALWAYS">
-                    <Label text="Đáp án chuẩn (điền khuyết: phân cách bằng |)" styleClass="field-label"/>
-                    <TextField fx:id="questionAnswerKey" promptText="Ví dụ: went | school; true/false: True hoặc False"/>
-                </VBox>
-            </HBox>
-            <VBox spacing="4">
-                <Label text="Giải thích đáp án *" styleClass="field-label"/>
-                <TextArea fx:id="questionExplanation" promptText="Giải thích vì sao đáp án này đúng..." wrapText="true" prefRowCount="2"/>
-            </VBox>
-
-            <HBox spacing="16" alignment="CENTER_LEFT">
-                <VBox spacing="4" prefWidth="150">
+                <VBox fx:id="boxCorrectOption" spacing="4" prefWidth="150">
                     <Label text="Đáp án đúng *" styleClass="field-label"/>
                     <ComboBox fx:id="questionCorrectOption" maxWidth="Infinity"/>
                 </VBox>
                 <VBox spacing="4" HBox.hgrow="ALWAYS">
                     <Label text="Chủ đề *" styleClass="field-label"/>
-                    <TextField fx:id="questionTopic" promptText="Ví dụ: Ngữ pháp, Từ vựng..."/>
+                    <TextField fx:id="questionTopic" promptText="Ví dụ: Ngữ pháp, Các thì, Câu điều kiện..."/>
                 </VBox>
                 <VBox spacing="4" prefWidth="170">
                     <Label text="Độ khó *" styleClass="field-label"/>
                     <ComboBox fx:id="questionDifficulty" maxWidth="Infinity"/>
                 </VBox>
             </HBox>
+
+            <VBox spacing="4">
+                <Label text="Giải thích đáp án (tùy chọn nhưng khuyến khích cho ngân hàng câu hỏi)" styleClass="field-label"/>
+                <TextArea fx:id="questionExplanation" promptText="Nhập giải thích chi tiết vì sao đáp án này đúng, kiến thức ngữ pháp cần lưu ý..." wrapText="true" prefRowCount="2"/>
+            </VBox>
 
             <Label fx:id="formError" styleClass="notice,error-notice" visible="false" managed="false"/>
 

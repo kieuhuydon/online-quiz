@@ -43,11 +43,9 @@ public final class ClientValidation {
         }
         quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
         return new CreateQuestionDto(text(input.content(), 1000),
-            option(input.optionA(), type, "Đúng"), option(input.optionB(), type, "Sai"),
-            option(input.optionC(), type, "-"), option(input.optionD(), type, "-"),
-            type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? correctOption(input.correctOption()) : 'A',
-            text(input.topic(), 100), input.difficulty(), type,
-            type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? "" : text(input.answerKey(), 1000), text(input.explanation(), 2000));
+            text(input.optionA(), 255), text(input.optionB(), 255),
+            text(input.optionC(), 255), text(input.optionD(), 255),
+            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), input.questionType(), optionalText(input.explanation(), 2000));
     }
 
     public static UpdateQuestionDto updateQuestion(UpdateQuestionDto input) {
@@ -57,11 +55,9 @@ public final class ClientValidation {
         positiveId(input.id());
         quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
         return new UpdateQuestionDto(input.id(), text(input.content(), 1000),
-            option(input.optionA(), type, "Đúng"), option(input.optionB(), type, "Sai"),
-            option(input.optionC(), type, "-"), option(input.optionD(), type, "-"),
-            type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? correctOption(input.correctOption()) : 'A',
-            text(input.topic(), 100), input.difficulty(), type,
-            type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? "" : text(input.answerKey(), 1000), text(input.explanation(), 2000));
+            text(input.optionA(), 255), text(input.optionB(), 255),
+            text(input.optionC(), 255), text(input.optionD(), 255),
+            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), input.questionType(), optionalText(input.explanation(), 2000));
 
     }
 
@@ -138,7 +134,18 @@ public final class ClientValidation {
         return value;
     }
 
+    private static String optionalText(String input, int limit) {
+        if (input == null) return null;
+        String value = input.strip();
+        if (value.isEmpty()) return null;
+        if (value.codePointCount(0, value.length()) > limit) {
+            throw invalid();
+        }
+        return value;
+    }
+
     private static ApiException invalid() {
         return new ApiException(ErrorCode.VALIDATION_ERROR);
     }
 }
+
