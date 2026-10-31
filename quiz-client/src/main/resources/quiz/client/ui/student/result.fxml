@@ -2,14 +2,40 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.ResultController" spacing="18" alignment="CENTER">
-    <padding><Insets top="36" right="30" bottom="28" left="30"/></padding>
-    <Label text="KẾT QUẢ BÀI THI" styleClass="eyebrow"/><Label fx:id="quizTitle" styleClass="page-heading" wrapText="true"/>
-    <Label fx:id="score" style="-fx-font-size: 40px; -fx-font-weight: bold;"/>
-    <Label fx:id="outcome" styleClass="card-heading"/>
-    <GridPane hgap="14" vgap="12">
-        <Label text="Số câu đúng:" GridPane.rowIndex="0" GridPane.columnIndex="0"/><Label fx:id="correct" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-        <Label text="Đã nộp lúc:" GridPane.rowIndex="1" GridPane.columnIndex="0"/><Label fx:id="submitted" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-    </GridPane>
-    <HBox spacing="12"><Button text="Xem lịch sử" onAction="#history" styleClass="secondary-button"/><Button text="← Về trang chủ" onAction="#home" styleClass="primary-button"/></HBox>
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.ResultController" spacing="18" alignment="TOP_CENTER">
+    <padding><Insets top="24" right="20" bottom="24" left="20"/></padding>
+
+    <VBox styleClass="content-card" maxWidth="540" spacing="18" alignment="CENTER">
+        <Label text="HOÀN THÀNH BÀI KIỂM TRA" styleClass="eyebrow"/>
+        <Label fx:id="quizTitle" styleClass="page-heading" wrapText="true" textAlignment="CENTER"/>
+
+        <VBox alignment="CENTER" spacing="8" styleClass="sub-card" maxWidth="380">
+            <Label text="ĐIỂM SỐ ĐẠT ĐƯỢC" styleClass="stat-label"/>
+            <Label fx:id="score" style="-fx-font-size: 42px; -fx-font-weight: bold; -fx-text-fill: #4f46e5;"/>
+            <Label fx:id="outcome" styleClass="badge"/>
+        </VBox>
+
+        <GridPane hgap="20" vgap="12" maxWidth="420">
+            <columnConstraints>
+                <ColumnConstraints minWidth="140" prefWidth="150"/>
+                <ColumnConstraints hgrow="ALWAYS"/>
+            </columnConstraints>
+            <Label text="Số câu trả lời đúng:" styleClass="field-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+            <Label fx:id="correct" style="-fx-font-weight: bold;" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+            <Label text="Hình thức nộp bài:" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+            <Label fx:id="submitReasonLabel" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+            <Label text="Thời gian nộp bài:" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+            <Label fx:id="submitted" styleClass="muted" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+        </GridPane>
+
+        <Separator/>
+
+        <HBox spacing="10" alignment="CENTER">
+            <Button text="← Về trang chủ" onAction="#home" styleClass="secondary-button"/>
+            <Button text="📊 Lịch sử làm bài" onAction="#history" styleClass="secondary-button"/>
+            <Button text="🔍 Xem chi tiết đáp án" onAction="#review" styleClass="primary-button"/>
+        </HBox>
+    </VBox>
 </VBox>

@@ -31,20 +31,20 @@ public final class HistoryController extends ScreenController {
 
     @FXML
     private void initialize() {
-        addColumn("Bài kiểm tra", ResultDto::quizTitle, 190);
-        addColumn("Điểm", r -> String.format(Locale.ROOT, "%.2f / 10", r.score()), 90);
-        addColumn("Đúng / Tổng", r -> r.correctCount() + " / " + r.totalQuestions(), 100);
-        addColumn("Kết quả", r -> r.passed() ? "Đạt" : "Chưa đạt", 100);
+        addColumn("Bài kiểm tra", ResultDto::quizTitle, 220);
+        addColumn("Điểm số", r -> String.format(Locale.ROOT, "%.2f / 10", r.score()), 95);
+        addColumn("Đúng / Tổng", r -> r.correctCount() + " / " + r.totalQuestions() + " câu", 110);
+        addStatusColumn();
         addColumn("Nộp lúc", r -> DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
-            .withZone(ZoneId.systemDefault()).format(r.submittedAt()), 150);
+            .withZone(ZoneId.systemDefault()).format(r.submittedAt()), 145);
         addColumn("Hình thức nộp", r -> switch (r.submitReason()) {
             case MANUAL -> "Nộp thủ công";
             case TIMEOUT -> "Tự động nộp — Hết giờ";
             case ANTICHEAT -> "Tự động nộp — Vi phạm";
-        }, 190);
+        }, 185);
         addReviewAction();
         table.setPlaceholder(new Label("Chưa có kết quả bài thi nào."));
-        table.setFixedCellSize(48);
+        table.setFixedCellSize(46);
     }
 
     private void addColumn(String title, Function<ResultDto, String> value, int width) {
@@ -54,13 +54,35 @@ public final class HistoryController extends ScreenController {
         table.getColumns().add(column);
     }
 
+    private void addStatusColumn() {
+        TableColumn<ResultDto, String> column = new TableColumn<>("Kết quả");
+        column.setPrefWidth(115);
+        column.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().passed() ? "ĐẠT" : "CHƯA ĐẠT"));
+        column.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                    setText(null);
+                } else {
+                    Label badge = new Label(item);
+                    badge.getStyleClass().addAll("badge", "ĐẠT".equals(item) ? "badge-pass" : "badge-fail");
+                    setGraphic(badge);
+                    setText(null);
+                }
+            }
+        });
+        table.getColumns().add(column);
+    }
+
     private void addReviewAction() {
-        TableColumn<ResultDto, Void> column = new TableColumn<>("Review");
-        column.setPrefWidth(130);
+        TableColumn<ResultDto, Void> column = new TableColumn<>("Chi tiết");
+        column.setPrefWidth(135);
         column.setCellFactory(ignored -> new TableCell<>() {
-            private final Button button = new Button("Xem review");
+            private final Button button = new Button("🔍 Xem đáp án");
             {
-                button.getStyleClass().addAll("secondary-button", "btn-small");
+                button.getStyleClass().addAll("accent-outline-button", "btn-small");
                 button.setOnAction(event -> {
                     ResultDto selected = getTableRow() == null ? null : getTableRow().getItem();
                     if (selected != null) navigator.showReview(selected);

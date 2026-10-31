@@ -162,6 +162,7 @@ public final class TeacherController extends ScreenController {
 
     // Quiz Details & Review/Edit Panel (Feature 2)
     @FXML private VBox quizDetailPanel;
+    @FXML private VBox detailMainWorkspace;
     @FXML private Label detailQuizTitle;
     @FXML private Label detailStatusBadge;
     @FXML private Label detailQuizInfo;
@@ -564,12 +565,76 @@ public final class TeacherController extends ScreenController {
         });
 
         TableColumn<QuizDto, String> colCreated = new TableColumn<>("Ngày tạo");
-        colCreated.setPrefWidth(130);
+        colCreated.setPrefWidth(125);
         colCreated.setCellValueFactory(d -> new SimpleStringProperty(DATE_FORMAT.format(d.getValue().createdAt())));
 
-        quizTable.getColumns().setAll(List.of(colId, colTitle, colCategory, colDuration, colPass, colStatus, colPin, colCreated));
+        TableColumn<QuizDto, Void> colQuickActions = new TableColumn<>("Thao tác nhanh");
+        colQuickActions.setPrefWidth(235);
+        colQuickActions.setCellFactory(col -> new TableCell<>() {
+            private final Button btnDetail = new Button("Chi tiết / Sửa");
+            private final Button btnAssign = new Button("Giao lớp");
+            private final Button btnStateAction = new Button();
+            private final HBox box = new HBox(6, btnDetail, btnAssign, btnStateAction);
+            {
+                btnDetail.getStyleClass().addAll("secondary-button", "btn-small");
+                btnAssign.getStyleClass().addAll("secondary-button", "btn-small");
+                box.setAlignment(Pos.CENTER_LEFT);
+
+                btnDetail.setOnAction(e -> {
+                    QuizDto row = getTableRow() != null ? getTableRow().getItem() : null;
+                    if (row != null) {
+                        quizTable.getSelectionModel().select(row);
+                        openReviewAndEdit(row.id(), row.title(), row.status());
+                    }
+                });
+                btnAssign.setOnAction(e -> {
+                    QuizDto row = getTableRow() != null ? getTableRow().getItem() : null;
+                    if (row != null) {
+                        quizTable.getSelectionModel().select(row);
+                        onAssignQuizClick();
+                    }
+                });
+                btnStateAction.setOnAction(e -> {
+                    QuizDto row = getTableRow() != null ? getTableRow().getItem() : null;
+                    if (row == null) return;
+                    quizTable.getSelectionModel().select(row);
+                    if (row.status() == QuizStatus.DRAFT) {
+                        onOpenQuizClick();
+                    } else if (row.status() == QuizStatus.OPEN) {
+                        onMonitorClick();
+                    }
+                });
+            }
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                QuizDto row = (!empty && getTableRow() != null) ? getTableRow().getItem() : null;
+                if (row == null) {
+                    setGraphic(null);
+                } else {
+                    btnStateAction.getStyleClass().removeAll("success-button", "accent-outline-button", "secondary-button", "btn-small");
+                    if (row.status() == QuizStatus.DRAFT) {
+                        btnStateAction.setText("Mở đề");
+                        btnStateAction.getStyleClass().addAll("success-button", "btn-small");
+                        btnStateAction.setVisible(true);
+                        btnStateAction.setManaged(true);
+                    } else if (row.status() == QuizStatus.OPEN) {
+                        btnStateAction.setText("Giám sát");
+                        btnStateAction.getStyleClass().addAll("accent-outline-button", "btn-small");
+                        btnStateAction.setVisible(true);
+                        btnStateAction.setManaged(true);
+                    } else {
+                        btnStateAction.setVisible(false);
+                        btnStateAction.setManaged(false);
+                    }
+                    setGraphic(box);
+                }
+            }
+        });
+
+        quizTable.getColumns().setAll(List.of(colId, colTitle, colCategory, colDuration, colPass, colStatus, colPin, colCreated, colQuickActions));
         quizTable.setItems(quizList);
-        quizTable.setPlaceholder(new Label("Chưa có đề kiểm tra nào. Bấm 'Tạo Đề Mới' hoặc 'Tạo Đề Tự Động' để bắt đầu."));
+        quizTable.setPlaceholder(new Label("Chưa có đề kiểm tra nào. Bấm '+ Tạo Đề Thủ Công' hoặc '⚡ Tạo Đề Tự Động' ở góc trên để bắt đầu."));
     }
 
     private void updateQuizButtons(QuizDto selected) {
@@ -1330,6 +1395,10 @@ public final class TeacherController extends ScreenController {
         isDetailQuizDraft = (status == QuizStatus.DRAFT);
 
         showQuizPanel(quizDetailPanel);
+        if (detailMainWorkspace != null) {
+            detailMainWorkspace.setVisible(true);
+            detailMainWorkspace.setManaged(true);
+        }
         questionPickerPanel.setVisible(false);
         questionPickerPanel.setManaged(false);
         scrollToTop();
@@ -1417,10 +1486,14 @@ public final class TeacherController extends ScreenController {
         lblPickerTitle.setText("➕ Chọn câu hỏi từ Ngân hàng câu hỏi để THÊM vào đề thi:");
         btnConfirmPicker.setText("Thêm Câu Hỏi Này Vào Đề");
         btnConfirmPicker.setDisable(true);
+        if (detailMainWorkspace != null) {
+            detailMainWorkspace.setVisible(false);
+            detailMainWorkspace.setManaged(false);
+        }
         questionPickerPanel.setVisible(true);
         questionPickerPanel.setManaged(true);
         filterPickerQuestions();
-        scrollToBottom();
+        scrollToTop();
     }
 
     private void openQuestionPickerForReplace(DetailQuestionRow row) {
@@ -1434,10 +1507,14 @@ public final class TeacherController extends ScreenController {
         if (cmbPickerQuestionType != null) {
             cmbPickerQuestionType.setValue(row.getQuestion().questionType() != null ? row.getQuestion().questionType() : QuestionType.MULTIPLE_CHOICE);
         }
+        if (detailMainWorkspace != null) {
+            detailMainWorkspace.setVisible(false);
+            detailMainWorkspace.setManaged(false);
+        }
         questionPickerPanel.setVisible(true);
         questionPickerPanel.setManaged(true);
         filterPickerQuestions();
-        scrollToBottom();
+        scrollToTop();
     }
 
     private void removeQuestionFromDetail(DetailQuestionRow row) {
@@ -1501,6 +1578,10 @@ public final class TeacherController extends ScreenController {
         detailNotice.setManaged(true);
         questionPickerPanel.setVisible(false);
         questionPickerPanel.setManaged(false);
+        if (detailMainWorkspace != null) {
+            detailMainWorkspace.setVisible(true);
+            detailMainWorkspace.setManaged(true);
+        }
         filterDetailQuestions();
     }
 
@@ -1508,6 +1589,10 @@ public final class TeacherController extends ScreenController {
     private void onCancelPickerClick() {
         questionPickerPanel.setVisible(false);
         questionPickerPanel.setManaged(false);
+        if (detailMainWorkspace != null) {
+            detailMainWorkspace.setVisible(true);
+            detailMainWorkspace.setManaged(true);
+        }
     }
 
     @FXML
