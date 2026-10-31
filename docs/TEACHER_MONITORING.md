@@ -39,11 +39,23 @@ Migration không được tự động áp dụng khi server khởi động.
 
 Mở thêm client để đăng nhập giáo viên và sinh viên riêng. Server và mọi client cần cùng bản build vì có DTO/lệnh mới.
 
+Bản sửa ngày 01/11/2026 không yêu cầu migration mới nếu đã chạy `001_exam_monitoring.sql`.
+Không chạy lại migration hoặc schema để cập nhật bản sửa này. Cột `deducted_time_seconds` và
+các audit cũ được giữ trong DB để bảo toàn dữ liệu lịch sử, nhưng không còn được đọc/ghi để
+xử phạt hay truyền xuống client. `PenaltyType` chỉ còn `DEDUCT_SCORE` và `TERMINATE`.
+Lịch sử hình thức đã ngừng vẫn đọc được; thời hạn đã lưu của các lượt thi cũ không được sửa hồi tố.
+
 ## Quy tắc xử lý
 
-- IP lấy qua `InetAddress.getLocalHost().getHostAddress()` trên luồng nền khi bắt đầu/tiếp tục bài.
-  Nếu không xác định được, lưu NULL và hiển thị “Chưa xác định”. Đây là IP client báo cáo,
-  có thể là IP LAN/loopback; không dùng để xác thực hoặc kết luận gian lận.
+- IP được chọn trên luồng nền từ IPv4 của card mạng đang bật qua `NetworkInterface`, ưu tiên
+  card dùng để kết nối server; loại loopback, link-local và các adapter ảo/VPN phổ biến khi có
+  card vật lý phù hợp. Khi server chạy localhost, vẫn ưu tiên IPv4 LAN thật của laptop.
+  Nếu không có IPv4 vật lý (offline/VM/IPv6-only), dùng địa chỉ thật của socket; localhost có
+  thể hiển thị loopback hợp lệ trong trường hợp này. Không tạo IP giả khi không xác định được.
+  IP gửi trong `StartAttemptRequestDto` và `ExamSessionRequestDto` mỗi chu kỳ giám sát.
+  Server kiểm tra IP dạng literal, kiểm tra chủ sở hữu rồi upsert vào `exam_sessions`;
+  chuỗi trống không ghi đè IP đã có. Phiên đang thi từng thiếu IP sẽ được bổ sung ở lần đồng bộ kế tiếp.
+  Đây là IP client báo cáo, không dùng để xác thực hoặc kết luận gian lận.
 - Mất focus/copy/paste: WARNING. Phát hiện process cấm: CHEATING.
   CHEATING là dấu hiệu để giáo viên xem bằng chứng; trạng thái này được giữ đến khi nộp bài.
   `violation_details` chứa sự kiện gần nhất; toàn bộ lịch sử nằm ở `anticheat_events`.
@@ -51,8 +63,8 @@ Mở thêm client để đăng nhập giáo viên và sinh viên riêng. Server 
   WARN_THEN_AUTO_SUBMIT tiếp tục hoạt động, chấm bài và log trong cùng giao dịch.
 - Trừ điểm: số dương, tối đa 2 chữ số thập phân, tổng không quá 10.
   Điểm cuối = max(0, điểm chấm − tổng phạt); xét đạt theo điểm cuối.
-- Trừ thời gian: giây nguyên dương. Server giảm `deadline_at`, client đồng bộ thời gian còn lại
-  từ server, tránh trừ lặp khi tải lại/reconnect. Nếu hết thời gian thì server chấm ngay (TIMEOUT).
+- Đồng hồ đếm ngược chuẩn tiếp tục đồng bộ theo `deadline_at`. Xử phạt không thay đổi thời hạn;
+  bài hết giờ tự nộp theo TIMEOUT như trước.
 - Kết thúc: server lưu is_force_stopped và TERMINATED, chấm các đáp án đã lưu (ANTICHEAT).
   Client khóa thao tác khi nhận trạng thái và gọi nộp bài idempotent để lấy kết quả.
   Việc kết thúc có hiệu lực ngay trên server, kể cả sinh viên offline.
@@ -71,11 +83,16 @@ Mở thêm client để đăng nhập giáo viên và sinh viên riêng. Server 
 4. Alt+Tab sang giáo viên: dòng sinh viên chuyển vàng, tăng số sự kiện.
 5. Sau khi bài bắt đầu, mở một app trong blacklist: trong khoảng một chu kỳ quét cộng một
    chu kỳ tải bảng, thấy dòng đỏ và tên app. Giữ app mở không tăng đếm liên tục.
-6. Trừ 1 điểm và 300 giây, nhập lý do: sinh viên thấy thông báo, đồng hồ thay đổi; lịch sử có cả hai lệnh.
+6. Kiểm tra không còn nút/ô nhập/cột phạt thời gian. Trừ 1 điểm, nhập lý do: sinh viên thấy
+   thông báo điểm phạt, đồng hồ tiếp tục đếm bình thường; lịch sử có lệnh trừ điểm.
 7. Làm đúng 4/5 câu rồi nộp: điểm cuối 7/10 sau khi trừ 1 điểm.
 8. Dùng quiz/tài khoản khác để thử Kết thúc: sinh viên bị khóa, có kết quả và trạng thái TERMINATED.
-9. Thử trừ quá thời gian còn lại: bài được nộp theo TIMEOUT.
+9. Dùng bài 1 phút và đợi hết giờ: bài được nộp theo TIMEOUT.
 10. Mở thêm sinh viên B: phạt A không làm thay đổi B. Đóng/mở màn hình vẫn thấy lịch sử.
+11. Hover/chọn dòng vàng và đỏ, chuyển focus bằng Tab: chữ luôn tối, dòng chọn có viền rõ.
+    Thử cả màn hình Giám sát và Nhật ký chống gian lận ở kết quả lớp.
+12. Đối chiếu cột IP với IPv4 Wi-Fi/Ethernet trong `ipconfig`; không chọn IP vEthernet/WSL.
+    Ngắt/kết nối mạng rồi tiếp tục bài: địa chỉ mới cập nhật sau một chu kỳ đồng bộ.
 
 Mỗi sinh viên chỉ có một attempt/quiz, dùng quiz riêng cho các ca nộp/kết thúc.
 Các client trên cùng laptop có thể báo cùng IP; đây là kết quả hợp lệ.
@@ -95,7 +112,7 @@ db.password=<test-password>
 
 Role quiz_test cần quyền tạo schema trong quizdb_test. MonitoringIT tạo schema ngẫu nhiên
 riêng và chỉ xóa schema đó sau test. Kiểm thử gửi trùng đồng thời, phạt/nộp đồng thời,
-rollback, kết thúc khi client offline, trừ hết giờ và migration/backfill:
+rollback, kết thúc khi client offline, hết giờ tự nhiên, sửa IP thiếu/đổi IP và migration/backfill:
 
 ```powershell
 .\mvnw.cmd -pl quiz-server -am -Pdb-it "-Dit.test=MonitoringIT" "-Dfailsafe.failIfNoSpecifiedTests=false" verify
@@ -112,6 +129,8 @@ ngừng báo cáo. Không phát hiện thiết bị thứ hai hay chứng minh g
 
 ## Kết quả kiểm tra ngày 31/10/2026
 
+Các số liệu dưới đây là của bản cũ, trước bản sửa 01/11/2026.
+
 - `mvnw.cmd clean verify`: 490 unit tests đạt, không lỗi hoặc bỏ qua.
 - `mvnw.cmd -Pui-it verify`: 490 unit tests và 53 JavaFX integration tests đạt.
   Trong đó có 2 test mới dùng socket thật: giáo viên gửi đúng lệnh phạt cho dòng đã chọn;
@@ -119,3 +138,15 @@ ngừng báo cáo. Không phát hiện thiết bị thứ hai hay chứng minh g
 - 6 test PostgreSQL trong MonitoringIT đã được viết và biên dịch, chưa chạy vì môi trường
   chưa có db-test-local.properties hoặc biến môi trường QUIZ_TEST_DB_*.
 - Chưa áp dụng migration lên database của ứng dụng. Cần chạy migration trước khi dùng tính năng.
+
+## Nguyên nhân và phạm vi bản sửa 01/11/2026
+
+- `QuizApi` có gửi IP nhưng `AttemptHandler` gọi overload 3 tham số, bỏ `ipAddress`;
+  overload này chuyển `null` vào `AttemptService`, nên DB không nhận IP. Handler nay truyền đủ tham số.
+  Cách cũ lấy IP từ hostname có thể trả về loopback/adapter không phù hợp hoặc bỏ qua lỗi thành null;
+  nay dùng `StudentIpResolver`, địa chỉ socket và cập nhật lại trong heartbeat.
+- Row factory cũ chỉ đặt nền màu bằng inline style. JavaFX vẫn dùng màu chữ trắng khi chọn.
+  `ViolationTableStyle` + `monitoring.css` dùng pseudo-class cho dòng cảnh báo/vi phạm, đặt màu
+  chữ `#111827` cho cell ở trạng thái thường, hover, selected, focused và xóa trạng thái khi tái sử dụng dòng.
+- Đã xóa xử phạt thời gian trong DTO trạng thái, enum lệnh, DAO, service, giao diện giáo viên,
+  đồng bộ sinh viên và thông báo. Trừ điểm/kết thúc bài vẫn có audit và phân quyền.

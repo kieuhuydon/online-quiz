@@ -18,6 +18,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -48,6 +49,7 @@ class JdbcAttemptRepositoryTest {
         statement = mock(PreparedStatement.class);
         rows = mock(ResultSet.class);
         when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.createStatement()).thenReturn(mock(Statement.class));
         when(connection.prepareStatement(anyString())).thenReturn(statement);
         when(statement.executeQuery()).thenReturn(rows);
         repository = new JdbcAttemptRepository(dataSource);
@@ -110,7 +112,7 @@ class JdbcAttemptRepositoryTest {
         verify(statement).setString(3, "B");
 
         repository.saveAnswer(connection, new AnswerRecord(100L, 2L, null, now));
-        verify(statement).setNull(3, Types.CHAR);
+        verify(statement).setString(3, null);
 
         // getAnswers
         when(rows.next()).thenReturn(true, true, false);
