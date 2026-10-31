@@ -145,6 +145,18 @@ public interface QuestionRepository {
     boolean deactivate(Connection connection, long id);
 
     /**
+     * Soft-deletes multiple questions using only the caller's connection.
+     * Questions not found are skipped; no exception is thrown for missing IDs.
+     *
+     * @param connection non-null, open connection owned by the caller
+     * @param ids        non-null list of positive question IDs
+     * @return the number of questions actually deactivated
+     * @throws IllegalArgumentException if the connection is null or any ID is not positive
+     * @throws QuizException if the database operation fails
+     */
+    int deactivate(Connection connection, List<Long> ids);
+
+    /**
      * Checks whether a question ID exists, regardless of active status.
      *
      * @param id positive question ID

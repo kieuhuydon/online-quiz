@@ -67,7 +67,7 @@ class QuestionServiceTest {
             "Chủ đề", Difficulty.EASY, true, actorId, TS, TS);
         when(questions.save(any(), any())).thenReturn(saved);
 
-        var dto = new CreateQuestionDto("Nội dung?", "A", "B", "C", "D", 'A', "Chủ đề", Difficulty.EASY);
+        var dto = new CreateQuestionDto("Nội dung?", "A", "B", "C", "D", 'A', "Chủ đề", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         Question result = service.createQuestion(dto, actorId);
 
         assertEquals(1, result.id());
@@ -80,7 +80,7 @@ class QuestionServiceTest {
     void studentCannotCreateQuestion(long actorId) {
         activeActor(actorId, Role.STUDENT);
 
-        var dto = new CreateQuestionDto("Nội dung?", "A", "B", "C", "D", 'A', "Chủ đề", Difficulty.EASY);
+        var dto = new CreateQuestionDto("Nội dung?", "A", "B", "C", "D", 'A', "Chủ đề", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         assertThrows(ForbiddenException.class, () -> service.createQuestion(dto, actorId));
         verifyNoInteractions(questions);
     }
@@ -90,7 +90,7 @@ class QuestionServiceTest {
         User actor = User.restore(ADMIN_ID, "actor", "hash", "Actor", null, Role.ADMIN, false, null, TS);
         when(users.findById(null, ADMIN_ID)).thenReturn(Optional.of(actor));
 
-        var dto = new CreateQuestionDto("Nội dung?", "A", "B", "C", "D", 'A', "Chủ đề", Difficulty.EASY);
+        var dto = new CreateQuestionDto("Nội dung?", "A", "B", "C", "D", 'A', "Chủ đề", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         assertThrows(UnauthorizedException.class, () -> service.createQuestion(dto, ADMIN_ID));
     }
 
@@ -134,7 +134,7 @@ class QuestionServiceTest {
             "T", Difficulty.EASY, false, 1, TS, TS);
         when(questions.findById(null, 1L)).thenReturn(Optional.of(existing));
 
-        var dto = new UpdateQuestionDto(1, "Mới?", "A", "B", "C", "D", 'B', "T", Difficulty.MEDIUM);
+        var dto = new UpdateQuestionDto(1, "Mới?", "A", "B", "C", "D", 'B', "T", Difficulty.MEDIUM, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         assertThrows(ValidationException.class, () -> service.updateQuestion(dto, ADMIN_ID));
     }
 
@@ -164,14 +164,14 @@ class QuestionServiceTest {
     void invalidCorrectOptionRejected() {
         activeActor(ADMIN_ID, Role.ADMIN);
 
-        var dto = new CreateQuestionDto("Câu?", "A", "B", "C", "D", 'X', "T", Difficulty.EASY);
+        var dto = new CreateQuestionDto("Câu?", "A", "B", "C", "D", 'X', "T", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         assertThrows(ValidationException.class, () -> service.createQuestion(dto, ADMIN_ID));
     }
 
     @Test
     void errorCodesArePreserved() {
         activeActor(ADMIN_ID, Role.STUDENT);
-        var dto = new CreateQuestionDto("Câu?", "A", "B", "C", "D", 'A', "T", Difficulty.EASY);
+        var dto = new CreateQuestionDto("Câu?", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         assertEquals(ErrorCode.FORBIDDEN, assertThrows(ForbiddenException.class,
             () -> service.createQuestion(dto, ADMIN_ID)).getErrorCode());
 
@@ -191,7 +191,7 @@ class QuestionServiceTest {
         when(questions.findById(null, 1L)).thenReturn(Optional.of(existing), Optional.of(updated));
         when(questions.update(eq(null), any(Question.class))).thenReturn(true);
 
-        var dto = new UpdateQuestionDto(1, "Mới?", "A1", "B1", "C1", "D1", 'b', "T2", Difficulty.MEDIUM);
+        var dto = new UpdateQuestionDto(1, "Mới?", "A1", "B1", "C1", "D1", 'b', "T2", Difficulty.MEDIUM, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         Question result = service.updateQuestion(dto, TEACHER_ID);
         assertEquals("Mới?", result.content());
         assertEquals('B', result.correctOption());
