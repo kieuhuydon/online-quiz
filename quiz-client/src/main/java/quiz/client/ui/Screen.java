@@ -14,7 +14,8 @@ public enum Screen {
     STUDENT_DASHBOARD("/quiz/client/ui/student/dashboard.fxml", "Không gian học tập", Role.STUDENT),
     STUDENT_EXAM("/quiz/client/ui/student/exam.fxml", "Đang làm bài", Role.STUDENT),
     STUDENT_RESULT("/quiz/client/ui/student/result.fxml", "Kết quả bài thi", Role.STUDENT),
-    STUDENT_HISTORY("/quiz/client/ui/student/history.fxml", "Lịch sử làm bài", Role.STUDENT);
+    STUDENT_HISTORY("/quiz/client/ui/student/history.fxml", "Lịch sử làm bài", Role.STUDENT),
+    STUDENT_REVIEW("/quiz/client/ui/student/review.fxml", "Xem lại bài thi", Role.STUDENT);
 
     private final String resource;
     private final String title;

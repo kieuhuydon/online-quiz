@@ -20,11 +20,20 @@ public record Question(
     boolean active,
     long createdBy,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    String answerKey,
+    String explanation
 ) {
     private static final int MAX_CONTENT_LENGTH = 1000;
     private static final int MAX_OPTION_LENGTH = 255;
     private static final int MAX_TOPIC_LENGTH = 100;
+
+    public Question(long id, String content, String optionA, String optionB, String optionC, String optionD,
+                    char correctOption, String topic, Difficulty difficulty, QuestionType questionType,
+                    boolean active, long createdBy, Instant createdAt, Instant updatedAt) {
+        this(id, content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty, questionType,
+            active, createdBy, createdAt, updatedAt, "", "");
+    }
 
     public Question {
         validateStorageState(id, createdAt, updatedAt);
@@ -40,6 +49,8 @@ public record Question(
         topic = normalizeRequiredText(topic, "Topic", MAX_TOPIC_LENGTH);
         if (difficulty == null) throw new IllegalArgumentException("Difficulty cannot be null");
         if (questionType == null) questionType = QuestionType.MULTIPLE_CHOICE;
+        answerKey = answerKey == null ? "" : answerKey.strip();
+        explanation = explanation == null ? "" : explanation.strip();
         if (createdBy <= 0) throw new IllegalArgumentException("Creator ID must be positive");
     }
 
@@ -48,7 +59,7 @@ public record Question(
                     String topic, Difficulty difficulty, boolean active,
                     long createdBy, Instant createdAt, Instant updatedAt) {
         this(id, content, optionA, optionB, optionC, optionD, correctOption,
-             topic, difficulty, QuestionType.MULTIPLE_CHOICE, active, createdBy, createdAt, updatedAt);
+             topic, difficulty, QuestionType.MULTIPLE_CHOICE, active, createdBy, createdAt, updatedAt, "", "");
     }
 
     public static Question createNew(String content, String optionA, String optionB,
@@ -56,7 +67,7 @@ public record Question(
                                      String topic, Difficulty difficulty, QuestionType questionType,
                                      long createdBy) {
         return new Question(0, content, optionA, optionB, optionC, optionD,
-            correctOption, topic, difficulty, questionType, true, createdBy, null, null);
+            correctOption, topic, difficulty, questionType, true, createdBy, null, null, "", "");
     }
 
     public static Question createNew(String content, String optionA, String optionB,
@@ -72,7 +83,23 @@ public record Question(
                                    boolean active, long createdBy, Instant createdAt, Instant updatedAt) {
         if (id <= 0) throw new IllegalArgumentException("Persisted question ID must be positive");
         return new Question(id, content, optionA, optionB, optionC, optionD,
-            correctOption, topic, difficulty, questionType, active, createdBy, createdAt, updatedAt);
+            correctOption, topic, difficulty, questionType, active, createdBy, createdAt, updatedAt, "", "");
+    }
+
+    public static Question restore(long id, String content, String optionA, String optionB, String optionC,
+                                   String optionD, char correctOption, String topic, Difficulty difficulty,
+                                   QuestionType type, boolean active, long createdBy, Instant createdAt,
+                                   Instant updatedAt, String answerKey, String explanation) {
+        if (id <= 0) throw new IllegalArgumentException("Persisted question ID must be positive");
+        return new Question(id, content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty,
+            type, active, createdBy, createdAt, updatedAt, answerKey, explanation);
+    }
+
+    public static Question createNew(String content, String optionA, String optionB, String optionC, String optionD,
+                                     char correctOption, String topic, Difficulty difficulty, QuestionType type,
+                                     long createdBy, String answerKey, String explanation) {
+        return new Question(0, content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty,
+            type, true, createdBy, null, null, answerKey, explanation);
     }
 
     public static Question restore(long id, String content, String optionA, String optionB,

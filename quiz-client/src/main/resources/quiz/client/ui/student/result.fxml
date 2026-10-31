@@ -2,14 +2,12 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.ResultController" spacing="18" alignment="TOP_CENTER">
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.ResultController" spacing="18" alignment="CENTER">
     <padding><Insets top="36" right="30" bottom="28" left="30"/></padding>
     <Label text="KẾT QUẢ BÀI THI" styleClass="eyebrow"/><Label fx:id="quizTitle" styleClass="page-heading" wrapText="true"/>
-    <Label fx:id="score" style="-fx-font-size: 40px; -fx-font-weight: bold;"/>
-    <Label fx:id="outcome" styleClass="card-heading"/>
-    <GridPane hgap="14" vgap="12">
-        <Label text="Số câu đúng:" GridPane.rowIndex="0" GridPane.columnIndex="0"/><Label fx:id="correct" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-        <Label text="Đã nộp lúc:" GridPane.rowIndex="1" GridPane.columnIndex="0"/><Label fx:id="submitted" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-    </GridPane>
+    <VBox alignment="CENTER" spacing="8" styleClass="content-card" maxWidth="560">
+        <Label text="ĐIỂM CỦA BẠN" styleClass="eyebrow"/>
+        <Label fx:id="score" style="-fx-font-size: 44px; -fx-font-weight: bold; -fx-text-fill: #172d48;"/>
+    </VBox>
     <HBox spacing="12"><Button text="Xem lịch sử" onAction="#history" styleClass="secondary-button"/><Button text="Về trang chủ" onAction="#home" styleClass="primary-button"/></HBox>
 </VBox>

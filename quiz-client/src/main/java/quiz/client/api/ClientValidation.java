@@ -41,10 +41,13 @@ public final class ClientValidation {
         if (input == null || input.difficulty() == null) {
             throw invalid();
         }
+        quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
         return new CreateQuestionDto(text(input.content(), 1000),
-            text(input.optionA(), 255), text(input.optionB(), 255),
-            text(input.optionC(), 255), text(input.optionD(), 255),
-            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty());
+            option(input.optionA(), type, "Đúng"), option(input.optionB(), type, "Sai"),
+            option(input.optionC(), type, "-"), option(input.optionD(), type, "-"),
+            type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? correctOption(input.correctOption()) : 'A',
+            text(input.topic(), 100), input.difficulty(), type,
+            type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? "" : text(input.answerKey(), 1000), text(input.explanation(), 2000));
     }
 
     public static UpdateQuestionDto updateQuestion(UpdateQuestionDto input) {
@@ -52,10 +55,13 @@ public final class ClientValidation {
             throw invalid();
         }
         positiveId(input.id());
+        quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
         return new UpdateQuestionDto(input.id(), text(input.content(), 1000),
-            text(input.optionA(), 255), text(input.optionB(), 255),
-            text(input.optionC(), 255), text(input.optionD(), 255),
-            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty());
+            option(input.optionA(), type, "Đúng"), option(input.optionB(), type, "Sai"),
+            option(input.optionC(), type, "-"), option(input.optionD(), type, "-"),
+            type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? correctOption(input.correctOption()) : 'A',
+            text(input.topic(), 100), input.difficulty(), type,
+            type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? "" : text(input.answerKey(), 1000), text(input.explanation(), 2000));
 
     }
 
@@ -116,6 +122,11 @@ public final class ClientValidation {
             throw invalid();
         }
         return value;
+    }
+
+    private static String option(String input, quiz.common.enums.QuestionType type, String fallback) {
+        return type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? text(input, 255)
+            : (input == null || input.isBlank() ? fallback : text(input, 255));
     }
 
     private static String password(String value, boolean creating) {

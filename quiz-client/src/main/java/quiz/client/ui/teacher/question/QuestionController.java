@@ -57,6 +57,9 @@ public final class QuestionController extends ScreenController {
     @FXML private ComboBox<Character> questionCorrectOption;
     @FXML private TextField questionTopic;
     @FXML private ComboBox<Difficulty> questionDifficulty;
+    @FXML private ComboBox<QuestionType> questionType;
+    @FXML private TextField questionAnswerKey;
+    @FXML private TextArea questionExplanation;
     @FXML private Button refreshQuestions;
     @FXML private Button importQuestions;
     @FXML private Button newQuestion;
@@ -100,6 +103,8 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setValue('A');
         questionDifficulty.getItems().setAll(Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
         questionDifficulty.setValue(Difficulty.MEDIUM);
+        questionType.getItems().setAll(QuestionType.values());
+        questionType.setValue(QuestionType.MULTIPLE_CHOICE);
         if (filterDifficulty != null) {
             filterDifficulty.getItems().setAll(Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
         }
@@ -339,7 +344,12 @@ public final class QuestionController extends ScreenController {
         dateLabel.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
         footer.getChildren().add(dateLabel);
 
-        card.getChildren().addAll(header, contentNode, optionsGrid, footer);
+        Label answerLabel = new Label("Đáp án: " + (q.answerKey() == null || q.answerKey().isBlank()
+            ? String.valueOf(q.correctOption()) : q.answerKey()));
+        answerLabel.setWrapText(true);
+        Label explanationLabel = new Label("Giải thích: " + (q.explanation() == null ? "" : q.explanation()));
+        explanationLabel.setWrapText(true);
+        card.getChildren().addAll(header, contentNode, optionsGrid, answerLabel, explanationLabel, footer);
         return card;
     }
 
@@ -530,7 +540,8 @@ public final class QuestionController extends ScreenController {
             input = ClientValidation.question(new CreateQuestionDto(
                 questionContent.getText(), questionOptionA.getText(), questionOptionB.getText(),
                 questionOptionC.getText(), questionOptionD.getText(),
-                questionCorrectOption.getValue(), questionTopic.getText(), questionDifficulty.getValue()));
+                questionCorrectOption.getValue(), questionTopic.getText(), questionDifficulty.getValue(),
+                questionType.getValue(), questionAnswerKey.getText(), questionExplanation.getText()));
         } catch (ApiException invalid) {
             show(formError, "Kiểm tra thông tin: nội dung tối đa 1000 ký tự, mỗi đáp án tối đa 255 ký tự, chủ đề 1–100 ký tự.", true);
             return;
@@ -551,7 +562,8 @@ public final class QuestionController extends ScreenController {
             input = ClientValidation.updateQuestion(new UpdateQuestionDto(
                 editTarget.id(), questionContent.getText(), questionOptionA.getText(),
                 questionOptionB.getText(), questionOptionC.getText(), questionOptionD.getText(),
-                questionCorrectOption.getValue(), questionTopic.getText(), questionDifficulty.getValue()));
+                questionCorrectOption.getValue(), questionTopic.getText(), questionDifficulty.getValue(),
+                questionType.getValue(), questionAnswerKey.getText(), questionExplanation.getText()));
         } catch (ApiException invalid) {
             show(formError, "Kiểm tra thông tin: nội dung tối đa 1000 ký tự, mỗi đáp án tối đa 255 ký tự, chủ đề 1–100 ký tự.", true);
             return;
@@ -646,6 +658,9 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setDisable(writing);
         questionTopic.setDisable(writing);
         questionDifficulty.setDisable(writing);
+        questionType.setDisable(writing);
+        questionAnswerKey.setDisable(writing);
+        questionExplanation.setDisable(writing);
         if (selectedQuestion != null) {
             selectedQuestion.setText(selected == null ? "Chọn một câu hỏi để xem/sao chép nội dung."
                 : String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
@@ -675,6 +690,9 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setValue(q.correctOption());
         questionTopic.setText(q.topic());
         questionDifficulty.setValue(q.difficulty());
+        questionType.setValue(q.questionType());
+        questionAnswerKey.setText(q.answerKey());
+        questionExplanation.setText(q.explanation());
     }
 
     private void clearForm() {
@@ -686,6 +704,9 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setValue('A');
         questionTopic.clear();
         questionDifficulty.setValue(Difficulty.MEDIUM);
+        questionType.setValue(QuestionType.MULTIPLE_CHOICE);
+        questionAnswerKey.clear();
+        questionExplanation.clear();
         show(formError, "", false);
     }
 

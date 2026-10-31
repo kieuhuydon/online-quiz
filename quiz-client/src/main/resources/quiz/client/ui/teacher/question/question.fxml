@@ -79,6 +79,21 @@
             </GridPane>
 
             <HBox spacing="16" alignment="CENTER_LEFT">
+                <VBox spacing="4" prefWidth="200">
+                    <Label text="Dạng câu hỏi *" styleClass="field-label"/>
+                    <ComboBox fx:id="questionType" maxWidth="Infinity"/>
+                </VBox>
+                <VBox spacing="4" HBox.hgrow="ALWAYS">
+                    <Label text="Đáp án chuẩn (điền khuyết: phân cách bằng |)" styleClass="field-label"/>
+                    <TextField fx:id="questionAnswerKey" promptText="Ví dụ: went | school; true/false: True hoặc False"/>
+                </VBox>
+            </HBox>
+            <VBox spacing="4">
+                <Label text="Giải thích đáp án *" styleClass="field-label"/>
+                <TextArea fx:id="questionExplanation" promptText="Giải thích vì sao đáp án này đúng..." wrapText="true" prefRowCount="2"/>
+            </VBox>
+
+            <HBox spacing="16" alignment="CENTER_LEFT">
                 <VBox spacing="4" prefWidth="150">
                     <Label text="Đáp án đúng *" styleClass="field-label"/>
                     <ComboBox fx:id="questionCorrectOption" maxWidth="Infinity"/>

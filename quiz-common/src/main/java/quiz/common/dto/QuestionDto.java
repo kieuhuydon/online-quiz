@@ -21,7 +21,9 @@ public record QuestionDto(
     QuestionType questionType,
     boolean active,
     long createdBy,
-    Instant createdAt
+    Instant createdAt,
+    String answerKey,
+    String explanation
 ) implements Serializable {
     public QuestionDto {
         if (questionType == null) {
@@ -34,6 +36,12 @@ public record QuestionDto(
                        String topic, Difficulty difficulty, boolean active,
                        long createdBy, Instant createdAt) {
         this(id, content, optionA, optionB, optionC, optionD, correctOption,
-             topic, difficulty, QuestionType.MULTIPLE_CHOICE, active, createdBy, createdAt);
+             topic, difficulty, QuestionType.MULTIPLE_CHOICE, active, createdBy, createdAt, null, null);
+    }
+    public QuestionDto(long id, String content, String optionA, String optionB, String optionC, String optionD,
+                       char correctOption, String topic, Difficulty difficulty, QuestionType questionType,
+                       boolean active, long createdBy, Instant createdAt) {
+        this(id, content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty, questionType,
+            active, createdBy, createdAt, null, null);
     }
 }

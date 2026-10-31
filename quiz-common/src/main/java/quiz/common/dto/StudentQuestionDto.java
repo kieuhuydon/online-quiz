@@ -1,6 +1,7 @@
 package quiz.common.dto;
 
 import quiz.common.enums.Difficulty;
+import quiz.common.enums.QuestionType;
 import java.io.Serializable;
 
 /**
@@ -16,6 +17,8 @@ public record StudentQuestionDto(
     String optionC,
     String optionD,
     String topic,
-    Difficulty difficulty
+    Difficulty difficulty,
+    QuestionType questionType,
+    int blankCount
 ) implements Serializable {
 }
