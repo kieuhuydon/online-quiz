@@ -94,8 +94,7 @@ public final class ServerMain {
             log.info("Quiz server listening on port {}", server.getPort());
             server.awaitTermination();
         } catch (Exception failure) {
-            // Configuration/JDBC messages may contain credentials; only log the exception type.
-            log.error("Server startup/runtime failed exception={}", failure.getClass().getName());
+            log.error("Server startup/runtime failed: {}", failure.getMessage());
             if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
             throw new IllegalStateException("Server failed; check configuration, database schema/access and bind port");
         } finally {
