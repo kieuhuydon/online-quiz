@@ -176,7 +176,7 @@ public class ProcessScannerService {
      */
     public synchronized void scanNow(ViolationListener listener) {
         if (!isRunning) return;
-        executeScan(listener);
+        scheduler.execute(() -> executeScan(listener));
     }
 
     private void executeScan(ViolationListener listener) {

@@ -70,6 +70,9 @@ public final class ExamController extends ScreenController {
 
     private final Map<Long, String> answers = new HashMap<>();
     private Timeline countdown;
+    private final quiz.client.anticheat.StudentAntiCheatService monitoring = new quiz.client.anticheat.StudentAntiCheatService();
+    private double deductedScore;
+    private int deductedSeconds;
     private long seconds;
     private int index;
 
@@ -181,12 +184,38 @@ public final class ExamController extends ScreenController {
             }
         };
         own(api.addPushListener(pushListener));
+        own(monitoring);
+        monitoring.start(api,attempt.attemptId(),this::applyMonitoringState,
+            error->{if(isActive()&&!isSubmitting.get()) saveStatus.setText("Chưa đồng bộ được giám sát: "+FxAsync.unwrap(error).getMessage());});
 
         // 3. Kích hoạt giám sát FullScreen & Chống gian lận (WindowFocusMonitor + ProcessScanner 10s)
         Stage stage = navigator.stage();
         if (stage != null) {
-            antiCheatController.startMonitoring(stage, examRoot);
+            antiCheatController.startMonitoring(stage, examRoot,Math.max(1,(api.monitoringIntervalMs()+999)/1000));
         }
+    }
+
+    private void applyMonitoringState(quiz.common.dto.ExamSession state) {
+        if(!isActive()||isSubmitting.get()) return;
+        seconds=state.remainingSeconds();
+        updateTimer();
+        if(state.forceStopped()) {
+            handleForceSubmit("Bài thi đã bị kết thúc bởi giảng viên coi thi");
+            return;
+        }
+        if(state.status()==quiz.common.enums.MonitoringStatus.SUBMITTED) { executeSubmit();return; }
+        double scoreChange=state.deductedScore()-deductedScore;
+        int timeChange=state.deductedTimeSeconds()-deductedSeconds;
+        deductedScore=state.deductedScore();deductedSeconds=state.deductedTimeSeconds();
+        if(scoreChange>0||timeChange>0) {
+            String message="Giảng viên xử phạt: trừ "+String.format("%.2f",Math.max(0,scoreChange))+" điểm, "
+                +Math.max(0,timeChange)+" giây. Tổng điểm trừ: "+String.format("%.2f",deductedScore);
+            saveStatus.setText(message);
+            warningHeader.setText("THÔNG BÁO XỬ PHẠT");warningDetail.setText(message);
+            remediationBox.setVisible(false);remediationBox.setManaged(false);
+            warningOverlay.setVisible(true);warningOverlay.toFront();
+        }
+        if(seconds==0) executeSubmit();
     }
 
     // ========================================================
@@ -339,6 +368,9 @@ public final class ExamController extends ScreenController {
             return;
         }
         log.warn("Kích hoạt cưỡng chế nộp bài (Force Submit): {}", violationReason);
+        monitoring.close();
+        optionA.setDisable(true);optionB.setDisable(true);optionC.setDisable(true);optionD.setDisable(true);
+        previous.setDisable(true);next.setDisable(true);reviewGrid.setDisable(true);
 
         // 1. Dọn dẹp tài nguyên giám sát ngay lập tức
         if (countdown != null) {
