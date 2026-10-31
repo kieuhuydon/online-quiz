@@ -110,7 +110,7 @@
             <Label fx:id="formError" styleClass="notice,error-notice" visible="false" managed="false"/>
 
             <HBox spacing="10" alignment="CENTER_RIGHT">
-                <Button fx:id="cancelEdit" text="Hủy bỏ" onAction="#cancelEdit" styleClass="secondary-button"/>
+                <Button fx:id="cancelEdit" text="← Quay lại" onAction="#cancelEdit" styleClass="secondary-button"/>
                 <Button fx:id="createQuestion" text="Lưu câu hỏi" onAction="#create" styleClass="primary-button"/>
                 <Button fx:id="updateQuestion" text="Cập nhật thay đổi" onAction="#update" styleClass="primary-button"/>
             </HBox>

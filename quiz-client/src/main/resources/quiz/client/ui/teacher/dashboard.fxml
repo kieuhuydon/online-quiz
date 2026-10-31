@@ -54,13 +54,13 @@
                         </columnConstraints>
                         <Button fx:id="btnNewQuiz" text="+ Tạo Đề Mới" onAction="#onNewQuizClick" styleClass="primary-button" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
                         <Button fx:id="btnAutoGenerateQuiz" text="⚡Tạo Đề Tự Động" onAction="#onAutoGenerateQuizClick" styleClass="primary-button" style="-fx-background-color: #2563eb;" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-                        <Button fx:id="btnEditQuiz" text="Sửa Đề" onAction="#onEditQuizClick" styleClass="secondary-button" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
+                        <Button fx:id="btnViewDetail" text="Chi Tiết &amp; Sửa Đề" onAction="#onViewDetailClick" styleClass="secondary-button" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
                         <Button fx:id="btnSelectQuestions" text="Chọn Câu Hỏi" onAction="#onSelectQuestionsClick" styleClass="warning-button" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="3"/>
                         <Button text="Giám sát phòng thi" onAction="#onMonitorClick" styleClass="secondary-button" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="4"/>
                         <Button fx:id="btnOpenQuiz" text="Mở Đề (Sinh PIN)" onAction="#onOpenQuizClick" styleClass="success-button" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
                         <Button fx:id="btnCloseQuiz" text="Đóng Đề Thi" onAction="#onCloseQuizClick" styleClass="danger-button" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
                         <Button fx:id="btnAssignQuiz" text="Giao Cho Lớp" onAction="#onAssignQuizClick" styleClass="secondary-button" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
-                        <Button fx:id="btnViewDetail" text="Chi Tiết &amp; Sửa Đề" onAction="#onViewDetailClick" styleClass="secondary-button" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="3"/>
+                        <Button fx:id="btnEditQuiz" text="Sửa Đề" onAction="#onEditQuizClick" visible="false" managed="false" GridPane.rowIndex="1" GridPane.columnIndex="3"/>
                         <HBox alignment="CENTER_RIGHT" spacing="8" GridPane.rowIndex="1" GridPane.columnIndex="4">
                             <ProgressIndicator fx:id="quizProgress" visible="false" prefWidth="22" prefHeight="22"/>
                             <Button fx:id="btnRefreshQuiz" text="Tải lại" onAction="#loadQuizzes" styleClass="secondary-button"/>
@@ -73,7 +73,11 @@
 
                 <!-- SUB-PANEL 1: Form Create/Edit Quiz (Manual) -->
                 <VBox fx:id="quizFormPanel" visible="false" managed="false" styleClass="content-card" spacing="12">
-                    <Label fx:id="formTitle" text="Tạo Đề Kiểm Tra Mới" styleClass="card-heading"/>
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Label fx:id="formTitle" text="Tạo Đề Kiểm Tra Mới" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button text="← Quay lại" onAction="#onCancelQuizFormClick" styleClass="secondary-button"/>
+                    </HBox>
                     <Separator/>
                     <Label fx:id="formError" visible="false" managed="false" styleClass="error-notice" wrapText="true"/>
                     <GridPane hgap="16" vgap="12">
@@ -109,8 +113,8 @@
                         <TextArea fx:id="txtQuizDescription" promptText="Mô tả chi tiết về bài kiểm tra..." prefRowCount="2" GridPane.rowIndex="4" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
                     </GridPane>
                     <HBox spacing="10" alignment="CENTER_RIGHT">
-                        <Button fx:id="btnCancelQuizForm" text="Hủy bỏ" onAction="#onCancelQuizFormClick" styleClass="secondary-button"/>
-                        <Button fx:id="btnSaveQuiz" text="Lưu Đề Thi" onAction="#onSaveQuizClick" styleClass="primary-button"/>
+                        <Button fx:id="btnCancelQuizForm" text="← Quay lại" onAction="#onCancelQuizFormClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnSaveQuiz" text="Chọn câu hỏi →" onAction="#onSaveQuizClick" styleClass="primary-button"/>
                     </HBox>
                 </VBox>
 
@@ -121,7 +125,7 @@
                             <Label text="TẠO ĐỀ KIỂM TRA TỰ ĐỘNG" styleClass="card-heading" style="-fx-text-fill: #1d4ed8;"/>
                             <Label text="Hệ thống tự động bốc ngẫu nhiên câu hỏi từ Ngân hàng câu hỏi theo tỷ lệ Easy / Medium / Hard và số lượng câu hỏi bạn chọn." styleClass="muted"/>
                         </VBox>
-                        <Button text="Đóng" onAction="#onCancelAutoQuizClick" styleClass="secondary-button"/>
+                        <Button text="← Quay lại" onAction="#onCancelAutoQuizClick" styleClass="secondary-button"/>
                     </HBox>
                     <Separator/>
                     <Label fx:id="autoQuizError" visible="false" managed="false" styleClass="error-notice" wrapText="true"/>
@@ -244,7 +248,7 @@
                     </VBox>
 
                     <HBox spacing="10" alignment="CENTER_RIGHT">
-                        <Button text="Hủy Bỏ" onAction="#onCancelAutoQuizClick" styleClass="secondary-button"/>
+                        <Button text="← Quay lại" onAction="#onCancelAutoQuizClick" styleClass="secondary-button"/>
                         <Button fx:id="btnConfirmAutoGenerate" text="Tạo Đề Tự Động &amp; Mở Review Chỉnh Sửa" onAction="#onConfirmAutoGenerateClick" styleClass="primary-button" style="-fx-background-color: #2563eb;"/>
                     </HBox>
                 </VBox>
@@ -256,13 +260,20 @@
                             <Label fx:id="questionSelectionTitle" text="Chọn câu hỏi từ Ngân hàng câu hỏi" styleClass="card-heading"/>
                             <Label fx:id="selectedQuestionsCount" text="Đã chọn: 0 câu hỏi" style="-fx-font-weight: bold; -fx-text-fill: #1d4ed8;"/>
                         </VBox>
-                        <Button fx:id="btnCancelQuestionSelection" text="Đóng" onAction="#onCancelQuestionSelectionClick" styleClass="secondary-button"/>
-                        <Button fx:id="btnSaveSelectedQuestions" text="Lưu Danh Sách Câu Hỏi Vào Đề" onAction="#onSaveSelectedQuestionsClick" styleClass="primary-button"/>
+                        <Button fx:id="btnCancelQuestionSelection" text="← Quay lại" onAction="#onCancelQuestionSelectionClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnSaveSelectedQuestions" text="Lưu Đề Thi" onAction="#onSaveSelectedQuestionsClick" styleClass="primary-button"/>
                     </HBox>
                     <Separator/>
+                    <!-- Filter row for question selection -->
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <TextField fx:id="txtSelectSearch" promptText="🔍 Tìm kiếm nội dung / chủ đề câu hỏi..." prefWidth="240" HBox.hgrow="ALWAYS"/>
+                        <ComboBox fx:id="cmbSelectQuestionType" prefWidth="160" promptText="Loại câu hỏi"/>
+                        <ComboBox fx:id="cmbSelectDifficulty" prefWidth="130" promptText="Độ khó"/>
+                        <Button text="Đặt lại" onAction="#onClearSelectFilterClick" styleClass="secondary-button"/>
+                    </HBox>
                     <TableView fx:id="questionTable" prefHeight="320" minHeight="260" VBox.vgrow="ALWAYS" styleClass="account-card"/>
                     <Label text="Xem trước câu hỏi đã chọn" styleClass="section-heading"/>
-                    <TextArea fx:id="questionSelectionPreview" editable="false" wrapText="true" prefRowCount="8" prefHeight="190" minHeight="150" promptText="Chọn một câu hỏi trong bảng để xem đầy đủ nội dung và các lựa chọn." styleClass="account-card"/>
+                    <TextArea fx:id="questionSelectionPreview" editable="false" wrapText="true" prefRowCount="6" prefHeight="160" minHeight="120" promptText="Chọn một câu hỏi trong bảng để xem đầy đủ nội dung và các lựa chọn." styleClass="account-card"/>
                 </VBox>
 
                 <!-- SUB-PANEL 4: Assign Quiz to Multiple Classes Panel -->
@@ -272,7 +283,7 @@
                             <Label fx:id="assignQuizTitle" text="Giao Đề Kiểm Tra Cho Nhiều Lớp Học" styleClass="card-heading"/>
                             <Label text="Tích chọn một hoặc nhiều lớp học để giao đề thi đồng thời trong 1 lần thực hiện." styleClass="muted"/>
                         </VBox>
-                        <Button fx:id="btnCancelAssign" text="Quay lại" onAction="#onCancelAssignClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnCancelAssign" text="← Quay lại" onAction="#onCancelAssignClick" styleClass="secondary-button"/>
                     </HBox>
                     <Separator/>
 
@@ -290,7 +301,7 @@
                     </HBox>
                 </VBox>
 
-                <!-- SUB-PANEL 5: Review & Edit Details Panel (Xem chi tiết & Chỉnh sửa đề) -->
+                <!-- SUB-PANEL 5: Review & Edit Details Panel (Xem chi tiết & Chỉnh sửa đề - Hợp nhất tính năng Sửa Đề) -->
                 <VBox fx:id="quizDetailPanel" visible="false" managed="false" VBox.vgrow="ALWAYS" maxWidth="Infinity" styleClass="content-card" spacing="14">
                     <HBox alignment="CENTER_LEFT" spacing="12">
                         <VBox spacing="3" HBox.hgrow="ALWAYS">
@@ -305,17 +316,66 @@
                                 <Label fx:id="detailAssignedClasses" text="" style="-fx-text-fill: #059669; -fx-font-weight: bold;"/>
                             </HBox>
                         </VBox>
-                        <Button fx:id="btnCloseDetail" text="Quay lại" onAction="#onCloseDetailClick" styleClass="secondary-button"/>
+                        <Button fx:id="btnCloseDetail" text="← Quay lại" onAction="#onCloseDetailClick" styleClass="secondary-button"/>
                     </HBox>
                     <Separator/>
 
-                    <!-- Detail Toolbar: Add question from bank, save changes -->
-                    <HBox spacing="10" alignment="CENTER_LEFT">
-                        <Button fx:id="btnDetailAddQuestion" text="+ Thêm Câu Hỏi Từ Ngân Hàng" onAction="#onDetailAddQuestionClick" styleClass="primary-button" style="-fx-background-color: #0d9488;"/>
-                        <Button fx:id="btnDetailSaveQuestions" text="Lưu Thay Đổi Đề Thi" onAction="#onDetailSaveQuestionsClick" styleClass="primary-button"/>
-                        <Region HBox.hgrow="ALWAYS"/>
-                        <Label fx:id="detailNotice" visible="false" managed="false" text="" style="-fx-font-weight: bold;"/>
-                    </HBox>
+                    <!-- Thông tin cấu hình đề thi (Hợp nhất tính năng Sửa Đề và Chi Tiết Đề) -->
+                    <VBox spacing="10" style="-fx-background-color: #f8fafc; -fx-padding: 12; -fx-border-color: #e2e8f0; -fx-border-radius: 8; -fx-background-radius: 8;">
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <Label text="THÔNG TIN &amp; CẤU HÌNH ĐỀ THI" style="-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #1e293b;"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="btnDetailSaveInfo" text="💾 Cập Nhật Thông Tin Đề" onAction="#onDetailSaveInfoClick" styleClass="primary-button" style="-fx-background-color: #2563eb;"/>
+                        </HBox>
+                        <GridPane hgap="14" vgap="8">
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="120" prefWidth="120"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                                <ColumnConstraints minWidth="120" prefWidth="120"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                            </columnConstraints>
+
+                            <Label text="Tiêu đề đề thi:" styleClass="field-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                            <TextField fx:id="txtDetailQuizTitle" promptText="Tiêu đề đề thi..." GridPane.rowIndex="0" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
+
+                            <Label text="Chủ đề:" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                            <TextField fx:id="txtDetailQuizCategory" promptText="Chủ đề..." GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                            <Label text="Thời lượng (phút):" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+                            <VBox spacing="2" GridPane.rowIndex="1" GridPane.columnIndex="3">
+                                <TextField fx:id="txtDetailQuizDuration" promptText="30"/>
+                                <Label fx:id="lblDetailDurationError" text="Không được viết chữ, chỉ được nhập số phút!" visible="false" managed="false" styleClass="field-error-text"/>
+                            </VBox>
+
+                            <Label text="Điểm đạt (%):" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                            <TextField fx:id="txtDetailQuizPassScore" promptText="50" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                            <Label text="Chính sách vi phạm:" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="2"/>
+                            <ComboBox fx:id="cmbDetailQuizPolicy" maxWidth="Infinity" GridPane.rowIndex="2" GridPane.columnIndex="3"/>
+
+                            <Label text="Số vi phạm tối đa:" styleClass="field-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                            <TextField fx:id="txtDetailQuizMaxViolations" promptText="3" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                            <Label text="Mô tả bài thi:" styleClass="field-label" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                            <TextArea fx:id="txtDetailQuizDescription" promptText="Mô tả bài thi..." prefRowCount="2" GridPane.rowIndex="4" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
+                        </GridPane>
+                    </VBox>
+
+                    <!-- Detail Toolbar: Add question from bank, save changes, and filter row -->
+                    <VBox spacing="10">
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Button fx:id="btnDetailAddQuestion" text="+ Thêm Câu Hỏi Từ Ngân Hàng" onAction="#onDetailAddQuestionClick" styleClass="primary-button" style="-fx-background-color: #0d9488;"/>
+                            <Button fx:id="btnDetailSaveQuestions" text="Lưu Danh Sách Câu Hỏi" onAction="#onDetailSaveQuestionsClick" styleClass="primary-button"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Label fx:id="detailNotice" visible="false" managed="false" text="" style="-fx-font-weight: bold;"/>
+                        </HBox>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <TextField fx:id="txtDetailSearch" promptText="🔍 Tìm kiếm câu hỏi trong đề..." prefWidth="240" HBox.hgrow="ALWAYS"/>
+                            <ComboBox fx:id="cmbDetailQuestionType" prefWidth="160" promptText="Loại câu hỏi"/>
+                            <ComboBox fx:id="cmbDetailDifficulty" prefWidth="130" promptText="Độ khó"/>
+                            <Button text="Đặt lại" onAction="#onClearDetailFilterClick" styleClass="secondary-button"/>
+                        </HBox>
+                    </VBox>
 
                     <!-- Questions Table with Delete & Replace actions -->
                     <TableView fx:id="detailQuestionTable" prefHeight="360" minHeight="260" maxHeight="Infinity" VBox.vgrow="ALWAYS" styleClass="account-card"/>
@@ -325,15 +385,17 @@
                         <HBox alignment="CENTER_LEFT" spacing="12">
                             <Label fx:id="lblPickerTitle" text="Chọn câu hỏi từ ngân hàng để thay thế / thêm:" style="-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #1e293b;"/>
                             <Region HBox.hgrow="ALWAYS"/>
-                            <TextField fx:id="txtPickerSearch" promptText="Tìm kiếm nội dung câu hỏi..." prefWidth="240"/>
-                            <ComboBox fx:id="cmbPickerDifficulty" prefWidth="130" promptText="Độ khó"/>
-                            <Button text="Đóng bộ chọn" onAction="#onCancelPickerClick" styleClass="secondary-button"/>
+                            <TextField fx:id="txtPickerSearch" promptText="Tìm kiếm nội dung câu hỏi..." prefWidth="200"/>
+                            <ComboBox fx:id="cmbPickerQuestionType" prefWidth="140" promptText="Loại câu hỏi"/>
+                            <ComboBox fx:id="cmbPickerDifficulty" prefWidth="120" promptText="Độ khó"/>
+                            <Button text="Đặt lại" onAction="#onClearPickerFilterClick" styleClass="secondary-button"/>
+                            <Button text="← Quay lại" onAction="#onCancelPickerClick" styleClass="secondary-button"/>
                         </HBox>
                         <TableView fx:id="pickerTable" prefHeight="300" minHeight="240" maxWidth="Infinity" VBox.vgrow="ALWAYS" styleClass="account-card"/>
                         <Label text="Xem trước câu hỏi đang chọn" styleClass="section-heading"/>
                         <TextArea fx:id="pickerPreview" editable="false" wrapText="true" prefRowCount="8" prefHeight="190" minHeight="150" promptText="Chọn một câu hỏi trong bảng để xem đầy đủ nội dung và các lựa chọn." styleClass="account-card"/>
                         <HBox alignment="CENTER_RIGHT" spacing="10">
-                            <Button text="Hủy" onAction="#onCancelPickerClick" styleClass="secondary-button"/>
+                            <Button text="← Quay lại" onAction="#onCancelPickerClick" styleClass="secondary-button"/>
                             <Button fx:id="btnConfirmPicker" text="Xác Nhận Chọn Câu Hỏi Này" onAction="#onConfirmPickerClick" styleClass="primary-button"/>
                         </HBox>
                     </VBox>

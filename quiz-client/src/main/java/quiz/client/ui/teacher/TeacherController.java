@@ -122,6 +122,34 @@ public final class TeacherController extends ScreenController {
     @FXML private TextArea questionSelectionPreview;
     private long targetQuizIdForQuestions = 0;
 
+    // Quiz Detail Info edit fields (Merged feature: Chi Tiết & Sửa Đề)
+    @FXML private TextField txtDetailQuizTitle;
+    @FXML private TextField txtDetailQuizCategory;
+    @FXML private TextField txtDetailQuizDuration;
+    @FXML private Label lblDetailDurationError;
+    @FXML private TextField txtDetailQuizPassScore;
+    @FXML private ComboBox<AntiCheatPolicyType> cmbDetailQuizPolicy;
+    @FXML private TextField txtDetailQuizMaxViolations;
+    @FXML private TextArea txtDetailQuizDescription;
+    @FXML private Button btnDetailSaveInfo;
+
+    // Filter controls for Detail Question Table
+    @FXML private TextField txtDetailSearch;
+    @FXML private ComboBox<QuestionType> cmbDetailQuestionType;
+    @FXML private ComboBox<Difficulty> cmbDetailDifficulty;
+
+    // Filter controls for Question Selection Panel
+    @FXML private TextField txtSelectSearch;
+    @FXML private ComboBox<QuestionType> cmbSelectQuestionType;
+    @FXML private ComboBox<Difficulty> cmbSelectDifficulty;
+
+    // Filter control for Question Picker Panel
+    @FXML private ComboBox<QuestionType> cmbPickerQuestionType;
+
+    // Full collections for filtering
+    private final List<DetailQuestionRow> allDetailQuestionRows = new ArrayList<>();
+    private final List<QuestionRow> allSelectionQuestions = new ArrayList<>();
+
     // Assign Quiz to Multiple Classes Panel (Feature 3)
     @FXML private VBox assignPanel;
     @FXML private Label assignQuizTitle;
@@ -226,15 +254,33 @@ public final class TeacherController extends ScreenController {
         };
         setupPolicyCombo(cmbQuizPolicy, policyConverter);
         setupPolicyCombo(cmbAutoQuizPolicy, policyConverter);
+        setupPolicyCombo(cmbDetailQuizPolicy, policyConverter);
+
+        setupQuestionTypeCombo(cmbDetailQuestionType);
+        setupQuestionTypeCombo(cmbPickerQuestionType);
+        setupQuestionTypeCombo(cmbSelectQuestionType);
+
+        setupDifficultyCombo(cmbDetailDifficulty);
+        setupDifficultyCombo(cmbSelectDifficulty);
+
+        if (txtDetailSearch != null) txtDetailSearch.textProperty().addListener((obs, o, n) -> filterDetailQuestions());
+        if (cmbDetailQuestionType != null) cmbDetailQuestionType.valueProperty().addListener((obs, o, n) -> filterDetailQuestions());
+        if (cmbDetailDifficulty != null) cmbDetailDifficulty.valueProperty().addListener((obs, o, n) -> filterDetailQuestions());
+
+        if (txtSelectSearch != null) txtSelectSearch.textProperty().addListener((obs, o, n) -> filterSelectionQuestions());
+        if (cmbSelectQuestionType != null) cmbSelectQuestionType.valueProperty().addListener((obs, o, n) -> filterSelectionQuestions());
+        if (cmbSelectDifficulty != null) cmbSelectDifficulty.valueProperty().addListener((obs, o, n) -> filterSelectionQuestions());
 
         // 2. Format Combobox Độ khó trong bộ chọn câu hỏi thay thế/thêm
         cmbPickerDifficulty.getItems().setAll(Difficulty.values());
         cmbPickerDifficulty.valueProperty().addListener((obs, o, n) -> filterPickerQuestions());
+        if (cmbPickerQuestionType != null) cmbPickerQuestionType.valueProperty().addListener((obs, o, n) -> filterPickerQuestions());
         txtPickerSearch.textProperty().addListener((obs, o, n) -> filterPickerQuestions());
 
         // 3. Feature 4: Validation lỗi thời lượng - hiển thị lỗi trực tiếp dưới box khi gõ chữ
         setupDurationValidation(txtQuizDuration, lblDurationError);
         setupDurationValidation(txtAutoQuizDuration, lblAutoDurationError);
+        setupDurationValidation(txtDetailQuizDuration, lblDetailDurationError);
 
         // 4. Feature 1: Listeners cho TextField tỷ lệ độ khó - Hard tự tính = 100 - Easy - Medium
         txtEasyPct.textProperty().addListener((obs, o, n) -> updateAutoDistribution());
@@ -303,6 +349,150 @@ public final class TeacherController extends ScreenController {
     // =========================================================================
     // QUIZ TABLE & GENERAL BUTTONS
     // =========================================================================
+
+    public static void setupQuestionTypeCombo(ComboBox<QuestionType> cmb) {
+        if (cmb == null) return;
+        cmb.setConverter(new javafx.util.StringConverter<>() {
+            @Override public String toString(QuestionType t) { return t == null ? "Tất cả loại câu hỏi" : formatQuestionTypeName(t); }
+            @Override public QuestionType fromString(String s) { return null; }
+        });
+        cmb.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(QuestionType item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : (item == null ? "Tất cả loại câu hỏi" : formatQuestionTypeName(item)));
+            }
+        });
+        cmb.setButtonCell(new ListCell<>() {
+            @Override protected void updateItem(QuestionType item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : (item == null ? "Tất cả loại câu hỏi" : formatQuestionTypeName(item)));
+            }
+        });
+        cmb.getItems().setAll((QuestionType) null, QuestionType.MULTIPLE_CHOICE, QuestionType.TRUE_FALSE, QuestionType.FILL_BLANK, QuestionType.SHORT_ANSWER);
+        cmb.setValue(null);
+    }
+
+    public static void setupDifficultyCombo(ComboBox<Difficulty> cmb) {
+        if (cmb == null) return;
+        javafx.util.StringConverter<Difficulty> diffConverter = new javafx.util.StringConverter<>() {
+            @Override public String toString(Difficulty d) {
+                if (d == null) return "Tất cả độ khó";
+                return switch (d) {
+                    case EASY -> "Dễ (Easy)";
+                    case MEDIUM -> "Trung bình (Medium)";
+                    case HARD -> "Khó (Hard)";
+                };
+            }
+            @Override public Difficulty fromString(String s) { return null; }
+        };
+        cmb.setConverter(diffConverter);
+        cmb.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(Difficulty item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : diffConverter.toString(item));
+            }
+        });
+        cmb.setButtonCell(new ListCell<>() {
+            @Override protected void updateItem(Difficulty item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : diffConverter.toString(item));
+            }
+        });
+        cmb.getItems().setAll((Difficulty) null, Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
+        cmb.setValue(null);
+    }
+
+    private void filterDetailQuestions() {
+        String search = txtDetailSearch != null && txtDetailSearch.getText() != null
+            ? txtDetailSearch.getText().trim().toLowerCase() : "";
+        QuestionType type = cmbDetailQuestionType != null ? cmbDetailQuestionType.getValue() : null;
+        Difficulty diff = cmbDetailDifficulty != null ? cmbDetailDifficulty.getValue() : null;
+
+        List<DetailQuestionRow> filtered = allDetailQuestionRows.stream()
+            .filter(r -> {
+                QuestionDto q = r.getQuestion();
+                if (type != null && (q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE) != type) {
+                    return false;
+                }
+                if (diff != null && q.difficulty() != diff) {
+                    return false;
+                }
+                if (!search.isEmpty()) {
+                    String content = q.content() != null ? q.content().toLowerCase() : "";
+                    String topic = q.topic() != null ? q.topic().toLowerCase() : "";
+                    return content.contains(search) || topic.contains(search);
+                }
+                return true;
+            })
+            .toList();
+
+        detailQuestionRows.setAll(filtered);
+        updateDetailBreakdown();
+    }
+
+    @FXML
+    private void onClearDetailFilterClick() {
+        if (txtDetailSearch != null) txtDetailSearch.clear();
+        if (cmbDetailQuestionType != null) cmbDetailQuestionType.setValue(null);
+        if (cmbDetailDifficulty != null) cmbDetailDifficulty.setValue(null);
+        filterDetailQuestions();
+    }
+
+    @FXML
+    private void onDetailSaveInfoClick() {
+        if (!isDetailQuizDraft) return;
+        String title = txtDetailQuizTitle.getText();
+        String category = txtDetailQuizCategory.getText();
+        String desc = txtDetailQuizDescription.getText();
+        int duration;
+        double passScore;
+        int maxViolations;
+
+        try {
+            duration = Integer.parseInt(txtDetailQuizDuration.getText().trim());
+            if (duration <= 0) throw new NumberFormatException();
+        } catch (NumberFormatException e) {
+            showQuizNotice("Thời lượng phải là số nguyên phút lớn hơn 0", true);
+            return;
+        }
+
+        try {
+            passScore = Double.parseDouble(txtDetailQuizPassScore.getText().trim());
+            if (passScore < 0 || passScore > 100) throw new NumberFormatException();
+        } catch (NumberFormatException e) {
+            showQuizNotice("Điểm đạt phải là số từ 0 đến 100", true);
+            return;
+        }
+
+        try {
+            maxViolations = Integer.parseInt(txtDetailQuizMaxViolations.getText().trim());
+            if (maxViolations <= 0) throw new NumberFormatException();
+        } catch (NumberFormatException e) {
+            showQuizNotice("Số vi phạm tối đa phải là số nguyên lớn hơn 0", true);
+            return;
+        }
+
+        if (title == null || title.strip().isBlank()) {
+            showQuizNotice("Tiêu đề đề thi không được để trống", true);
+            return;
+        }
+
+        btnDetailSaveInfo.setDisable(true);
+        UpdateQuizDto dto = new UpdateQuizDto(currentDetailQuizId, title.strip(), desc, category, duration, passScore, cmbDetailQuizPolicy.getValue(), maxViolations);
+        fx.observe(api.updateQuiz(dto), this::isActive,
+            updated -> {
+                showQuizNotice("✅ Đã cập nhật thông tin đề thi #" + updated.id() + " thành công!", false);
+                detailQuizTitle.setText("Chi tiết & Chỉnh sửa đề thi #" + updated.id() + ": " + updated.title());
+                loadQuizzes();
+                btnDetailSaveInfo.setDisable(false);
+            },
+            err -> {
+                showQuizNotice("Lỗi khi cập nhật đề thi: " + formatError(err), true);
+                btnDetailSaveInfo.setDisable(false);
+            },
+            () -> btnDetailSaveInfo.setDisable(false)
+        );
+    }
 
     private void configureQuizTable() {
         TableColumn<QuizDto, String> colId = new TableColumn<>("ID");
@@ -384,7 +574,7 @@ public final class TeacherController extends ScreenController {
 
     private void updateQuizButtons(QuizDto selected) {
         boolean hasSel = selected != null;
-        btnEditQuiz.setDisable(!hasSel || selected.status() != QuizStatus.DRAFT);
+        btnEditQuiz.setDisable(!hasSel);
         btnSelectQuestions.setDisable(!hasSel || selected.status() != QuizStatus.DRAFT);
         btnOpenQuiz.setDisable(!hasSel || selected.status() != QuizStatus.DRAFT);
         btnCloseQuiz.setDisable(!hasSel || selected.status() != QuizStatus.OPEN);
@@ -787,7 +977,8 @@ public final class TeacherController extends ScreenController {
         hideAllQuizPanels();
         isEditingQuiz = false;
         editingQuizId = 0;
-        formTitle.setText("Tạo Đề Kiểm Tra Mới (Trạng thái: DRAFT)");
+        formTitle.setText("Tạo Đề Kiểm Tra Mới (Thủ công)");
+        if (btnSaveQuiz != null) btnSaveQuiz.setText("Chọn câu hỏi →");
         txtQuizTitle.clear();
         txtQuizCategory.setText("Tiếng Anh");
         txtQuizDuration.setText("30");
@@ -805,26 +996,7 @@ public final class TeacherController extends ScreenController {
 
     @FXML
     private void onEditQuizClick() {
-        QuizDto sel = quizTable.getSelectionModel().getSelectedItem();
-        if (sel == null || sel.status() != QuizStatus.DRAFT) return;
-
-        hideAllQuizPanels();
-        isEditingQuiz = true;
-        editingQuizId = sel.id();
-        formTitle.setText("Chỉnh Sửa Đề Kiểm Tra #" + sel.id() + " (DRAFT)");
-        txtQuizTitle.setText(sel.title());
-        txtQuizCategory.setText(sel.category() != null ? sel.category() : "");
-        txtQuizDuration.setText(String.valueOf(sel.durationMinutes()));
-        lblDurationError.setVisible(false);
-        txtQuizDuration.setStyle("");
-        txtQuizPassScore.setText(String.format("%.0f", sel.passScore()));
-        txtQuizMaxViolations.setText(String.valueOf(sel.maxViolations()));
-        txtQuizDescription.setText(sel.description() != null ? sel.description() : "");
-        cmbQuizPolicy.setValue(sel.anticheatPolicy());
-        formError.setVisible(false);
-        quizFormPanel.setVisible(true);
-        quizFormPanel.setManaged(true);
-        scrollToBottom();
+        onViewDetailClick();
     }
 
     @FXML
@@ -874,9 +1046,10 @@ public final class TeacherController extends ScreenController {
             CreateQuizDto dto = new CreateQuizDto(title.strip(), desc, category, duration, passScore, cmbQuizPolicy.getValue(), maxViolations);
             fx.observe(api.createQuiz(dto), this::isActive,
                 created -> {
-                    showQuizNotice("Đã tạo đề thi '" + created.title() + "' (ID: " + created.id() + ") thành công ở trạng thái DRAFT!", false);
+                    showQuizNotice("Đã tạo đề thi '" + created.title() + "'. Hãy chọn các câu hỏi cho đề thi!", false);
                     hideAllQuizPanels();
                     loadQuizzes();
+                    openQuestionSelectionForQuiz(created.id(), created.title());
                 },
                 err -> {
                     showFormError("Lỗi tạo đề thi: " + formatError(err));
@@ -968,10 +1141,10 @@ public final class TeacherController extends ScreenController {
         colContent.setCellFactory(col -> wrappingTextCell());
 
         TableColumn<DetailQuestionRow, String> colOptions = new TableColumn<>("Đáp án đúng & Lựa chọn");
-        colOptions.setPrefWidth(220);
+        colOptions.setPrefWidth(240);
         colOptions.setCellValueFactory(r -> {
             QuestionDto q = r.getValue().getQuestion();
-            return new SimpleStringProperty("Đáp án: " + q.correctOption() + " | A: " + q.optionA() + " | B: " + q.optionB() + " | C: " + q.optionC() + " | D: " + q.optionD());
+            return new SimpleStringProperty(formatQuestionOptionsSummary(q));
         });
         colOptions.setCellFactory(col -> wrappingTextCell());
 
@@ -1100,9 +1273,18 @@ public final class TeacherController extends ScreenController {
         colContent.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().content()));
         colContent.setCellFactory(col -> wrappingTextCell());
 
-        TableColumn<QuestionDto, String> colCorrect = new TableColumn<>("Đáp án");
-        colCorrect.setPrefWidth(65);
-        colCorrect.setCellValueFactory(d -> new SimpleStringProperty(String.valueOf(d.getValue().correctOption())));
+        TableColumn<QuestionDto, String> colCorrect = new TableColumn<>("Đáp án đúng");
+        colCorrect.setPrefWidth(130);
+        colCorrect.setCellValueFactory(d -> {
+            QuestionDto q = d.getValue();
+            QuestionType qt = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
+            return switch (qt) {
+                case MULTIPLE_CHOICE -> new SimpleStringProperty(q.correctOption() + " (" + getOptionText(q, q.correctOption()) + ")");
+                case TRUE_FALSE -> new SimpleStringProperty(q.correctOption() == 'A' ? "A (Đúng)" : "B (Sai)");
+                case FILL_BLANK, SHORT_ANSWER -> new SimpleStringProperty(getCorrectOptionText(q));
+            };
+        });
+        colCorrect.setCellFactory(col -> wrappingTextCell());
 
         pickerTable.getColumns().setAll(List.of(colId, colType, colDiff, colTopic, colContent, colCorrect));
         pickerTable.setItems(pickerQuestionRows);
@@ -1184,11 +1366,33 @@ public final class TeacherController extends ScreenController {
                     + " phút | Điểm đạt: " + String.format("%.0f%%", detail.quiz().passScore()) + (detail.quiz().pin() != null ? " | PIN: " + detail.quiz().pin() : ""));
                 detailAssignedClasses.setText("Các lớp đã giao: " + (detail.assignedClassIds().isEmpty() ? "Chưa giao lớp nào" : detail.assignedClassIds().size() + " lớp"));
 
-                List<DetailQuestionRow> rows = new ArrayList<>();
+                // Cập nhật thông tin chi tiết đề vào biểu mẫu (Hợp nhất tính năng Sửa Đề)
+                if (txtDetailQuizTitle != null) txtDetailQuizTitle.setText(detail.quiz().title());
+                if (txtDetailQuizCategory != null) txtDetailQuizCategory.setText(detail.quiz().category() != null ? detail.quiz().category() : "");
+                if (txtDetailQuizDuration != null) txtDetailQuizDuration.setText(String.valueOf(detail.quiz().durationMinutes()));
+                if (txtDetailQuizPassScore != null) txtDetailQuizPassScore.setText(String.format("%.0f", detail.quiz().passScore()));
+                if (txtDetailQuizMaxViolations != null) txtDetailQuizMaxViolations.setText(String.valueOf(detail.quiz().maxViolations()));
+                if (txtDetailQuizDescription != null) txtDetailQuizDescription.setText(detail.quiz().description() != null ? detail.quiz().description() : "");
+                if (cmbDetailQuizPolicy != null) cmbDetailQuizPolicy.setValue(detail.quiz().anticheatPolicy());
+
+                boolean canEdit = isDetailQuizDraft;
+                if (txtDetailQuizTitle != null) txtDetailQuizTitle.setEditable(canEdit);
+                if (txtDetailQuizCategory != null) txtDetailQuizCategory.setEditable(canEdit);
+                if (txtDetailQuizDuration != null) txtDetailQuizDuration.setEditable(canEdit);
+                if (txtDetailQuizPassScore != null) txtDetailQuizPassScore.setEditable(canEdit);
+                if (txtDetailQuizMaxViolations != null) txtDetailQuizMaxViolations.setEditable(canEdit);
+                if (txtDetailQuizDescription != null) txtDetailQuizDescription.setEditable(canEdit);
+                if (cmbDetailQuizPolicy != null) cmbDetailQuizPolicy.setDisable(!canEdit);
+                if (btnDetailSaveInfo != null) btnDetailSaveInfo.setDisable(!canEdit);
+
+                allDetailQuestionRows.clear();
                 for (QuestionDto q : detail.questions()) {
-                    rows.add(new DetailQuestionRow(q));
+                    allDetailQuestionRows.add(new DetailQuestionRow(q));
                 }
-                detailQuestionRows.setAll(rows);
+                if (txtDetailSearch != null) txtDetailSearch.clear();
+                if (cmbDetailQuestionType != null) cmbDetailQuestionType.setValue(null);
+                if (cmbDetailDifficulty != null) cmbDetailDifficulty.setValue(null);
+                filterDetailQuestions();
                 updateDetailBreakdown();
             }
         }));
@@ -1226,7 +1430,10 @@ public final class TeacherController extends ScreenController {
         lblPickerTitle.setText("🔄 Chọn câu hỏi từ Ngân hàng câu hỏi để THAY THẾ cho câu #" + (detailQuestionRows.indexOf(row) + 1) + " (Độ khó: " + row.getQuestion().difficulty() + "):");
         btnConfirmPicker.setText("Xác Nhận Thay Thế Câu Này");
         btnConfirmPicker.setDisable(true);
-        cmbPickerDifficulty.setValue(row.getQuestion().difficulty()); // Gợi ý độ khó tương đương
+        cmbPickerDifficulty.setValue(row.getQuestion().difficulty());
+        if (cmbPickerQuestionType != null) {
+            cmbPickerQuestionType.setValue(row.getQuestion().questionType() != null ? row.getQuestion().questionType() : QuestionType.MULTIPLE_CHOICE);
+        }
         questionPickerPanel.setVisible(true);
         questionPickerPanel.setManaged(true);
         filterPickerQuestions();
@@ -1235,9 +1442,9 @@ public final class TeacherController extends ScreenController {
 
     private void removeQuestionFromDetail(DetailQuestionRow row) {
         if (!isDetailQuizDraft || row == null) return;
-        detailQuestionRows.remove(row);
-        updateDetailBreakdown();
-        detailNotice.setText("⚠️ Đã xóa 1 câu hỏi khỏi đề. Nhớ nhấn 'Lưu Thay Đổi Đề Thi' bên trên để lưu lại vào cơ sở dữ liệu!");
+        allDetailQuestionRows.remove(row);
+        filterDetailQuestions();
+        detailNotice.setText("⚠️ Đã xóa 1 câu hỏi khỏi đề. Nhớ nhấn 'Lưu Danh Sách Câu Hỏi' bên trên để lưu lại vào cơ sở dữ liệu!");
         detailNotice.setStyle("-fx-text-fill: #d97706;");
         detailNotice.setVisible(true);
         detailNotice.setManaged(true);
@@ -1245,20 +1452,32 @@ public final class TeacherController extends ScreenController {
 
     private void filterPickerQuestions() {
         Set<Long> existingIds = new HashSet<>();
-        for (DetailQuestionRow r : detailQuestionRows) {
+        for (DetailQuestionRow r : allDetailQuestionRows) {
             existingIds.add(r.getQuestion().id());
         }
 
-        Difficulty filterDiff = cmbPickerDifficulty.getValue();
-        String search = txtPickerSearch.getText() != null ? txtPickerSearch.getText().trim().toLowerCase() : "";
+        Difficulty filterDiff = cmbPickerDifficulty != null ? cmbPickerDifficulty.getValue() : null;
+        QuestionType filterType = cmbPickerQuestionType != null ? cmbPickerQuestionType.getValue() : null;
+        String search = txtPickerSearch != null && txtPickerSearch.getText() != null
+            ? txtPickerSearch.getText().trim().toLowerCase() : "";
 
         List<QuestionDto> filtered = allBankQuestions.stream()
-            .filter(q -> !existingIds.contains(q.id())) // Không hiển thị những câu đã có trong đề
+            .filter(q -> !existingIds.contains(q.id()))
             .filter(q -> filterDiff == null || q.difficulty() == filterDiff)
-            .filter(q -> search.isEmpty() || q.content().toLowerCase().contains(search) || q.topic().toLowerCase().contains(search))
+            .filter(q -> filterType == null || (q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE) == filterType)
+            .filter(q -> search.isEmpty() || (q.content() != null && q.content().toLowerCase().contains(search))
+                || (q.topic() != null && q.topic().toLowerCase().contains(search)))
             .toList();
 
         pickerQuestionRows.setAll(filtered);
+    }
+
+    @FXML
+    private void onClearPickerFilterClick() {
+        if (txtPickerSearch != null) txtPickerSearch.clear();
+        if (cmbPickerDifficulty != null) cmbPickerDifficulty.setValue(null);
+        if (cmbPickerQuestionType != null) cmbPickerQuestionType.setValue(null);
+        filterPickerQuestions();
     }
 
     @FXML
@@ -1267,14 +1486,14 @@ public final class TeacherController extends ScreenController {
         if (selectedBankQ == null) return;
 
         if (isPickerForReplace && questionToReplace != null) {
-            int idx = detailQuestionRows.indexOf(questionToReplace);
+            int idx = allDetailQuestionRows.indexOf(questionToReplace);
             if (idx >= 0) {
-                detailQuestionRows.set(idx, new DetailQuestionRow(selectedBankQ));
-                detailNotice.setText("✅ Đã thay thế câu hỏi thành công. Nhớ nhấn 'Lưu Thay Đổi Đề Thi' để lưu!");
+                allDetailQuestionRows.set(idx, new DetailQuestionRow(selectedBankQ));
+                detailNotice.setText("✅ Đã thay thế câu hỏi thành công. Nhớ nhấn 'Lưu Danh Sách Câu Hỏi' để lưu!");
             }
         } else {
-            detailQuestionRows.add(new DetailQuestionRow(selectedBankQ));
-            detailNotice.setText("✅ Đã thêm câu hỏi vào đề. Nhớ nhấn 'Lưu Thay Đổi Đề Thi' để lưu!");
+            allDetailQuestionRows.add(new DetailQuestionRow(selectedBankQ));
+            detailNotice.setText("✅ Đã thêm câu hỏi vào đề. Nhớ nhấn 'Lưu Danh Sách Câu Hỏi' để lưu!");
         }
 
         detailNotice.setStyle("-fx-text-fill: #15803d;");
@@ -1282,7 +1501,7 @@ public final class TeacherController extends ScreenController {
         detailNotice.setManaged(true);
         questionPickerPanel.setVisible(false);
         questionPickerPanel.setManaged(false);
-        updateDetailBreakdown();
+        filterDetailQuestions();
     }
 
     @FXML
@@ -1295,7 +1514,7 @@ public final class TeacherController extends ScreenController {
     private void onDetailSaveQuestionsClick() {
         if (!isDetailQuizDraft) return;
 
-        List<Long> ids = detailQuestionRows.stream()
+        List<Long> ids = allDetailQuestionRows.stream()
             .map(r -> r.getQuestion().id())
             .toList();
 
@@ -1815,15 +2034,88 @@ public final class TeacherController extends ScreenController {
             questionSelectionPreview.setText(row == null ? "" : formatQuestionPreview(row.getQuestion())));
     }
 
-    private String formatQuestionPreview(QuestionDto question) {
-        return question.content() + "\n\n"
-            + "A. " + question.optionA() + "\n"
-            + "B. " + question.optionB() + "\n"
-            + "C. " + question.optionC() + "\n"
-            + "D. " + question.optionD();
+    public static String getOptionText(QuestionDto q, char opt) {
+        if (q == null) return "";
+        return switch (opt) {
+            case 'A' -> safeString(q.optionA());
+            case 'B' -> safeString(q.optionB());
+            case 'C' -> safeString(q.optionC());
+            case 'D' -> safeString(q.optionD());
+            default -> "";
+        };
     }
 
-    private <S> TableCell<S, String> wrappingTextCell() {
+    public static String getCorrectOptionText(QuestionDto q) {
+    if (q == null) return "";
+    String text = getOptionText(q, q.correctOption());
+    if (!isEmptyOrDash(text)) return text;
+    if (!isEmptyOrDash(q.optionA())) return safeString(q.optionA());
+    if (!isEmptyOrDash(q.optionB())) return safeString(q.optionB());
+    if (!isEmptyOrDash(q.optionC())) return safeString(q.optionC());
+    if (!isEmptyOrDash(q.optionD())) return safeString(q.optionD());
+    return "";
+}
+
+public static boolean isEmptyOrDash(String s) {
+        return s == null || s.isBlank() || s.trim().equals("-") || s.trim().equals("—");
+    }
+
+    private static String safeString(String s) {
+        return s == null ? "" : s.trim();
+    }
+
+    public static String formatQuestionOptionsSummary(QuestionDto q) {
+    if (q == null) return "";
+    QuestionType type = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
+    return switch (type) {
+        case MULTIPLE_CHOICE -> {
+            String correctText = getOptionText(q, q.correctOption());
+            yield "✓ Đáp án: " + q.correctOption() + (correctText.isEmpty() ? "" : " (" + correctText + ")") + "\n"
+                + "A: " + safeString(q.optionA()) + " | B: " + safeString(q.optionB())
+                + " | C: " + safeString(q.optionC()) + " | D: " + safeString(q.optionD());
+        }
+        case TRUE_FALSE -> {
+            String optA = safeString(q.optionA());
+            String optB = safeString(q.optionB());
+            yield "✓ Đáp án: " + (q.correctOption() == 'A' ? "A (Đúng)" : "B (Sai)")
+                + "\nA: " + (!optA.isEmpty() ? optA : "Đúng") + " | B: " + (!optB.isEmpty() ? optB : "Sai");
+        }
+        case FILL_BLANK -> "✓ Đáp án: " + getCorrectOptionText(q);
+        case SHORT_ANSWER -> "✓ Đáp án: " + getCorrectOptionText(q);
+    };
+}
+
+public static String formatQuestionPreview(QuestionDto question) {
+    if (question == null) return "";
+    StringBuilder sb = new StringBuilder();
+    sb.append(question.content()).append("\n\n");
+    QuestionType type = question.questionType() != null ? question.questionType() : QuestionType.MULTIPLE_CHOICE;
+    switch (type) {
+        case MULTIPLE_CHOICE -> {
+            sb.append("A. ").append(question.optionA()).append(question.correctOption() == 'A' ? "  ✓ (Đáp án đúng)" : "").append("\n");
+            sb.append("B. ").append(question.optionB()).append(question.correctOption() == 'B' ? "  ✓ (Đáp án đúng)" : "").append("\n");
+            sb.append("C. ").append(question.optionC()).append(question.correctOption() == 'C' ? "  ✓ (Đáp án đúng)" : "").append("\n");
+            sb.append("D. ").append(question.optionD()).append(question.correctOption() == 'D' ? "  ✓ (Đáp án đúng)" : "").append("\n");
+            sb.append("\n→ Đáp án đúng: ").append(question.correctOption()).append(" (").append(getOptionText(question, question.correctOption())).append(")");
+        }
+        case TRUE_FALSE -> {
+            String optA = !isEmptyOrDash(question.optionA()) ? question.optionA() : "Đúng";
+            String optB = !isEmptyOrDash(question.optionB()) ? question.optionB() : "Sai";
+            sb.append("A. ").append(optA).append(question.correctOption() == 'A' ? "  ✓ (Đáp án đúng)" : "").append("\n");
+            sb.append("B. ").append(optB).append(question.correctOption() == 'B' ? "  ✓ (Đáp án đúng)" : "").append("\n");
+            sb.append("\n→ Đáp án đúng: ").append(question.correctOption() == 'A' ? "A (Đúng)" : "B (Sai)");
+        }
+        case FILL_BLANK -> {
+            sb.append("→ Đáp án đúng: ").append(getCorrectOptionText(question));
+        }
+        case SHORT_ANSWER -> {
+            sb.append("→ Đáp án đúng: ").append(getCorrectOptionText(question));
+        }
+    }
+    return sb.toString();
+}
+
+private <S> TableCell<S, String> wrappingTextCell() {
         return new TableCell<>() {
             private final Label text = new Label();
             {
@@ -1851,16 +2143,22 @@ public final class TeacherController extends ScreenController {
     private void onSelectQuestionsClick() {
         QuizDto sel = quizTable.getSelectionModel().getSelectedItem();
         if (sel == null || sel.status() != QuizStatus.DRAFT) return;
+        openQuestionSelectionForQuiz(sel.id(), sel.title());
+    }
 
-        targetQuizIdForQuestions = sel.id();
-        questionSelectionTitle.setText("Chọn câu hỏi từ Ngân hàng câu hỏi cho đề: " + sel.title());
-        hideAllQuizPanels();
-        questionSelectionPanel.setVisible(true);
-        questionSelectionPanel.setManaged(true);
-        scrollToBottom();
+    private void openQuestionSelectionForQuiz(long quizId, String quizTitle) {
+        targetQuizIdForQuestions = quizId;
+        questionSelectionTitle.setText("Chọn câu hỏi từ Ngân hàng câu hỏi cho đề: " + quizTitle);
+        if (btnSaveSelectedQuestions != null) btnSaveSelectedQuestions.setText("Lưu Đề Thi");
+        showQuizPanel(questionSelectionPanel);
+        scrollToTop();
+
+        if (txtSelectSearch != null) txtSelectSearch.clear();
+        if (cmbSelectQuestionType != null) cmbSelectQuestionType.setValue(null);
+        if (cmbSelectDifficulty != null) cmbSelectDifficulty.setValue(null);
 
         setQuizLoading(true);
-        api.listQuestions().thenCombine(api.getQuiz(sel.id()), (allQ, detail) -> {
+        api.listQuestions().thenCombine(api.getQuiz(quizId), (allQ, detail) -> {
             Set<Long> existingIds = new HashSet<>();
             for (QuestionDto q : detail.questions()) {
                 existingIds.add(q.id());
@@ -1878,20 +2176,57 @@ public final class TeacherController extends ScreenController {
             if (err != null) {
                 showQuizNotice("Lỗi khi tải câu hỏi: " + formatError(err), true);
             } else {
-                questionRows.setAll(rows);
+                allSelectionQuestions.clear();
+                allSelectionQuestions.addAll(rows);
+                filterSelectionQuestions();
                 updateSelectedQuestionCount();
             }
         }));
     }
 
+    private void filterSelectionQuestions() {
+        String search = txtSelectSearch != null && txtSelectSearch.getText() != null
+            ? txtSelectSearch.getText().trim().toLowerCase() : "";
+        QuestionType type = cmbSelectQuestionType != null ? cmbSelectQuestionType.getValue() : null;
+        Difficulty diff = cmbSelectDifficulty != null ? cmbSelectDifficulty.getValue() : null;
+
+        List<QuestionRow> filtered = allSelectionQuestions.stream()
+            .filter(r -> {
+                QuestionDto q = r.getQuestion();
+                if (type != null && (q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE) != type) {
+                    return false;
+                }
+                if (diff != null && q.difficulty() != diff) {
+                    return false;
+                }
+                if (!search.isEmpty()) {
+                    String content = q.content() != null ? q.content().toLowerCase() : "";
+                    String topic = q.topic() != null ? q.topic().toLowerCase() : "";
+                    return content.contains(search) || topic.contains(search);
+                }
+                return true;
+            })
+            .toList();
+
+        questionRows.setAll(filtered);
+    }
+
+    @FXML
+    private void onClearSelectFilterClick() {
+        if (txtSelectSearch != null) txtSelectSearch.clear();
+        if (cmbSelectQuestionType != null) cmbSelectQuestionType.setValue(null);
+        if (cmbSelectDifficulty != null) cmbSelectDifficulty.setValue(null);
+        filterSelectionQuestions();
+    }
+
     private void updateSelectedQuestionCount() {
-        long count = questionRows.stream().filter(QuestionRow::isSelected).count();
+        long count = allSelectionQuestions.stream().filter(QuestionRow::isSelected).count();
         selectedQuestionsCount.setText("Đã chọn: " + count + " câu hỏi");
     }
 
     @FXML
     private void onSaveSelectedQuestionsClick() {
-        List<Long> selectedIds = questionRows.stream()
+        List<Long> selectedIds = allSelectionQuestions.stream()
             .filter(QuestionRow::isSelected)
             .map(r -> r.getQuestion().id())
             .toList();
@@ -1899,9 +2234,10 @@ public final class TeacherController extends ScreenController {
         btnSaveSelectedQuestions.setDisable(true);
         fx.observe(api.setQuizQuestions(targetQuizIdForQuestions, selectedIds), this::isActive,
             ignored -> {
-                showQuizNotice("Đã lưu " + selectedIds.size() + " câu hỏi vào đề kiểm tra #" + targetQuizIdForQuestions + "!", false);
+                showQuizNotice("✅ Đã lưu đề thi #" + targetQuizIdForQuestions + " kèm " + selectedIds.size() + " câu hỏi thành công!", false);
                 hideAllQuizPanels();
                 loadQuizzes();
+                openReviewAndEdit(targetQuizIdForQuestions, "", QuizStatus.DRAFT);
             },
             err -> {
                 showQuizNotice("Lỗi khi lưu câu hỏi: " + formatError(err), true);
