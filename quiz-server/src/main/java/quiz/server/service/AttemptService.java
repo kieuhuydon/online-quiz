@@ -69,7 +69,10 @@ public final class AttemptService {
             authorize(a,studentId); if(a.status()!=AttemptStatus.IN_PROGRESS)throw new ConflictException("Bài làm đã được nộp");
             if(!clock.instant().isBefore(a.deadlineAt()))throw new ConflictException("Đã hết thời gian làm bài");
             List<Question> qs=questions.findQuestionsByQuizId(a.quizId());
-            if(qs.stream().noneMatch(q->q.id()==questionId))throw new ValidationException("Câu hỏi không thuộc bài kiểm tra");
+            Question question=qs.stream().filter(q->q.id()==questionId).findFirst()
+                .orElseThrow(()->new ValidationException("Câu hỏi không thuộc bài kiểm tra"));
+            if(answer!=null && question.questionType()==QuestionType.MULTIPLE_CHOICE && !answer.strip().matches("[A-Da-d]"))
+                throw new ValidationException("Đáp án trắc nghiệm không hợp lệ");
             attempts.saveAnswer(c,new AnswerRecord(attemptId,questionId,answer == null ? null : answer.strip(),clock.instant())); return null;
         });
     }
@@ -84,11 +87,7 @@ public final class AttemptService {
             if(existing.isPresent())return existing.get();
             if(a.status()!=AttemptStatus.IN_PROGRESS)throw new ConflictException("Attempt đã được nộp");
             Instant now=clock.instant(); SubmitReason reason=requestedReason==SubmitReason.ANTICHEAT?SubmitReason.ANTICHEAT:SubmitReason.MANUAL; if(!now.isBefore(a.deadlineAt()))reason=SubmitReason.TIMEOUT;
-            Quiz quiz=quizzes.findById(a.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
-            User user=users.findById(studentId).orElseThrow(()->new NotFoundException("Tài khoản không tồn tại"));
-            List<Question> qs=questions.findQuestionsByQuizId(a.quizId());
-            ExamResult graded=grading.grade(a,attempts.getTextAnswers(c,attemptId),qs,quiz,user.fullName(),reason,now);
-            attempts.submit(c,attemptId,now,reason);attempts.saveResult(c,graded);return graded;
+            return finishLocked(c,a,reason);
         });
         return resultDto(result);
     }
@@ -97,7 +96,7 @@ public final class AttemptService {
         Instant now=clock.instant();
         Quiz quiz=quizzes.findById(a.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
         User user=users.findById(a.studentId()).orElseThrow(()->new NotFoundException("Tài khoản không tồn tại"));
-        ExamResult raw=grading.grade(a,attempts.getAnswers(c,a.id()),questions.findQuestionsByQuizId(a.quizId()),quiz,user.fullName(),reason,now);
+        ExamResult raw=grading.grade(a,attempts.getTextAnswers(c,a.id()),questions.findQuestionsByQuizId(a.quizId()),quiz,user.fullName(),reason,now);
         double deduction=monitoring==null?0:monitoring.find(c,a.id(),now).deductedScore();
         double score=Math.max(0,Math.round((raw.score()-deduction)*100.0)/100.0);
         ExamResult result=new ExamResult(raw.attemptId(),raw.quizId(),raw.studentId(),raw.studentName(),score,

@@ -137,7 +137,7 @@ class AttemptServiceTest {
         when(quizRepo.findAssignedQuizzesForStudent(studentId)).thenReturn(List.of(quiz));
         when(attemptRepo.findByStudentAndQuiz(studentId, quizId)).thenReturn(Optional.of(existing));
         when(questionRepo.findQuestionsByQuizId(quizId)).thenReturn(List.of(sampleQuestion(101L, 'A')));
-        when(attemptRepo.getAnswers(any(), eq(attemptId))).thenReturn(Map.of(101L, 'B'));
+        when(attemptRepo.getTextAnswers(any(), eq(attemptId))).thenReturn(Map.of(101L, "B"));
 
         AttemptStateDto state = service.startAttempt(quizId, "123456", studentId);
 
@@ -145,7 +145,7 @@ class AttemptServiceTest {
         assertEquals(quizId, state.quizId());
         assertEquals(1500L, state.remainingSeconds());
         assertEquals(1, state.questions().size());
-        assertEquals('B', state.savedAnswers().get(101L));
+        assertEquals("B", state.savedAnswers().get(101L));
 
         // Tiếp tục được attempt IN_PROGRESS ngay cả khi giáo viên đã đóng đề (CLOSED) nhưng chưa quá deadline
         when(quizRepo.findById(quizId)).thenReturn(Optional.of(closedQuiz()));
@@ -172,7 +172,7 @@ class AttemptServiceTest {
             now, now.plusSeconds(1800), null, null);
         when(attemptRepo.create(any(), any())).thenReturn(created);
         when(questionRepo.findQuestionsByQuizId(quizId)).thenReturn(List.of(sampleQuestion(101L, 'A')));
-        when(attemptRepo.getAnswers(any(), eq(attemptId))).thenReturn(Map.of());
+        when(attemptRepo.getTextAnswers(any(), eq(attemptId))).thenReturn(Map.of());
 
         AttemptStateDto state = service.startAttempt(quizId, "123456", studentId);
         assertEquals(attemptId, state.attemptId());
@@ -230,7 +230,7 @@ class AttemptServiceTest {
             sampleQuestion(101L, 'A'),
             sampleQuestion(102L, 'B')
         ));
-        when(attemptRepo.getAnswers(any(), eq(attemptId))).thenReturn(Map.of(101L, 'A', 102L, 'C'));
+        when(attemptRepo.getTextAnswers(any(), eq(attemptId))).thenReturn(Map.of(101L, "A", 102L, "C"));
 
         ResultDto dto = service.submitAttempt(attemptId, studentId, SubmitReason.MANUAL);
 
@@ -265,7 +265,7 @@ class AttemptServiceTest {
         when(quizRepo.findById(quizId)).thenReturn(Optional.of(quiz));
         when(userRepo.findById(studentId)).thenReturn(Optional.of(student));
         when(questionRepo.findQuestionsByQuizId(quizId)).thenReturn(List.of(sampleQuestion(101L, 'A')));
-        when(attemptRepo.getAnswers(any(), eq(attemptId))).thenReturn(Map.of(101L, 'A'));
+        when(attemptRepo.getTextAnswers(any(), eq(attemptId))).thenReturn(Map.of(101L, "A"));
 
         service.finalizeExpiredAttempts();
 
