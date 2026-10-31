@@ -31,6 +31,13 @@ import java.util.Objects;
  * Dịch vụ giám sát và xử lý vi phạm chống gian lận trong quá trình làm bài thi (FR-S13, FR-S14, FR-T09, BR-12, BR-13, NFR-09).
  */
 public final class AntiCheatService {
+    private quiz.server.repository.jdbc.MonitoringDAO monitoring;
+    public AntiCheatService(AntiCheatRepository events, AttemptRepository attempts, QuizRepository quizzes,
+                            AttemptService exams, ConnectionRegistry connections, TransactionManager transactions,
+                            quiz.server.repository.jdbc.MonitoringDAO monitoring) {
+        this(events,attempts,quizzes,exams,connections,transactions);
+        this.monitoring=Objects.requireNonNull(monitoring);
+    }
     private static final Logger log = LoggerFactory.getLogger(AntiCheatService.class);
 
     private final AntiCheatRepository antiCheatRepo;
@@ -74,6 +81,7 @@ public final class AntiCheatService {
      */
     public void reportEvent(ReportAntiCheatDto dto, long studentId) {
         Objects.requireNonNull(dto, "ReportAntiCheatDto cannot be null");
+        if(dto.eventType()==null) throw new quiz.server.exception.ValidationException("Thiếu loại sự kiện");
         Attempt attempt = attemptRepo.findById(dto.attemptId())
             .orElseThrow(() -> new NotFoundException("Lượt làm bài không tồn tại"));
 
@@ -95,6 +103,9 @@ public final class AntiCheatService {
         Instant now = clock.instant();
 
         EventResult result = transactionManager.executeWithException(conn -> {
+            Attempt locked=attemptRepo.findByIdForUpdate(conn,dto.attemptId())
+                .orElseThrow(()->new NotFoundException("Lượt thi không tồn tại"));
+            if(locked.status()!=AttemptStatus.IN_PROGRESS || !now.isBefore(locked.deadlineAt())) return null;
             int currentViolations = antiCheatRepo.countViolations(conn, dto.attemptId());
             int violationCountAfter = currentViolations + 1;
             String action;
@@ -124,9 +135,12 @@ public final class AntiCheatService {
                 violationCountAfter,
                 action
             );
+            if(monitoring!=null) monitoring.recordViolation(conn,dto.attemptId(),dto.eventType(),detail,now);
+            if("AUTO_SUBMITTED".equals(action)) attemptService.finishLocked(conn,locked,SubmitReason.ANTICHEAT);
 
             return new EventResult(violationCountAfter, action, maxViolations);
         });
+        if(result==null) return;
 
         log.warn("Sự kiện gian lận ghi nhận: attemptId={}, eventType={}, detail={}, count={}/{}, action={}",
             dto.attemptId(), dto.eventType(), dto.detail(), result.countAfter(), result.maxViolations(), result.action());

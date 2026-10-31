@@ -364,7 +364,39 @@ public final class QuizApi implements AutoCloseable {
     }
 
     public CompletableFuture<AttemptStateDto> startAttempt(long quizId, String pin) {
-        return protectedCall(MessageType.START_ATTEMPT, new StartAttemptRequestDto(quizId, pin), QuizApi::decodeAttemptState);
+        final long operation;
+        synchronized(lock) { operation=sessionRevision; }
+        return CompletableFuture.supplyAsync(() -> {
+            try { return java.net.InetAddress.getLocalHost().getHostAddress(); }
+            catch(java.net.UnknownHostException e) { return null; }
+        }).thenCompose(ip -> {
+            synchronized(lock) {
+                if(operation!=sessionRevision) return CompletableFuture.failedFuture(new TransportException(CONNECTION_LOST));
+                return protectedCall(MessageType.START_ATTEMPT, new StartAttemptRequestDto(quizId, pin,ip), QuizApi::decodeAttemptState);
+            }
+        });
+    }
+
+    public int monitoringIntervalMs() { return connection.monitoringIntervalMs(); }
+    public CompletableFuture<List<ExamSession>> listExamSessions(long quizId) {
+        return protectedCall(MessageType.LIST_EXAM_SESSIONS,quizId,p->typedList(p,ExamSession.class));
+    }
+    public CompletableFuture<ExamSession> getExamSession(long id) {
+        return protectedCall(MessageType.GET_EXAM_SESSION,id,QuizApi::decodeExamSession);
+    }
+    public CompletableFuture<ExamSession> applyMonitoringPenalty(ApplyPenaltyDto p) {
+        return protectedCall(MessageType.APPLY_MONITORING_PENALTY,p,QuizApi::decodeExamSession);
+    }
+    public CompletableFuture<List<MonitoringPenalty>> listMonitoringPenalties(long id) {
+        return protectedCall(MessageType.LIST_MONITORING_PENALTIES,id,p->typedList(p,MonitoringPenalty.class));
+    }
+    private static ExamSession decodeExamSession(Object p) {
+        if(!(p instanceof ExamSession s)) throw new TransportException(PROTOCOL);
+        return s;
+    }
+    private static <T> List<T> typedList(Object p,Class<T> type) {
+        if(!(p instanceof List<?> list)||list.stream().anyMatch(x->!type.isInstance(x))) throw new TransportException(PROTOCOL);
+        return list.stream().map(type::cast).toList();
     }
 
     public CompletableFuture<Void> saveAnswer(long attemptId, long questionId, Character option) {

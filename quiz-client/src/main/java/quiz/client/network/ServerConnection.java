@@ -22,6 +22,7 @@ import static quiz.client.network.TransportException.Kind.*;
  */
 public final class ServerConnection implements AutoCloseable {
     public int heartbeatIntervalMs() { return config.heartbeatIntervalMs(); }
+    public int monitoringIntervalMs() { return config.monitoringIntervalMs(); }
     public enum State { DISCONNECTED, CONNECTING, CONNECTED, CLOSING, CLOSED }
     private static final Logger log = LoggerFactory.getLogger(ServerConnection.class);
     private final ClientConfig config;

@@ -56,6 +56,7 @@
                         <Button fx:id="btnAutoGenerateQuiz" text="⚡Tạo Đề Tự Động" onAction="#onAutoGenerateQuizClick" styleClass="primary-button" style="-fx-background-color: #2563eb;" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
                         <Button fx:id="btnEditQuiz" text="Sửa Đề" onAction="#onEditQuizClick" styleClass="secondary-button" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
                         <Button fx:id="btnSelectQuestions" text="Chọn Câu Hỏi" onAction="#onSelectQuestionsClick" styleClass="warning-button" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="3"/>
+                        <Button text="Giám sát phòng thi" onAction="#onMonitorClick" styleClass="secondary-button" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="4"/>
                         <Button fx:id="btnOpenQuiz" text="Mở Đề (Sinh PIN)" onAction="#onOpenQuizClick" styleClass="success-button" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
                         <Button fx:id="btnCloseQuiz" text="Đóng Đề Thi" onAction="#onCloseQuizClick" styleClass="danger-button" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
                         <Button fx:id="btnAssignQuiz" text="Giao Cho Lớp" onAction="#onAssignQuizClick" styleClass="secondary-button" maxWidth="Infinity" GridPane.rowIndex="1" GridPane.columnIndex="2"/>

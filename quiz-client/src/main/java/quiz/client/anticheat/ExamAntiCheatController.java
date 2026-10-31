@@ -95,6 +95,9 @@ public class ExamAntiCheatController {
      * Bắt đầu toàn bộ luồng giám sát: khóa FullScreen, lắng nghe Window/Focus, và quét định kỳ 10 giây.
      */
     public void startMonitoring(Stage stage, Parent examRoot) {
+        startMonitoring(stage,examRoot,3);
+    }
+    public void startMonitoring(Stage stage, Parent examRoot,long scanIntervalSeconds) {
         this.stage = Objects.requireNonNull(stage, "stage cannot be null");
         this.examRoot = examRoot;
 
@@ -159,7 +162,7 @@ public class ExamAntiCheatController {
         checkProcessesOnWindowFocus();
 
         // 6. Khởi động Process Scanner định kỳ mỗi 10 giây với Stateful Deduplication (Yêu cầu 2 & NFR-09)
-        processScannerService.startPeriodicScan(10, new ProcessScannerService.ViolationListener() {
+        processScannerService.startPeriodicScan(scanIntervalSeconds, new ProcessScannerService.ViolationListener() {
             @Override
             public void onNewViolation(List<DetectedProcess> newViolations, String formattedSummary) {
                 Platform.runLater(() -> {
@@ -265,20 +268,16 @@ public class ExamAntiCheatController {
      */
     public void checkProcessesOnWindowFocus() {
         if (isSuppressed.getAsBoolean()) return;
-        List<DetectedProcess> running = processScannerService.scanViolations();
-        if (!running.isEmpty()) {
-            String summary = ProcessBlacklistScanner.formatViolationDetail(running);
-            Platform.runLater(() -> {
-                if (isSuppressed.getAsBoolean()) return;
-                // 1. Luôn cập nhật giao diện popup cảnh báo in-scene kèm 2 nút Remediation
-                callback.onProhibitedProcessDetected(running, summary);
-            });
-
-            // 2. Chỉ gửi sự kiện vi phạm lên Server nếu đây là ứng dụng cấm MỚI (Stateful Deduplication)
+        processScannerService.scanViolationsAsync().whenComplete((running,error) -> Platform.runLater(() -> {
+            if(isSuppressed.getAsBoolean()) return;
+            if(error!=null) { log.warn("Không thể quét tiến trình: {}",error.getClass().getSimpleName());return; }
+            if(!running.isEmpty()) callback.onProhibitedProcessDetected(running,ProcessBlacklistScanner.formatViolationDetail(running));
             processScannerService.scanNow(new ProcessScannerService.ViolationListener() {
                 @Override
                 public void onNewViolation(List<DetectedProcess> newViolations, String formattedSummary) {
-                    reportViolationThrottled(AntiCheatEventType.PROHIBITED_PROCESS, formattedSummary);
+                    Platform.runLater(()->{
+                        if(!isSuppressed.getAsBoolean()) reportViolationThrottled(AntiCheatEventType.PROHIBITED_PROCESS, formattedSummary);
+                    });
                 }
 
                 @Override
@@ -286,7 +285,7 @@ public class ExamAntiCheatController {
                     Platform.runLater(() -> callback.onViolationsResolved(resolvedApps));
                 }
             });
-        }
+        }));
     }
 
     public void stopMonitoring() {

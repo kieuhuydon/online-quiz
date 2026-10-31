@@ -6,6 +6,9 @@ import quiz.server.db.TransactionManager;
 import quiz.server.domain.*;
 import quiz.server.exception.*;
 import quiz.server.repository.*;
+import quiz.server.repository.jdbc.MonitoringDAO;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.*;
 import java.util.*;
 
@@ -13,6 +16,12 @@ public final class AttemptService {
     private final AttemptRepository attempts; private final QuizRepository quizzes; private final QuestionRepository questions;
     private final UserRepository users; private final TransactionManager transactions; private final GradingService grading;
     private final Clock clock;
+    private MonitoringDAO monitoring;
+    public AttemptService(AttemptRepository attempts, QuizRepository quizzes, QuestionRepository questions,
+                          UserRepository users, TransactionManager transactions, GradingService grading, MonitoringDAO monitoring) {
+        this(attempts,quizzes,questions,users,transactions,grading);
+        this.monitoring=Objects.requireNonNull(monitoring);
+    }
     public AttemptService(AttemptRepository attempts, QuizRepository quizzes, QuestionRepository questions,
                           UserRepository users, TransactionManager transactions, GradingService grading) {
         this(attempts,quizzes,questions,users,transactions,grading,Clock.systemUTC());
@@ -24,6 +33,11 @@ public final class AttemptService {
         this.transactions=Objects.requireNonNull(transactions);this.grading=Objects.requireNonNull(grading);this.clock=Objects.requireNonNull(clock);
     }
     public AttemptStateDto startAttempt(long quizId,String pin,long studentId) {
+        return startAttempt(quizId,pin,studentId,null);
+    }
+    public AttemptStateDto startAttempt(long quizId,String pin,long studentId,String ipAddress) {
+        if(ipAddress!=null && (ipAddress.length()>45 || !ipAddress.matches("[0-9a-fA-F:.%]+")))
+            throw new ValidationException("Địa chỉ IP không hợp lệ");
         Quiz quiz=quizzes.findById(quizId).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
         Optional<Attempt> existing=attempts.findByStudentAndQuiz(studentId,quizId);
         if(existing.isPresent()) {
@@ -34,13 +48,18 @@ public final class AttemptService {
                 throw new ConflictException("Bài kiểm tra đã hết giờ và được tự động nộp");
             }
             if(quiz.status()==QuizStatus.OPEN && !Objects.equals(quiz.pin(),pin))throw new ForbiddenException("Mã PIN không chính xác");
+            if(monitoring!=null) transactions.executeWithException(c->{monitoring.create(c,a,ipAddress);return null;});
             return state(a);
         }
         if(quiz.status()!=QuizStatus.OPEN)throw new ConflictException("Bài kiểm tra hiện không mở");
         if(!quizzes.findAssignedQuizzesForStudent(studentId).stream().anyMatch(q->q.id()==quizId))throw new ForbiddenException("Bài kiểm tra chưa được giao cho bạn");
         if(!Objects.equals(quiz.pin(),pin))throw new ForbiddenException("Mã PIN không chính xác");
         Instant start=clock.instant();
-        Attempt created=transactions.executeWithException(c->attempts.create(c,new Attempt(0,quizId,studentId,AttemptStatus.IN_PROGRESS,start,start.plusSeconds(quiz.durationMinutes()*60L),null,null)));
+        Attempt created=transactions.executeWithException(c->{
+            Attempt a=attempts.create(c,new Attempt(0,quizId,studentId,AttemptStatus.IN_PROGRESS,start,start.plusSeconds(quiz.durationMinutes()*60L),null,null));
+            if(monitoring!=null) monitoring.create(c,a,ipAddress);
+            return a;
+        });
         return state(created);
     }
     public void saveAnswer(long attemptId,long questionId,Character option,long studentId) {
@@ -61,14 +80,26 @@ public final class AttemptService {
             Optional<ExamResult> existing=attempts.findResult(attemptId);
             if(existing.isPresent())return existing.get();
             if(a.status()!=AttemptStatus.IN_PROGRESS)throw new ConflictException("Attempt đã được nộp");
-            Instant now=clock.instant(); SubmitReason reason=requestedReason==SubmitReason.ANTICHEAT?SubmitReason.ANTICHEAT:SubmitReason.MANUAL; if(!now.isBefore(a.deadlineAt()))reason=SubmitReason.TIMEOUT;
-            Quiz quiz=quizzes.findById(a.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
-            User user=users.findById(studentId).orElseThrow(()->new NotFoundException("Tài khoản không tồn tại"));
-            List<Question> qs=questions.findQuestionsByQuizId(a.quizId());
-            ExamResult graded=grading.grade(a,attempts.getAnswers(c,attemptId),qs,quiz,user.fullName(),reason,now);
-            attempts.submit(c,attemptId,now,reason);attempts.saveResult(c,graded);return graded;
+            SubmitReason reason=requestedReason==SubmitReason.ANTICHEAT?SubmitReason.ANTICHEAT:SubmitReason.MANUAL;
+            if(!clock.instant().isBefore(a.deadlineAt()))reason=SubmitReason.TIMEOUT;
+            return finishLocked(c,a,reason);
         });
         return resultDto(result);
+    }
+    /** Caller holds the attempt row lock. Grading, penalty and status commit together. */
+    ExamResult finishLocked(Connection c,Attempt a,SubmitReason reason) throws SQLException {
+        Instant now=clock.instant();
+        Quiz quiz=quizzes.findById(a.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
+        User user=users.findById(a.studentId()).orElseThrow(()->new NotFoundException("Tài khoản không tồn tại"));
+        ExamResult raw=grading.grade(a,attempts.getAnswers(c,a.id()),questions.findQuestionsByQuizId(a.quizId()),quiz,user.fullName(),reason,now);
+        double deduction=monitoring==null?0:monitoring.find(c,a.id(),now).deductedScore();
+        double score=Math.max(0,Math.round((raw.score()-deduction)*100.0)/100.0);
+        ExamResult result=new ExamResult(raw.attemptId(),raw.quizId(),raw.studentId(),raw.studentName(),score,
+            raw.correctCount(),raw.totalQuestions(),score*10>=quiz.passScore(),reason,now);
+        attempts.submit(c,a.id(),now,reason);
+        attempts.saveResult(c,result);
+        if(monitoring!=null) monitoring.submitted(c,a.id(),now);
+        return result;
     }
     public AttemptStateDto getAttemptState(long id,long studentId){Attempt a=attempts.findById(id).orElseThrow(()->new NotFoundException("Attempt không tồn tại"));authorize(a,studentId);if(a.status()==AttemptStatus.SUBMITTED)throw new ConflictException("Attempt đã được nộp");if(!clock.instant().isBefore(a.deadlineAt())){submitAttempt(id,studentId,SubmitReason.TIMEOUT);throw new ConflictException("Bài kiểm tra đã hết giờ và được tự động nộp");}return state(a);}
     public ResultDto getResult(long id,long studentId){ExamResult r=attempts.findResult(id).orElseThrow(()->new NotFoundException("Kết quả chưa có"));if(r.studentId()!=studentId)throw new ForbiddenException("Bạn không có quyền xem kết quả này");return resultDto(r);}
