@@ -47,30 +47,30 @@ public final class JdbcQuestionRepository implements QuestionRepository {
 
         if (hasQuestionTypeColumn) {
             findIdSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                + "topic, difficulty, question_type, answer_key, explanation, active, created_by, created_at, updated_at "
                 + "FROM questions WHERE id = ?";
             findAllSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                + "topic, difficulty, question_type, answer_key, explanation, active, created_by, created_at, updated_at "
                 + "FROM questions ORDER BY id ASC";
             findActiveSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                + "topic, difficulty, question_type, answer_key, explanation, active, created_by, created_at, updated_at "
                 + "FROM questions WHERE active = TRUE ORDER BY id ASC";
             findByFilterSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                + "topic, difficulty, question_type, answer_key, explanation, active, created_by, created_at, updated_at "
                 + "FROM questions WHERE active = TRUE "
                 + "AND (? IS NULL OR topic = ?) AND (? IS NULL OR difficulty = ?) ORDER BY id ASC";
             insertSql = "INSERT INTO questions (content, option_a, option_b, option_c, option_d, "
-                + "correct_option, topic, difficulty, question_type, created_by) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "correct_option, topic, difficulty, question_type, answer_key, explanation, created_by) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 + "RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type, active, created_by, created_at, updated_at";
+                + "topic, difficulty, question_type, answer_key, explanation, active, created_by, created_at, updated_at";
             updateSql = "UPDATE questions SET content = ?, option_a = ?, option_b = ?, option_c = ?, "
-                + "option_d = ?, correct_option = ?, topic = ?, difficulty = ?, question_type = ?, updated_at = now() "
+                + "option_d = ?, correct_option = ?, topic = ?, difficulty = ?, question_type = ?, answer_key = ?, explanation = ?, updated_at = now() "
                 + "WHERE id = ? AND active = TRUE "
                 + "RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type, active, created_by, created_at, updated_at";
+                + "topic, difficulty, question_type, answer_key, explanation, active, created_by, created_at, updated_at";
             findByQuizIdSql = "SELECT q.id, q.content, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option, "
-                + "q.topic, q.difficulty, q.question_type, q.active, q.created_by, q.created_at, q.updated_at "
+                + "q.topic, q.difficulty, q.question_type, q.answer_key, q.explanation, q.active, q.created_by, q.created_at, q.updated_at "
                 + "FROM quiz_questions qq "
                 + "JOIN questions q ON qq.question_id = q.id "
                 + "WHERE qq.quiz_id = ? ORDER BY qq.position ASC";
@@ -107,10 +107,10 @@ public final class JdbcQuestionRepository implements QuestionRepository {
     }
 
     public void ensureSchema() {
-        String addColumn = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS question_type VARCHAR(20) NOT NULL DEFAULT 'MULTIPLE_CHOICE'";
+        String addColumn = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS question_type VARCHAR(20) NOT NULL DEFAULT 'MULTIPLE_CHOICE'; ALTER TABLE questions ADD COLUMN IF NOT EXISTS answer_key TEXT NOT NULL DEFAULT ''; ALTER TABLE questions ADD COLUMN IF NOT EXISTS explanation TEXT NOT NULL DEFAULT ''";
         try (Connection c = dataSource.getConnection();
              java.sql.Statement s = c.createStatement()) {
-            s.execute(addColumn);
+            for (String sql : addColumn.split(";")) s.execute(sql);
         } catch (SQLException ignored) {
             // Có thể xảy ra nếu user kết nối không phải superuser/owner; repository sẽ tự động dùng fallback mode.
         }
@@ -202,7 +202,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
         return withConnection(connection -> {
             String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
             String colPart = hasQuestionTypeColumn
-                ? "id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                ? "id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, answer_key, explanation, active, created_by, created_at, updated_at "
                 : "id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, active, created_by, created_at, updated_at ";
             String sql = "SELECT " + colPart + "FROM questions WHERE id IN (" + placeholders + ") ORDER BY id ASC";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -320,7 +320,9 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             statement.setString(8, question.difficulty().name());
             if (hasQuestionTypeColumn) {
                 statement.setString(9, (question.questionType() != null ? question.questionType() : QuestionType.MULTIPLE_CHOICE).name());
-                statement.setLong(10, question.createdBy());
+                statement.setString(10, question.answerKey());
+                statement.setString(11, question.explanation());
+                statement.setLong(12, question.createdBy());
             } else {
                 statement.setLong(9, question.createdBy());
             }
@@ -347,7 +349,9 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             statement.setString(8, question.difficulty().name());
             if (hasQuestionTypeColumn) {
                 statement.setString(9, (question.questionType() != null ? question.questionType() : QuestionType.MULTIPLE_CHOICE).name());
-                statement.setLong(10, question.id());
+                statement.setString(10, question.answerKey());
+                statement.setString(11, question.explanation());
+                statement.setLong(12, question.id());
             } else {
                 statement.setLong(9, question.id());
             }
@@ -396,10 +400,14 @@ public final class JdbcQuestionRepository implements QuestionRepository {
                 questionType,
                 rows.getBoolean("active"), rows.getLong("created_by"),
                 createdAt == null ? null : createdAt.toInstant(),
-                updatedAt == null ? null : updatedAt.toInstant());
+                updatedAt == null ? null : updatedAt.toInstant(), safeString(rows, "answer_key"), safeString(rows, "explanation"));
         } catch (IllegalArgumentException | NullPointerException error) {
             throw new SQLException("Invalid stored question data", error);
         }
+    }
+
+    private static String safeString(ResultSet rows, String column) {
+        try { return rows.getString(column); } catch (SQLException ignored) { return ""; }
     }
 
     private static QuestionType inferQuestionType(String content, String optA, String optB, String optC, String optD) {

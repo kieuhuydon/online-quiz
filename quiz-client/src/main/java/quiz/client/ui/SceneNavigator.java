@@ -83,6 +83,7 @@ public final class SceneNavigator implements AutoCloseable {
     public void showExam(quiz.common.dto.AttemptStateDto attempt) { activeAttempt = Objects.requireNonNull(attempt); navigate(Screen.STUDENT_EXAM, ""); }
     public void showResult(quiz.common.dto.ResultDto result) { showResult(result, ""); }
     public void showResult(quiz.common.dto.ResultDto result, String notice) { activeResult = Objects.requireNonNull(result); navigate(Screen.STUDENT_RESULT, notice == null ? "" : notice); }
+    public void showReview(quiz.common.dto.ResultDto result) { activeResult = Objects.requireNonNull(result); navigate(Screen.STUDENT_REVIEW, ""); }
 
     public void showLogin(String notice) {
         navigate(Screen.LOGIN, notice == null ? "" : notice);
@@ -202,6 +203,9 @@ public final class SceneNavigator implements AutoCloseable {
         }
         if (type == quiz.client.ui.student.ResultController.class) {
             return new quiz.client.ui.student.ResultController(api, this, Objects.requireNonNull(activeResult));
+        }
+        if (type == quiz.client.ui.student.ReviewController.class) {
+            return new quiz.client.ui.student.ReviewController(this, Objects.requireNonNull(activeResult));
         }
         if (type == quiz.client.ui.student.HistoryController.class) {
             return new quiz.client.ui.student.HistoryController(api, this, fx);

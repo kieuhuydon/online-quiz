@@ -399,10 +399,14 @@ public final class QuizApi implements AutoCloseable {
         return list.stream().map(type::cast).toList();
     }
 
-    public CompletableFuture<Void> saveAnswer(long attemptId, long questionId, Character option) {
-        return protectedCall(MessageType.SAVE_ANSWER, new SaveAnswerDto(attemptId, questionId, option), payload -> {
+    public CompletableFuture<Void> saveAnswer(long attemptId, long questionId, String answer) {
+        return protectedCall(MessageType.SAVE_ANSWER, new SaveAnswerDto(attemptId, questionId, answer), payload -> {
             requireNull(payload); return null;
         });
+    }
+
+    public CompletableFuture<Void> saveAnswer(long attemptId, long questionId, Character option) {
+        return saveAnswer(attemptId, questionId, option == null ? null : option.toString());
     }
 
     public CompletableFuture<ResultDto> submitAttempt(long attemptId) {

@@ -17,7 +17,9 @@ public record CreateQuestionDto(
     char correctOption,
     String topic,
     Difficulty difficulty,
-    QuestionType questionType
+    QuestionType questionType,
+    String answerKey,
+    String explanation
 ) implements Serializable {
     public CreateQuestionDto {
         if (questionType == null) {
@@ -29,6 +31,10 @@ public record CreateQuestionDto(
                              String optionC, String optionD, char correctOption,
                              String topic, Difficulty difficulty) {
         this(content, optionA, optionB, optionC, optionD, correctOption,
-             topic, difficulty, QuestionType.MULTIPLE_CHOICE);
+             topic, difficulty, QuestionType.MULTIPLE_CHOICE, null, null);
+    }
+    public CreateQuestionDto(String content, String optionA, String optionB, String optionC, String optionD,
+                             char correctOption, String topic, Difficulty difficulty, QuestionType questionType) {
+        this(content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty, questionType, null, null);
     }
 }

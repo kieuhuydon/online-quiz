@@ -17,7 +17,15 @@ import java.util.*;
 /** PostgreSQL persistence for attempts, answers and results. */
 public final class JdbcAttemptRepository implements AttemptRepository {
     private final DataSource dataSource;
-    public JdbcAttemptRepository(DataSource dataSource) { this.dataSource = Objects.requireNonNull(dataSource); }
+    public JdbcAttemptRepository(DataSource dataSource) {
+        this.dataSource = Objects.requireNonNull(dataSource);
+        try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
+            s.execute("ALTER TABLE attempt_answers ADD COLUMN IF NOT EXISTS answer_text TEXT");
+            s.execute("UPDATE attempt_answers SET answer_text = selected_option::TEXT WHERE answer_text IS NULL AND selected_option IS NOT NULL");
+        } catch (SQLException ignored) {
+            // Schema migrations may be run by an administrator; writes will report a database error if absent.
+        }
+    }
 
     @Override public Attempt create(Connection c, Attempt a) {
         try (PreparedStatement s = c.prepareStatement("INSERT INTO attempts (quiz_id,student_id,status,started_at,deadline_at) VALUES (?,?,'IN_PROGRESS',?,?) RETURNING *")) {
@@ -42,10 +50,15 @@ public final class JdbcAttemptRepository implements AttemptRepository {
         try(PreparedStatement s=c.prepareStatement("UPDATE attempts SET status='SUBMITTED',submitted_at=? WHERE id=? AND status='IN_PROGRESS'")){s.setObject(1,utc(at));s.setLong(2,id);if(s.executeUpdate()!=1)throw new ConflictException("Attempt đã được nộp");}catch(SQLException e){throw db(e);}
     }
     @Override public void saveAnswer(Connection c,AnswerRecord a) {
-        try(PreparedStatement s=c.prepareStatement("INSERT INTO attempt_answers(attempt_id,question_id,selected_option,answered_at) VALUES(?,?,?,?) ON CONFLICT(attempt_id,question_id) DO UPDATE SET selected_option=EXCLUDED.selected_option,answered_at=EXCLUDED.answered_at")){s.setLong(1,a.attemptId());s.setLong(2,a.questionId());if(a.selectedOption()==null)s.setNull(3,Types.CHAR);else s.setString(3,a.selectedOption().toString());s.setObject(4,utc(a.savedAt()));s.executeUpdate();}catch(SQLException e){throw db(e);}
+        try(PreparedStatement s=c.prepareStatement("INSERT INTO attempt_answers(attempt_id,question_id,answer_text,answered_at) VALUES(?,?,?,?) ON CONFLICT(attempt_id,question_id) DO UPDATE SET answer_text=EXCLUDED.answer_text,answered_at=EXCLUDED.answered_at")){s.setLong(1,a.attemptId());s.setLong(2,a.questionId());s.setString(3,a.answer());s.setObject(4,utc(a.savedAt()));s.executeUpdate();}catch(SQLException e){throw db(e);}
     }
     @Override public Map<Long,Character> getAnswers(Connection c,long id) {
-        try(PreparedStatement s=c.prepareStatement("SELECT question_id,selected_option FROM attempt_answers WHERE attempt_id=?")){s.setLong(1,id);try(ResultSet r=s.executeQuery()){Map<Long,Character> out=new HashMap<>();while(r.next()){String v=r.getString(2);if(v!=null)out.put(r.getLong(1),v.charAt(0));}return Map.copyOf(out);}}catch(SQLException e){throw db(e);}
+        Map<Long,Character> out = new HashMap<>();
+        getTextAnswers(c, id).forEach((questionId, answer) -> { if (answer != null && answer.length() == 1) out.put(questionId, answer.charAt(0)); });
+        return Map.copyOf(out);
+    }
+    @Override public Map<Long,String> getTextAnswers(Connection c,long id) {
+        try(PreparedStatement s=c.prepareStatement("SELECT question_id,answer_text FROM attempt_answers WHERE attempt_id=?")){s.setLong(1,id);try(ResultSet r=s.executeQuery()){Map<Long,String> out=new HashMap<>();while(r.next()){String v=r.getString(2);if(v!=null)out.put(r.getLong(1),v);}return Map.copyOf(out);}}catch(SQLException e){throw db(e);}
     }
     @Override public void saveResult(Connection c,ExamResult r) {
         try(PreparedStatement s=c.prepareStatement("INSERT INTO results(attempt_id,score,correct_count,total_questions,passed,submit_reason,graded_at) VALUES(?,?,?,?,?,?,?)")){s.setLong(1,r.attemptId());s.setBigDecimal(2,java.math.BigDecimal.valueOf(r.score()));s.setInt(3,r.correctCount());s.setInt(4,r.totalQuestions());s.setBoolean(5,r.passed());s.setString(6,r.submitReason().name());s.setObject(7,utc(r.submittedAt()));s.executeUpdate();}catch(SQLException e){if("23505".equals(e.getSQLState()))throw new ConflictException("Kết quả Attempt đã được lưu",e);throw db(e);}
