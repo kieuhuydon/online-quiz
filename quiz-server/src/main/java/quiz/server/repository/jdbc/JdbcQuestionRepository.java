@@ -405,10 +405,11 @@ public final class JdbcQuestionRepository implements QuestionRepository {
                 rows.getString("correct_option").charAt(0),
                 rows.getString("topic"), Difficulty.valueOf(rows.getString("difficulty")),
                 questionType,
-                explanation,
                 rows.getBoolean("active"), rows.getLong("created_by"),
                 createdAt == null ? null : createdAt.toInstant(),
-                updatedAt == null ? null : updatedAt.toInstant(), safeString(rows, "answer_key"), safeString(rows, "explanation"));
+                updatedAt == null ? null : updatedAt.toInstant(),
+                safeString(rows, "answer_key"),
+                explanation != null ? explanation : safeString(rows, "explanation"));
         } catch (IllegalArgumentException | NullPointerException error) {
             throw new SQLException("Invalid stored question data", error);
         }

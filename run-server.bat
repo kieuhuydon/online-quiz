@@ -5,7 +5,7 @@ echo =============================================
 cd /d "%~dp0"
 
 echo Dang bien dich quiz-server...
-call .\mvnw.cmd clean install -DskipTests -pl quiz-server -am
+call .\mvnw.cmd install -Dmaven.test.skip=true -pl quiz-server -am
 if errorlevel 1 goto build_error
 
 echo Dang khoi dong Server...
@@ -19,7 +19,7 @@ if %ERRORLEVEL% NEQ 0 (
     echo 2. Thong tin tai khoan db.user / db.password trong quiz-server\src\main\resources\server.properties da chinh xac.
     echo 3. Cong 5555 khong bi chiem dung boi tien trinh khac.
     pause
-exit /b 1
+    exit /b 1
 )
 exit /b %ERRORLEVEL%
 

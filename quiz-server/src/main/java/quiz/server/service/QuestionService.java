@@ -143,15 +143,11 @@ public final class QuestionService {
             throw new ValidationException("Question data is required");
         }
         String content = ServiceValidation.requiredText(dto.content(), "Question content", 1000);
-        QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
-        String optionA = optionValue(dto.optionA(), questionType, "Đúng");
-        String optionB = optionValue(dto.optionB(), questionType, "Sai");
-        String optionC = optionValue(dto.optionC(), questionType, "-");
-        String optionD = optionValue(dto.optionD(), questionType, "-");
-        String answerKey = validateAnswerKey(dto.answerKey(), questionType);
-        validateBlankCount(content, answerKey, questionType);
-        String explanation = ServiceValidation.requiredText(dto.explanation(), "Explanation", 2000);
-        char correctOption = questionType == QuestionType.MULTIPLE_CHOICE ? normalizeCorrectOption(dto.correctOption()) : 'A';
+        String optionA = ServiceValidation.requiredText(dto.optionA(), "Option A", 255);
+        String optionB = ServiceValidation.requiredText(dto.optionB(), "Option B", 255);
+        String optionC = ServiceValidation.requiredText(dto.optionC(), "Option C", 255);
+        String optionD = ServiceValidation.requiredText(dto.optionD(), "Option D", 255);
+        char correctOption = normalizeCorrectOption(dto.correctOption());
         String topic = ServiceValidation.requiredText(dto.topic(), "Topic", 100);
         if (dto.difficulty() == null) {
             throw new ValidationException("Difficulty is required");
@@ -168,15 +164,11 @@ public final class QuestionService {
         }
         ServiceValidation.positiveId(dto.id());
         String content = ServiceValidation.requiredText(dto.content(), "Question content", 1000);
-        QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
-        String optionA = optionValue(dto.optionA(), questionType, "Đúng");
-        String optionB = optionValue(dto.optionB(), questionType, "Sai");
-        String optionC = optionValue(dto.optionC(), questionType, "-");
-        String optionD = optionValue(dto.optionD(), questionType, "-");
-        String answerKey = validateAnswerKey(dto.answerKey(), questionType);
-        validateBlankCount(content, answerKey, questionType);
-        String explanation = ServiceValidation.requiredText(dto.explanation(), "Explanation", 2000);
-        char correctOption = questionType == QuestionType.MULTIPLE_CHOICE ? normalizeCorrectOption(dto.correctOption()) : 'A';
+        String optionA = ServiceValidation.requiredText(dto.optionA(), "Option A", 255);
+        String optionB = ServiceValidation.requiredText(dto.optionB(), "Option B", 255);
+        String optionC = ServiceValidation.requiredText(dto.optionC(), "Option C", 255);
+        String optionD = ServiceValidation.requiredText(dto.optionD(), "Option D", 255);
+        char correctOption = normalizeCorrectOption(dto.correctOption());
         String topic = ServiceValidation.requiredText(dto.topic(), "Topic", 100);
         if (dto.difficulty() == null) {
             throw new ValidationException("Difficulty is required");
