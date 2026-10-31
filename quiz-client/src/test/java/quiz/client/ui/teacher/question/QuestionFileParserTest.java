@@ -162,8 +162,9 @@ class QuestionFileParserTest {
             QuestionFileParser.normalizeBlanks("She is interested in ..... learning English."));
 
         // Dấu gạch dưới dài
+        // Dấu 3 gạch dưới đúng chuẩn
         assertEquals("If I had known, I ___ have called you.",
-            QuestionFileParser.normalizeBlanks("If I had known, I ________ have called you."));
+            QuestionFileParser.normalizeBlanks("If I had known, I ___ have called you."));
 
         // Dấu ngoặc rỗng
         assertEquals("Neither of them ___ ready for the test.",
@@ -176,6 +177,36 @@ class QuestionFileParserTest {
         // Câu kết thúc lửng ở giới từ
         assertEquals("The letter was written by ___ .",
             QuestionFileParser.normalizeBlanks("The letter was written by"));
+    }
+
+    @Test
+    void normalizeBlanksHandlesQuestionMarkInMiddle() {
+        // Bug 1: Câu có dấu ? ở giữa + đoạn cuối kết thúc bằng giới từ "about ."
+        assertEquals("Did you consider taking part? Yes, I have thought about ___ .",
+            QuestionFileParser.normalizeBlanks("Did you consider taking part? Yes, I have thought about ."));
+
+        // Câu kết thúc bằng ? → không thêm ___
+        assertEquals("What is your name?",
+            QuestionFileParser.normalizeBlanks("What is your name?"));
+
+        // Câu có ? ở giữa nhưng đoạn cuối KHÔNG kết thúc bằng giới từ → không thêm ___
+        assertEquals("Is it true? The sky is blue.",
+            QuestionFileParser.normalizeBlanks("Is it true? The sky is blue."));
+
+        // Câu có ? ở giữa + đoạn cuối kết thúc bằng "by" (không có dấu câu)
+        assertEquals("Really? The book was written by ___ .",
+            QuestionFileParser.normalizeBlanks("Really? The book was written by"));
+    }
+
+    @Test
+    void normalizeBlanksDetectsDotLowercasePattern() {
+        // Bug 2: Dấu ". chữ_thường" ở giữa → thiếu chủ ngữ/cụm từ
+        assertEquals("There are some bottles on the shelf. ___ for the party.",
+            QuestionFileParser.normalizeBlanks("There are some bottles on the shelf. for the party."));
+
+        // Viết tắt (từ trước dấu . ngắn ≤ 3 ký tự) → KHÔNG chèn ___
+        assertEquals("I like e.g. apples and bananas.",
+            QuestionFileParser.normalizeBlanks("I like e.g. apples and bananas."));
     }
 
     @Test
@@ -244,4 +275,12 @@ class QuestionFileParserTest {
         assertThrows(IllegalArgumentException.class,
             () -> QuestionFileParser.parse(tempDir.resolve("missing.txt").toFile()));
     }
+    @Test
+    void normalizeBlanksPreservesNewlinesForMultiLineQuestions() {
+        // Câu đối thoại 2 dòng
+        String input = "- Did you consider taking part in volunteer programs?\n- Yes, I have thought about ________.";
+        String expected = "- Did you consider taking part in volunteer programs?\n- Yes, I have thought about ___ .";
+        assertEquals(expected, QuestionFileParser.normalizeBlanks(input));
+    }
+
 }

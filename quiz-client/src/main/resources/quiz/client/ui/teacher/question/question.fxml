@@ -24,6 +24,7 @@
                 <Button fx:id="refreshQuestions" text="🔄 Tải lại" onAction="#reload" styleClass="secondary-button"/>
                 <Button fx:id="importQuestions" text="📥 Nhập từ file" onAction="#importQuestions" styleClass="secondary-button"/>
                 <Button fx:id="newQuestion" text="➕ Thêm mới" onAction="#newQuestion" styleClass="primary-button"/>
+                <Button fx:id="deleteSelectedQuestions" text="🗑️ Xóa đã chọn" onAction="#deleteSelectedQuestions" styleClass="danger-button" visible="false" managed="false"/>
             </HBox>
         </HBox>
 
@@ -103,14 +104,16 @@
             </HBox>
 
             <VBox spacing="4">
-                <Label text="Giải thích đáp án (tùy chọn nhưng khuyến khích cho ngân hàng câu hỏi)" styleClass="field-label"/>
+                <Label text="Giải thích đáp án *" styleClass="field-label"/>
                 <TextArea fx:id="questionExplanation" promptText="Nhập giải thích chi tiết vì sao đáp án này đúng, kiến thức ngữ pháp cần lưu ý..." wrapText="true" prefRowCount="2"/>
             </VBox>
 
             <Label fx:id="formError" styleClass="notice,error-notice" visible="false" managed="false"/>
 
             <HBox spacing="10" alignment="CENTER_RIGHT">
-                <Button fx:id="cancelEdit" text="Hủy bỏ" onAction="#cancelEdit" styleClass="secondary-button"/>
+                <Button fx:id="cancelEdit" text="Thoát" onAction="#cancelEdit" styleClass="secondary-button"/>
+                <Button fx:id="prevQuestion" text="◀ Trước" onAction="#goToPreviousQuestion" styleClass="secondary-button" visible="false" managed="false"/>
+                <Button fx:id="nextQuestion" text="Sau ▶" onAction="#goToNextQuestion" styleClass="secondary-button" visible="false" managed="false"/>
                 <Button fx:id="createQuestion" text="Lưu câu hỏi" onAction="#create" styleClass="primary-button"/>
                 <Button fx:id="updateQuestion" text="Cập nhật thay đổi" onAction="#update" styleClass="primary-button"/>
             </HBox>

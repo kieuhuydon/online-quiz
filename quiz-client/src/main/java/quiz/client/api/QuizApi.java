@@ -293,6 +293,20 @@ public final class QuizApi implements AutoCloseable {
             });
     }
 
+    public CompletableFuture<Integer> deactivateQuestions(List<Long> questionIds) {
+        if (questionIds == null || questionIds.isEmpty()) {
+            return CompletableFuture.completedFuture(0);
+        }
+        questionIds.forEach(ClientValidation::positiveId);
+        return protectedCall(MessageType.BATCH_DEACTIVATE_QUESTIONS, new ArrayList<>(questionIds),
+            payload -> {
+                if (!(payload instanceof Integer count)) {
+                    throw new IllegalStateException("Unexpected response type from server");
+                }
+                return count;
+            });
+    }
+
     public CompletableFuture<QuizDto> setQuizQuestions(QuizQuestionsDto dto) {
         try {
             return protectedCall(MessageType.SET_QUIZ_QUESTIONS, dto, QuizApi::decodeQuiz);
