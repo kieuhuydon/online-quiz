@@ -43,7 +43,7 @@ public final class DtoMapper {
         Objects.requireNonNull(question, "Question cannot be null");
         return new QuestionDto(question.id(), question.content(), question.optionA(), question.optionB(),
             question.optionC(), question.optionD(), question.correctOption(), question.topic(),
-            question.difficulty(), question.questionType(), question.active(), question.createdBy(), question.createdAt());
+            question.difficulty(), question.questionType(), question.explanation(), question.active(), question.createdBy(), question.createdAt());
     }
 
     public static ArrayList<QuestionDto> questions(List<Question> questionList) {

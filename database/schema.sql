@@ -51,6 +51,7 @@ CREATE TABLE questions (
     topic          VARCHAR(100) NOT NULL,
     difficulty     VARCHAR(10)  NOT NULL CHECK (difficulty IN ('EASY', 'MEDIUM', 'HARD')),
     question_type  VARCHAR(20)  NOT NULL DEFAULT 'MULTIPLE_CHOICE' CHECK (question_type IN ('MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_BLANK', 'SHORT_ANSWER')),
+    explanation    TEXT,
     active         BOOLEAN NOT NULL DEFAULT TRUE,          -- Soft-delete (BR-05)
     created_by     BIGINT NOT NULL REFERENCES users(id),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -111,7 +112,8 @@ CREATE TABLE attempts (
 CREATE TABLE attempt_answers (
     attempt_id      BIGINT NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
     question_id     BIGINT NOT NULL REFERENCES questions(id),
-    selected_option CHAR(1) CHECK (selected_option IN ('A', 'B', 'C', 'D')), -- NULL nếu chưa chọn
+    selected_option CHAR(1) CHECK (selected_option IN ('A', 'B', 'C', 'D')), -- tương thích dữ liệu cũ
+    answer_text     TEXT,
     is_correct      BOOLEAN,                                                -- Server chấm khi nộp bài
     answered_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (attempt_id, question_id)
