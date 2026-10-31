@@ -19,7 +19,9 @@ public class MonitoringDAO {
     public MonitoringDAO(DataSource source) { this.source=Objects.requireNonNull(source); }
 
     public void create(Connection c, Attempt a, String ip) throws SQLException {
-        try (PreparedStatement s=c.prepareStatement("INSERT INTO exam_sessions(session_id,exam_id,student_id,ip_address) VALUES(?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET ip_address=COALESCE(EXCLUDED.ip_address,exam_sessions.ip_address)")) {
+        try (PreparedStatement s=c.prepareStatement("INSERT INTO exam_sessions(session_id,exam_id,student_id,ip_address) VALUES(?,?,?,NULLIF(BTRIM(?),'')) "
+            + "ON CONFLICT(session_id) DO UPDATE SET ip_address=EXCLUDED.ip_address,last_updated=CURRENT_TIMESTAMP "
+            + "WHERE EXCLUDED.ip_address IS NOT NULL AND exam_sessions.ip_address IS DISTINCT FROM EXCLUDED.ip_address")) {
             s.setLong(1,a.id());s.setLong(2,a.quizId());s.setLong(3,a.studentId());s.setString(4,ip);s.executeUpdate();
         }
     }
@@ -63,18 +65,11 @@ public class MonitoringDAO {
             throw e;
         }
         try(PreparedStatement s=c.prepareStatement("UPDATE exam_sessions SET deducted_score=ROUND((deducted_score+?)::numeric,2),"
-            + "deducted_time_seconds=deducted_time_seconds+?,is_force_stopped=is_force_stopped OR ?,"
+            + "is_force_stopped=is_force_stopped OR ?,"
             + "status=CASE WHEN ? THEN 'TERMINATED' WHEN status='CHEATING' THEN status ELSE 'WARNING' END,last_updated=? WHERE session_id=?")) {
             s.setDouble(1,p.type()==PenaltyType.DEDUCT_SCORE?p.amount():0);
-            s.setInt(2,p.type()==PenaltyType.DEDUCT_TIME?(int)p.amount():0);
-            s.setBoolean(3,p.type()==PenaltyType.TERMINATE);s.setBoolean(4,p.type()==PenaltyType.TERMINATE);
-            s.setObject(5,utc(now));s.setLong(6,p.sessionId());s.executeUpdate();
-        }
-    }
-
-    public void updateDeadline(Connection c,long id,Instant deadline) throws SQLException {
-        try(PreparedStatement s=c.prepareStatement("UPDATE attempts SET deadline_at=? WHERE id=?")) {
-            s.setObject(1,utc(deadline));s.setLong(2,id);s.executeUpdate();
+            s.setBoolean(2,p.type()==PenaltyType.TERMINATE);s.setBoolean(3,p.type()==PenaltyType.TERMINATE);
+            s.setObject(4,utc(now));s.setLong(5,p.sessionId());s.executeUpdate();
         }
     }
 
@@ -89,7 +84,7 @@ public class MonitoringDAO {
             s.setLong(1,id);
             try(ResultSet r=s.executeQuery()) {
                 List<MonitoringPenalty> rows=new ArrayList<>();
-                while(r.next()) rows.add(new MonitoringPenalty(r.getLong("teacher_id"),PenaltyType.valueOf(r.getString("penalty_type")),
+                while(r.next()) rows.add(new MonitoringPenalty(r.getLong("teacher_id"),r.getString("penalty_type"),
                     r.getDouble("amount"),r.getString("reason"),r.getObject("applied_at",OffsetDateTime.class).toInstant()));
                 return List.copyOf(rows);
             }
@@ -102,7 +97,7 @@ public class MonitoringDAO {
         if(status==MonitoringStatus.SUBMITTED||status==MonitoringStatus.TERMINATED) remaining=0;
         return new ExamSession(r.getLong("session_id"),r.getLong("exam_id"),r.getLong("student_id"),r.getString("full_name"),
             r.getString("ip_address"),status,r.getInt("violation_count"),r.getString("violation_details"),r.getDouble("deducted_score"),
-            r.getInt("deducted_time_seconds"),r.getBoolean("is_force_stopped"),r.getObject("last_updated",OffsetDateTime.class).toInstant(),remaining);
+            r.getBoolean("is_force_stopped"),r.getObject("last_updated",OffsetDateTime.class).toInstant(),remaining);
     }
     private static OffsetDateTime utc(Instant t) { return t.atOffset(ZoneOffset.UTC); }
     private static QuizException failure(SQLException e) { return new QuizException(ErrorCode.DATABASE_ERROR,"Database operation failed",e); }

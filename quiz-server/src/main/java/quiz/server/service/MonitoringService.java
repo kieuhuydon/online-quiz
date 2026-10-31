@@ -33,10 +33,15 @@ public final class MonitoringService {
         return dao.list(examId,clock.instant());
     }
     public ExamSession studentState(long id,UserSession actor) {
+        return studentState(id,actor,null);
+    }
+    public ExamSession studentState(long id,UserSession actor,String ipAddress) {
         if(actor.role()!=Role.STUDENT) throw new ForbiddenException("Chỉ dành cho sinh viên");
+        String ip=MonitoringIpAddress.normalize(ipAddress);
         return transactions.executeWithException(c->{
             Attempt a=attempts.findByIdForUpdate(c,id).orElseThrow(()->new NotFoundException("Lượt thi không tồn tại"));
             if(a.studentId()!=actor.userId()) throw new ForbiddenException("Lượt thi không thuộc về bạn");
+            if(a.status()==AttemptStatus.IN_PROGRESS) dao.create(c,a,ip);
             if(a.status()==AttemptStatus.IN_PROGRESS && !clock.instant().isBefore(a.deadlineAt()))
                 exams.finishLocked(c,a,SubmitReason.TIMEOUT);
             return dao.find(c,id,clock.instant());
@@ -58,15 +63,8 @@ public final class MonitoringService {
             ExamSession state=dao.find(c,a.id(),now);
             if(p.type()==PenaltyType.DEDUCT_SCORE && Math.round((state.deductedScore()+p.amount())*100)>1000)
                 throw new ValidationException("Tổng điểm trừ không được vượt quá 10");
-            if(p.type()==PenaltyType.DEDUCT_TIME && p.amount()>Integer.MAX_VALUE-state.deductedTimeSeconds())
-                throw new ValidationException("Tổng thời gian trừ vượt giới hạn");
             dao.apply(c,p,actor.userId(),now);
             if(p.type()==PenaltyType.TERMINATE) exams.finishLocked(c,a,SubmitReason.ANTICHEAT);
-            else if(p.type()==PenaltyType.DEDUCT_TIME) {
-                Instant deadline=a.deadlineAt().minusSeconds((long)p.amount());
-                if(!deadline.isAfter(now)) exams.finishLocked(c,a,SubmitReason.TIMEOUT);
-                else dao.updateDeadline(c,a.id(),deadline);
-            }
             return dao.find(c,a.id(),now);
         });
     }
@@ -82,8 +80,7 @@ public final class MonitoringService {
         catch(RuntimeException e) { throw new ValidationException("Mã yêu cầu không hợp lệ"); }
         if(!Double.isFinite(p.amount()) || switch(p.type()) {
             case DEDUCT_SCORE -> p.amount()<=0||p.amount()>10||Math.abs(p.amount()*100-Math.rint(p.amount()*100))>0.000001;
-            case DEDUCT_TIME -> p.amount()<1||p.amount()>Integer.MAX_VALUE||p.amount()!=Math.rint(p.amount());
             case TERMINATE -> p.amount()!=0;
-        }) throw new ValidationException("Mức phạt không hợp lệ (điểm: tối đa 2 chữ số thập phân; thời gian: giây nguyên)");
+        }) throw new ValidationException("Mức phạt không hợp lệ (điểm: tối đa 2 chữ số thập phân)");
     }
 }

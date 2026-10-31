@@ -22,7 +22,13 @@ public final class ServerMain {
     private ServerMain() { }
 
     public static ServerConfig loadConfig(String[] args) throws java.io.IOException {
-        if (args.length == 0) return ServerConfig.load();
+        if (args.length == 0) {
+            Path local = Path.of("server-local.properties");
+            if (java.nio.file.Files.isRegularFile(local)) {
+                return ServerConfig.load(local);
+            }
+            return ServerConfig.load();
+        }
         if (args.length != 2 || !"--config".equals(args[0])) {
             throw new IllegalArgumentException("Usage: ServerMain [--config <path>]");
         }

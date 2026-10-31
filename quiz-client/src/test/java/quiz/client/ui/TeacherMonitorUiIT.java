@@ -39,7 +39,21 @@ class TeacherMonitorUiIT {
                     fx(()->{
                         var table=table();assertEquals("127.0.0.1",((ExamSession)table.getItems().getFirst()).ipAddress());
                         table.getSelectionModel().select(0);table.applyCss();table.layout();
-                        assertTrue(table.lookupAll(".table-row-cell").stream().anyMatch(n->n.getStyle().contains("fecaca")));
+                        assertNull(table.getScene().lookup("#monitorTime"));
+                        assertFalse(table.getColumns().stream().anyMatch(c->c.getText().contains("Giây đã trừ")));
+                        assertTrue(table.lookupAll(".table-row-cell").stream().anyMatch(n->n.getPseudoClassStates()
+                            .contains(javafx.css.PseudoClass.getPseudoClass("cheating"))));
+                        assertRowContrast(table,MonitoringStatus.CHEATING);
+                        ExamSession original=table.getItems().getFirst();
+                        table.getItems().set(0,withStatus(original,MonitoringStatus.WARNING));
+                        assertRowContrast(table,MonitoringStatus.WARNING);
+                        table.getItems().set(0,withStatus(original,MonitoringStatus.IN_PROGRESS));
+                        table.applyCss();table.layout();
+                        table.lookupAll(".table-row-cell").stream().map(n->(TableRow<?>)n).filter(r->!r.isEmpty()).forEach(r->{
+                            assertFalse(r.getPseudoClassStates().contains(javafx.css.PseudoClass.getPseudoClass("warning")));
+                            assertFalse(r.getPseudoClassStates().contains(javafx.css.PseudoClass.getPseudoClass("cheating")));
+                        });
+                        table.getItems().set(0,original);table.getSelectionModel().select(0);
                         Platform.runLater(()->{
                             DialogPane form=(DialogPane)Window.getWindows().stream().filter(w->w.isShowing()&&w.getScene().getRoot() instanceof DialogPane)
                                 .map(w->w.getScene().getRoot()).filter(n->((DialogPane)n).getHeaderText().contains("Trừ điểm")).findFirst().orElseThrow();
@@ -64,6 +78,8 @@ class TeacherMonitorUiIT {
             try(var service=new StudentAntiCheatService()) {
                 service.start(api,10,s->{assertTrue(Platform.isFxApplicationThread());updates.add(s);},e->fail(e));
                 Request request=peer.read();assertEquals(MessageType.GET_EXAM_SESSION,request.type());
+                ExamSessionRequestDto heartbeat=assertInstanceOf(ExamSessionRequestDto.class,request.payload());
+                assertEquals(10,heartbeat.sessionId());assertNotNull(heartbeat.ipAddress());assertFalse(heartbeat.ipAddress().isBlank());
                 peer.success(request,state(2,true));
                 ExamSession result=updates.poll(3,TimeUnit.SECONDS);assertNotNull(result);assertTrue(result.forceStopped());assertEquals(2,result.deductedScore());
             }
@@ -75,13 +91,40 @@ class TeacherMonitorUiIT {
     }
     private static ExamSession state(double deduction,boolean stopped) {
         return new ExamSession(10,20,30,"Nguyễn Văn A","127.0.0.1",stopped?MonitoringStatus.TERMINATED:MonitoringStatus.CHEATING,
-            2,"Discord",deduction,300,stopped,Instant.now(),stopped?0:300);
+            2,"Discord",deduction,stopped,Instant.now(),stopped?0:300);
     }
     private static void login(QuizApi api,SocketFixture.Peer peer,Role role) throws Exception {
         var login=api.login("tester","password");peer.success(peer.read(),new LoginResultDto("token",1,"tester","Tester",role));login.get(3,TimeUnit.SECONDS);
     }
-    private static TableView<?> table() {
-        return (TableView<?>)Window.getWindows().stream().filter(Window::isShowing).map(w->w.getScene().lookup("#monitorTable"))
+    private static ExamSession withStatus(ExamSession s,MonitoringStatus status) {
+        return new ExamSession(s.sessionId(),s.examId(),s.studentId(),s.studentName(),s.ipAddress(),status,
+            s.violationCount(),s.violationDetails(),s.deductedScore(),s.forceStopped(),s.lastUpdated(),s.remainingSeconds());
+    }
+    private static void assertRowContrast(TableView<ExamSession> table,MonitoringStatus status) {
+        table.applyCss();table.layout();
+        TableRow<?> row=table.lookupAll(".table-row-cell").stream().map(n->(TableRow<?>)n)
+            .filter(r->!r.isEmpty()).findFirst().orElseThrow();
+        for(boolean focused:new boolean[]{false,true}) for(boolean selected:new boolean[]{false,true})
+            for(boolean hovered:new boolean[]{false,true}) {
+                if(selected) table.getSelectionModel().select(0);else table.getSelectionModel().clearSelection();
+                table.pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("focused"),focused);
+                row.pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("focused"),focused);
+                row.pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("hover"),hovered);
+                table.applyCss();table.layout();
+                var cells=row.lookupAll(".table-cell").stream().map(n->(TableCell<?,?>)n).filter(c->!c.isEmpty()).toList();
+                assertFalse(cells.isEmpty());
+                cells.forEach(c->assertEquals(javafx.scene.paint.Color.web("#111827"),c.getTextFill(),
+                    "Unreadable "+status+" focused="+focused+" selected="+selected+" hover="+hovered));
+                String background=status==MonitoringStatus.WARNING?(focused||selected||hovered?"#fde047":"#fef08a")
+                    :(focused||selected||hovered?"#fca5a5":"#fecaca");
+                assertEquals(javafx.scene.paint.Color.web(background),row.getBackground().getFills().getFirst().getFill());
+            }
+        row.pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("hover"),false);
+        row.pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("focused"),false);
+    }
+    @SuppressWarnings("unchecked")
+    private static TableView<ExamSession> table() {
+        return (TableView<ExamSession>)Window.getWindows().stream().filter(Window::isShowing).map(w->w.getScene().lookup("#monitorTable"))
             .filter(Objects::nonNull).findFirst().orElseThrow();
     }
     private static void await(Callable<Boolean> check) throws Exception {
