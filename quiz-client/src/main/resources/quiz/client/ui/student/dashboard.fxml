@@ -5,15 +5,12 @@
 <?import javafx.scene.layout.*?>
 
 <VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.StudentController" spacing="14">
-    <!-- Top Header -->
-    <HBox alignment="CENTER_LEFT" spacing="16">
-        <VBox spacing="2" HBox.hgrow="ALWAYS">
-            <Label text="KHÔNG GIAN HỌC VIÊN" styleClass="eyebrow"/>
-            <Label fx:id="studentWelcome" text="Không gian học tập" styleClass="page-heading"/>
-            <Label fx:id="studentClassLabel" text="Lớp: đang tải…" styleClass="muted"/>
-        </VBox>
+    <!-- Top Action Toolbar (No redundant page header) -->
+    <HBox alignment="CENTER_LEFT" spacing="12" style="-fx-padding: 0 0 4 0;">
+        <Label fx:id="studentWelcome" visible="false" managed="false"/>
+        <Label fx:id="studentClassLabel" text="Lớp: đang tải…" styleClass="badge" style="-fx-font-size: 13px; -fx-padding: 6 12;"/>
+        <Region HBox.hgrow="ALWAYS"/>
         <ProgressIndicator fx:id="studentProgress" visible="false" prefWidth="22" prefHeight="22"/>
-        <Button text="📊 Lịch sử làm bài" onAction="#onHistoryClick" styleClass="secondary-button"/>
         <Button fx:id="btnRefresh" text="🔄 Tải lại danh sách" onAction="#loadAssignedQuizzes" styleClass="primary-button"/>
     </HBox>
 

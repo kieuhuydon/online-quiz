@@ -67,6 +67,7 @@ public final class AccountController extends ScreenController {
     }
 
     private void configureTable() {
+        accountTable.getSelectionModel().setSelectionMode(javafx.scene.control.SelectionMode.MULTIPLE);
         addColumn("ID", 65, account -> Long.toString(account.id()));
         addColumn("Tên đăng nhập", 145, AccountDto::username);
         addColumn("Họ và tên", 200, AccountDto::fullName);
@@ -161,16 +162,35 @@ public final class AccountController extends ScreenController {
 
     @FXML
     private void toggle() {
-        AccountDto selected = accountTable.getSelectionModel().getSelectedItem();
-        if (!isActive() || writing || loading || !listFresh || selected == null || selected.role() == Role.ADMIN) {
+        List<AccountDto> selectedList = accountTable.getSelectionModel().getSelectedItems();
+        if (!isActive() || writing || loading || !listFresh || selectedList.isEmpty()) {
             return;
         }
-        if (!selected.active()) {
-            setActive(selected, true);
+        List<AccountDto> nonAdmin = selectedList.stream().filter(a -> a.role() != Role.ADMIN).toList();
+        if (nonAdmin.isEmpty()) return;
+
+        if (nonAdmin.size() == 1) {
+            AccountDto selected = nonAdmin.get(0);
+            if (!selected.active()) {
+                setActive(selected, true);
+                return;
+            }
+            lockTarget = selected;
+            confirmationText.setText("Khóa tài khoản “" + selected.username() + "”? Các phiên đăng nhập hiện có sẽ bị thu hồi. Người dùng phải đăng nhập lại sau khi được mở khóa.");
+            confirmation.setVisible(true);
+            confirmation.setManaged(true);
+            confirmLock.requestFocus();
+            updateControls();
             return;
         }
-        lockTarget = selected;
-        confirmationText.setText("Khóa tài khoản “" + selected.username() + "”? Các phiên đăng nhập hiện có sẽ bị thu hồi. Người dùng phải đăng nhập lại sau khi được mở khóa.");
+
+        boolean anyActive = nonAdmin.stream().anyMatch(AccountDto::active);
+        if (!anyActive) {
+            setBatchActive(nonAdmin, true);
+            return;
+        }
+        lockTarget = nonAdmin.get(0);
+        confirmationText.setText("Khóa " + nonAdmin.size() + " tài khoản đã chọn? Các phiên đăng nhập hiện có sẽ bị thu hồi.");
         confirmation.setVisible(true);
         confirmation.setManaged(true);
         confirmLock.requestFocus();
@@ -179,12 +199,37 @@ public final class AccountController extends ScreenController {
 
     @FXML
     private void confirmLock() {
-        AccountDto selected = lockTarget;
-        if (selected == null || !isActive() || writing || loading || !listFresh) {
+        if (!isActive() || writing || loading || !listFresh) {
             return;
         }
+        List<AccountDto> selectedList = accountTable.getSelectionModel().getSelectedItems();
+        List<AccountDto> nonAdmin = selectedList.stream().filter(a -> a.role() != Role.ADMIN).toList();
+        AccountDto target = lockTarget;
         cancelLock();
-        setActive(selected, false);
+        if (nonAdmin.size() <= 1) {
+            if (target != null) {
+                setActive(target, false);
+            }
+        } else {
+            setBatchActive(nonAdmin, false);
+        }
+    }
+
+    private void setBatchActive(List<AccountDto> targets, boolean active) {
+        if (targets.isEmpty()) return;
+        beginWrite((active ? "Đang mở khóa " : "Đang khóa ") + targets.size() + " tài khoản…");
+        var futures = targets.stream()
+            .map(a -> api.setAccountActive(a.id(), active))
+            .toList();
+        fx.observe(java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0])), this::isActive, ignored -> {
+            writing = false;
+            show(accountNotice, "Đã " + (active ? "mở khóa " : "khóa ") + targets.size() + " tài khoản thành công.", false);
+            reload();
+        }, failure -> {
+            show(accountNotice, AccountMessages.message(failure), true);
+            writing = false;
+            reload();
+        }, this::finishWrite);
     }
 
     @FXML
@@ -225,13 +270,33 @@ public final class AccountController extends ScreenController {
         boolean busy = writing || loading;
         createAccount.setDisable(writing);
         refreshAccounts.setDisable(writing);
-        AccountDto selected = accountTable.getSelectionModel().getSelectedItem();
-        accountActions.setVisible(selected != null);
-        accountActions.setManaged(selected != null);
-        selectedAccount.setText(selected == null ? ""
-            : "Đã chọn: " + selected.username() + (selected.role() == Role.ADMIN ? " • Tài khoản Admin được bảo vệ." : ""));
-        toggleAccount.setText(selected != null && !selected.active() ? "Mở khóa tài khoản" : "Khóa tài khoản");
-        toggleAccount.setDisable(busy || !listFresh || lockTarget != null || selected == null || selected.role() == Role.ADMIN);
+        List<AccountDto> selectedList = accountTable.getSelectionModel().getSelectedItems();
+        boolean hasSel = !selectedList.isEmpty();
+        accountActions.setVisible(hasSel);
+        accountActions.setManaged(hasSel);
+
+        boolean allAdmin = hasSel && selectedList.stream().allMatch(a -> a.role() == Role.ADMIN);
+        boolean anyAdmin = hasSel && selectedList.stream().anyMatch(a -> a.role() == Role.ADMIN);
+
+        if (!hasSel) {
+            selectedAccount.setText("");
+        } else if (selectedList.size() == 1) {
+            AccountDto single = selectedList.get(0);
+            selectedAccount.setText("Đã chọn: " + single.username() + (single.role() == Role.ADMIN ? " • Tài khoản Admin được bảo vệ." : ""));
+        } else {
+            long nonAdminCount = selectedList.stream().filter(a -> a.role() != Role.ADMIN).count();
+            selectedAccount.setText("Đã chọn " + selectedList.size() + " tài khoản (" + nonAdminCount + " có thể thao tác" + (anyAdmin ? " • Admin được bảo vệ" : "") + ").");
+        }
+
+        boolean anyActive = hasSel && selectedList.stream().anyMatch(AccountDto::active);
+        toggleAccount.setText(hasSel && !anyActive ? "Mở khóa tài khoản" : "Khóa tài khoản");
+        toggleAccount.getStyleClass().removeAll("danger-button", "success-button", "secondary-button");
+        if (hasSel && !anyActive) {
+            toggleAccount.getStyleClass().add("success-button");
+        } else {
+            toggleAccount.getStyleClass().add("danger-button");
+        }
+        toggleAccount.setDisable(busy || !listFresh || lockTarget != null || !hasSel || allAdmin);
         confirmLock.setDisable(busy);
         accountProgress.setVisible(busy);
         accountProgress.setManaged(busy);

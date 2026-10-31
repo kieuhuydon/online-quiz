@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.admin.classes.AdminClassController" spacing="16" minWidth="0">
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.admin.classes.AdminClassController" spacing="14" minWidth="0">
     <HBox alignment="CENTER_LEFT" spacing="12">
-        <Label text="Quản lí lớp học" styleClass="page-heading" HBox.hgrow="ALWAYS"/>
-        <Button fx:id="refresh" text="Tải lại" onAction="#reload" styleClass="secondary-button"/>
+        <Label text="Quản lý lớp học &amp; Phân công" styleClass="page-heading" HBox.hgrow="ALWAYS"/>
+        <Button fx:id="refresh" text="🔄 Tải lại" onAction="#reload" styleClass="secondary-button"/>
     </HBox>
     <Label fx:id="notice" styleClass="notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
-    <VBox styleClass="account-card" spacing="12">
+
+    <!-- KHỐI 1: DANH SÁCH LỚP HỌC -->
+    <VBox styleClass="account-card" style="-fx-padding: 16;" spacing="10">
         <HBox spacing="12" alignment="CENTER_LEFT">
-            <Label text="Danh sách lớp học" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
-            <Button fx:id="deleteClass" text="Xóa lớp" onAction="#requestDelete" styleClass="danger-button"/>
+            <VBox spacing="2" HBox.hgrow="ALWAYS">
+                <Label text="DANH SÁCH LỚP HỌC" styleClass="eyebrow"/>
+                <Label text="Chọn một lớp học để quản lý thành viên bên dưới" styleClass="muted"/>
+            </VBox>
+            <Button fx:id="deleteClass" text="🗑️ Xóa lớp" onAction="#requestDelete" styleClass="danger-button"/>
         </HBox>
         <VBox fx:id="deleteConfirmation" spacing="10" styleClass="note" visible="false" managed="false" minHeight="-Infinity">
             <Label fx:id="deleteConfirmationText" wrapText="true" maxWidth="Infinity" minHeight="-Infinity"/>
@@ -19,30 +24,64 @@
                 <Button fx:id="confirmDelete" text="Xác nhận xóa lớp" onAction="#confirmDelete" styleClass="danger-button"/>
             </HBox>
         </VBox>
-        <TableView fx:id="classes" minHeight="320" prefHeight="360"/>
+        <TableView fx:id="classes" minHeight="200" prefHeight="230"/>
     </VBox>
-    <VBox styleClass="account-card" spacing="12">
-        <HBox spacing="12" alignment="CENTER_LEFT">
-            <Label fx:id="memberTitle" text="Học viên trong lớp" styleClass="card-heading" HBox.hgrow="ALWAYS"/>
-            <Button fx:id="removeMember" text="Xóa khỏi lớp" onAction="#remove" styleClass="danger-button"/>
-        </HBox>
-        <TableView fx:id="members" minHeight="280" prefHeight="320"/>
-        <Label text="Chọn học viên để thêm vào lớp" styleClass="section-heading"/>
-        <Label text="Chỉ hiển thị học viên đang hoạt động và chưa có lớp. Mỗi học viên thuộc tối đa một lớp; muốn chuyển lớp, hãy xóa khỏi lớp cũ trước." styleClass="muted" wrapText="true" minHeight="-Infinity"/>
-        <FlowPane hgap="10" vgap="8" alignment="CENTER_LEFT">
-            <Button fx:id="selectAllStudents" text="Chọn tất cả" onAction="#selectAll" styleClass="secondary-button"/>
-            <Button fx:id="clearStudents" text="Bỏ chọn" onAction="#clearSelection" styleClass="secondary-button"/>
-            <Label fx:id="selectedCount" text="Đã chọn 0 học viên" styleClass="muted"/>
-        </FlowPane>
-        <TableView fx:id="students" minHeight="320" prefHeight="360" editable="true"/>
-        <Button fx:id="addMember" text="Thêm học viên đã chọn" onAction="#add" styleClass="primary-button"/>
-    </VBox>
-    <TitledPane fx:id="createPane" text="Tạo lớp và chọn giáo viên phụ trách" expanded="false" animated="false">
-        <VBox styleClass="account-card" spacing="10">
-            <TextField fx:id="className" promptText="Tên lớp (tối đa 100 ký tự)"/>
-            <TextField fx:id="description" promptText="Mô tả (tối đa 255 ký tự)"/>
-            <ComboBox fx:id="teacher" promptText="Chọn giáo viên phụ trách" maxWidth="Infinity"/>
-            <Button fx:id="createClass" text="Tạo lớp học" onAction="#create" styleClass="primary-button"/>
+
+    <!-- KHỐI 2: QUẢN LÝ THÀNH VIÊN THEO LỚP (BỐ CỤC 2 CỘT SPLIT VIEW THỰC TẾ) -->
+    <HBox spacing="14" VBox.vgrow="ALWAYS">
+        <!-- Cột trái: Học viên hiện tại trong lớp -->
+        <VBox styleClass="account-card" style="-fx-padding: 16;" spacing="10" HBox.hgrow="ALWAYS" prefWidth="440">
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <VBox spacing="2" HBox.hgrow="ALWAYS">
+                    <Label text="THÀNH VIÊN LỚP" styleClass="eyebrow"/>
+                    <Label fx:id="memberTitle" text="Học viên trong lớp" styleClass="card-heading" wrapText="true"/>
+                </VBox>
+                <Button fx:id="removeMember" text="❌ Xóa khỏi lớp" onAction="#remove" styleClass="danger-button, btn-small"/>
+            </HBox>
+            <TableView fx:id="members" minHeight="240" prefHeight="280" VBox.vgrow="ALWAYS"/>
+        </VBox>
+
+        <!-- Cột phải: Thêm học viên chưa có lớp -->
+        <VBox styleClass="account-card" style="-fx-padding: 16;" spacing="10" HBox.hgrow="ALWAYS" prefWidth="500">
+            <VBox spacing="2">
+                <Label text="HỌC VIÊN CHƯA CÓ LỚP" styleClass="eyebrow"/>
+                <Label text="Chọn học viên để ghi danh vào lớp" styleClass="card-heading"/>
+                <Label text="Học viên chỉ thuộc tối đa 1 lớp. Muốn đổi lớp cần xóa khỏi lớp cũ trước." styleClass="muted" wrapText="true"/>
+            </VBox>
+            <HBox spacing="8" alignment="CENTER_LEFT">
+                <Button fx:id="selectAllStudents" text="Chọn tất cả" onAction="#selectAll" styleClass="secondary-button, btn-small"/>
+                <Button fx:id="clearStudents" text="Bỏ chọn" onAction="#clearSelection" styleClass="secondary-button, btn-small"/>
+                <Label fx:id="selectedCount" text="Đã chọn 0 học viên" styleClass="muted" style="-fx-font-weight: bold;"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button fx:id="addMember" text="➕ Thêm vào lớp" onAction="#add" styleClass="primary-button, btn-small"/>
+            </HBox>
+            <TableView fx:id="students" minHeight="240" prefHeight="280" editable="true" VBox.vgrow="ALWAYS"/>
+        </VBox>
+    </HBox>
+
+    <!-- KHỐI 3: TẠO LỚP MỚI VÀ PHÂN CÔNG GIÁO VIÊN -->
+    <TitledPane fx:id="createPane" text="➕ Tạo lớp học mới và phân công giáo viên phụ trách" expanded="false" animated="false">
+        <VBox styleClass="account-card" style="-fx-padding: 18;" spacing="12">
+            <GridPane hgap="14" vgap="10">
+                <columnConstraints>
+                    <ColumnConstraints minWidth="130" prefWidth="140"/>
+                    <ColumnConstraints hgrow="ALWAYS"/>
+                    <ColumnConstraints minWidth="130" prefWidth="140"/>
+                    <ColumnConstraints hgrow="ALWAYS"/>
+                </columnConstraints>
+
+                <Label text="Tên lớp học *" styleClass="field-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                <TextField fx:id="className" promptText="Tên lớp (tối đa 100 ký tự)" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                <Label text="Giáo viên phụ trách *" styleClass="field-label" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
+                <ComboBox fx:id="teacher" promptText="Chọn giáo viên phụ trách" maxWidth="Infinity" GridPane.rowIndex="0" GridPane.columnIndex="3"/>
+
+                <Label text="Mô tả lớp:" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                <TextField fx:id="description" promptText="Mô tả (tối đa 255 ký tự)" GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
+            </GridPane>
+            <HBox alignment="CENTER_RIGHT">
+                <Button fx:id="createClass" text="Tạo lớp học" onAction="#create" styleClass="primary-button"/>
+            </HBox>
         </VBox>
     </TitledPane>
 </VBox>

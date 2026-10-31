@@ -33,11 +33,8 @@
     </left>
     <center>
         <VBox spacing="0">
-            <HBox alignment="CENTER_LEFT" spacing="16" styleClass="topbar">
-                <Label fx:id="pageTitle" id="pageTitle" styleClass="topbar-title"/>
-                <Region HBox.hgrow="ALWAYS"/>
-                <Label text="Hệ thống Khảo thí &amp; Đánh giá Trực tuyến" styleClass="muted"/>
-            </HBox>
+            <!-- Topbar an theo yeu cau bo header cac trang, giu id pageTitle cho logic & test -->
+            <Label fx:id="pageTitle" id="pageTitle" visible="false" managed="false"/>
             <ScrollPane id="pageScroll" fitToWidth="true" fitToHeight="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS" styleClass="page-scroll">
                 <VBox spacing="14" styleClass="page-content" fillWidth="true">
                     <Label fx:id="notice" id="workspaceNotice" styleClass="notice" wrapText="true" maxWidth="Infinity" visible="false" managed="false"/>

@@ -168,6 +168,39 @@
     -fx-prompt-text-fill: #94a3b8;
 }
 
+/* Eliminate nested double borders in TextArea scroll-pane */
+.text-area .scroll-pane {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+.text-area .scroll-pane .viewport,
+.text-area .scroll-pane .content {
+    -fx-background-color: transparent;
+}
+
+.exam-question-area {
+    -fx-padding: 10 14;
+    -fx-background-color: #f8fafc;
+    -fx-border-color: #cbd5e1;
+    -fx-border-width: 1px;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+}
+.exam-question-area .scroll-pane {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+}
+.exam-question-area .scroll-pane .viewport,
+.exam-question-area .scroll-pane .content {
+    -fx-background-color: transparent;
+}
+
 .text-field:focused, .text-area:focused {
     -fx-border-color: #4f46e5;
     -fx-background-color: #ffffff;

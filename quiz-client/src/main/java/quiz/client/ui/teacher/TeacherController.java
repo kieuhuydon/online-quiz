@@ -503,10 +503,36 @@ public final class TeacherController extends ScreenController {
         TableColumn<QuizDto, String> colTitle = new TableColumn<>("Tiêu đề bài kiểm tra");
         colTitle.setPrefWidth(220);
         colTitle.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().title()));
+        colTitle.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    setText(item);
+                    setTooltip(new Tooltip(item));
+                }
+            }
+        });
 
         TableColumn<QuizDto, String> colCategory = new TableColumn<>("Chủ đề");
         colCategory.setPrefWidth(120);
         colCategory.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().category() == null ? "—" : d.getValue().category()));
+        colCategory.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    setText(item);
+                    setTooltip(new Tooltip(item));
+                }
+            }
+        });
 
         TableColumn<QuizDto, String> colDuration = new TableColumn<>("Thời lượng");
         colDuration.setPrefWidth(90);
@@ -569,15 +595,17 @@ public final class TeacherController extends ScreenController {
         colCreated.setCellValueFactory(d -> new SimpleStringProperty(DATE_FORMAT.format(d.getValue().createdAt())));
 
         TableColumn<QuizDto, Void> colQuickActions = new TableColumn<>("Thao tác nhanh");
-        colQuickActions.setPrefWidth(235);
+        colQuickActions.setPrefWidth(320);
         colQuickActions.setCellFactory(col -> new TableCell<>() {
-            private final Button btnDetail = new Button("Chi tiết / Sửa");
-            private final Button btnAssign = new Button("Giao lớp");
+            private final Button btnDetail = new Button("✏️ Chi tiết / Sửa");
+            private final Button btnAssign = new Button("🏫 Giao lớp");
             private final Button btnStateAction = new Button();
-            private final HBox box = new HBox(6, btnDetail, btnAssign, btnStateAction);
+            private final HBox box = new HBox(8, btnDetail, btnAssign, btnStateAction);
             {
                 btnDetail.getStyleClass().addAll("secondary-button", "btn-small");
+                btnDetail.setTooltip(new Tooltip("Xem chi tiết và chỉnh sửa câu hỏi / cấu hình đề thi"));
                 btnAssign.getStyleClass().addAll("secondary-button", "btn-small");
+                btnAssign.setTooltip(new Tooltip("Giao đề thi cho các lớp học"));
                 box.setAlignment(Pos.CENTER_LEFT);
 
                 btnDetail.setOnAction(e -> {
@@ -614,12 +642,14 @@ public final class TeacherController extends ScreenController {
                 } else {
                     btnStateAction.getStyleClass().removeAll("success-button", "accent-outline-button", "secondary-button", "btn-small");
                     if (row.status() == QuizStatus.DRAFT) {
-                        btnStateAction.setText("Mở đề");
+                        btnStateAction.setText("🔑 Mở đề");
+                        btnStateAction.setTooltip(new Tooltip("Mở đề thi và sinh mã PIN cho học sinh"));
                         btnStateAction.getStyleClass().addAll("success-button", "btn-small");
                         btnStateAction.setVisible(true);
                         btnStateAction.setManaged(true);
                     } else if (row.status() == QuizStatus.OPEN) {
-                        btnStateAction.setText("Giám sát");
+                        btnStateAction.setText("📡 Giám sát");
+                        btnStateAction.setTooltip(new Tooltip("Mở phòng giám sát thi theo thời gian thực"));
                         btnStateAction.getStyleClass().addAll("accent-outline-button", "btn-small");
                         btnStateAction.setVisible(true);
                         btnStateAction.setManaged(true);
@@ -704,6 +734,11 @@ public final class TeacherController extends ScreenController {
         autoQuizPanel.setVisible(true);
         autoQuizPanel.setManaged(true);
         scrollToBottom();
+        javafx.application.Platform.runLater(() -> {
+            javafx.application.Platform.runLater(() -> {
+                if (txtAutoQuizTitle != null) txtAutoQuizTitle.requestFocus();
+            });
+        });
     }
 
     @FXML
@@ -1006,8 +1041,11 @@ public final class TeacherController extends ScreenController {
                     hideAllQuizPanels();
                     loadQuizzes();
                     showQuizNotice("⚡ Đã TẠO ĐỀ TỰ ĐỘNG thành công! Đề thi '" + createdQuiz.title() + "' gồm " + selectedIds.size() + " câu hỏi (" + easyCount + " Dễ, " + medCount + " Vừa, " + hardCount + " Khó).", false);
-                    // Mở ngay giao diện Review & Chỉnh sửa đề vừa tạo cho giáo viên xem
-                    openReviewAndEdit(createdQuiz.id(), createdQuiz.title(), QuizStatus.DRAFT);
+                    Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                    alert.setTitle("Thông báo");
+                    alert.setHeaderText(null);
+                    alert.setContentText("Đã tạo bài kiểm tra thành công!");
+                    alert.show();
                 }
             }));
         }));
@@ -1057,6 +1095,11 @@ public final class TeacherController extends ScreenController {
         quizFormPanel.setVisible(true);
         quizFormPanel.setManaged(true);
         scrollToBottom();
+        javafx.application.Platform.runLater(() -> {
+            javafx.application.Platform.runLater(() -> {
+                if (txtQuizTitle != null) txtQuizTitle.requestFocus();
+            });
+        });
     }
 
     @FXML
@@ -2320,7 +2363,11 @@ private <S> TableCell<S, String> wrappingTextCell() {
                 showQuizNotice("✅ Đã lưu đề thi #" + targetQuizIdForQuestions + " kèm " + selectedIds.size() + " câu hỏi thành công!", false);
                 hideAllQuizPanels();
                 loadQuizzes();
-                openReviewAndEdit(targetQuizIdForQuestions, "", QuizStatus.DRAFT);
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Thông báo");
+                alert.setHeaderText(null);
+                alert.setContentText("Đã tạo bài kiểm tra thành công!");
+                alert.show();
             },
             err -> {
                 showQuizNotice("Lỗi khi lưu câu hỏi: " + formatError(err), true);
@@ -2367,15 +2414,17 @@ private <S> TableCell<S, String> wrappingTextCell() {
 
     private void scrollToBottom() {
         javafx.application.Platform.runLater(() -> {
-            if (quizScrollPane != null) {
-                quizScrollPane.setVvalue(1.0);
-            }
-            if (quizFormPanel != null && quizFormPanel.getScene() != null) {
-                var pageScroll = (ScrollPane) quizFormPanel.getScene().lookup("#pageScroll");
-                if (pageScroll != null) {
-                    pageScroll.setVvalue(1.0);
+            javafx.application.Platform.runLater(() -> {
+                if (quizScrollPane != null) {
+                    quizScrollPane.setVvalue(1.0);
                 }
-            }
+                if (quizFormPanel != null && quizFormPanel.getScene() != null) {
+                    var pageScroll = (ScrollPane) quizFormPanel.getScene().lookup("#pageScroll");
+                    if (pageScroll != null) {
+                        pageScroll.setVvalue(1.0);
+                    }
+                }
+            });
         });
     }
 
@@ -2422,18 +2471,40 @@ private <S> TableCell<S, String> wrappingTextCell() {
         colId.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().id())));
 
         TableColumn<ClassDto, String> colName = new TableColumn<>("Tên Lớp");
-        colName.setPrefWidth(160);
+        colName.setPrefWidth(180);
         colName.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().name()));
+        colName.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    setText(item);
+                    setTooltip(new Tooltip(item));
+                }
+            }
+        });
 
         TableColumn<ClassDto, String> colDesc = new TableColumn<>("Mô Tả");
-        colDesc.setPrefWidth(220);
+        colDesc.setPrefWidth(300);
         colDesc.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().description() == null ? "—" : c.getValue().description()));
+        colDesc.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    setText(item);
+                    setTooltip(new Tooltip(item));
+                }
+            }
+        });
 
-        TableColumn<ClassDto, String> colTeacher = new TableColumn<>("Giáo viên");
-        colTeacher.setPrefWidth(140);
-        colTeacher.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().teacherName()));
-
-        classTable.getColumns().setAll(List.of(colId, colName, colDesc, colTeacher));
+        classTable.getColumns().setAll(List.of(colId, colName, colDesc));
         classTable.setItems(classList);
         classTable.setPlaceholder(new Label("Chưa có lớp học nào."));
     }

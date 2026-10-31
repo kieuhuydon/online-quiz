@@ -26,6 +26,7 @@ import quiz.common.enums.QuizStatus;
 import javafx.application.Platform;
 import quiz.client.anticheat.ProcessBlacklistScanner.DetectedProcess;
 import quiz.client.anticheat.ProcessScannerService;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -70,6 +71,7 @@ public final class StudentController extends ScreenController {
 
     private final ObservableList<QuizInfoDto> quizList = FXCollections.observableArrayList();
     private final Set<Long> completedQuizIds = new HashSet<>();
+    private final Map<Long, ResultDto> completedResultsByQuizId = new HashMap<>();
     private boolean historyLoaded;
 
     private final ProcessScannerService preExamScanner;
@@ -117,7 +119,11 @@ public final class StudentController extends ScreenController {
         fx.observe(api.listMyHistory(), this::isActive,
             results -> {
                 completedQuizIds.clear();
-                results.stream().map(ResultDto::quizId).forEach(completedQuizIds::add);
+                completedResultsByQuizId.clear();
+                for (ResultDto r : results) {
+                    completedQuizIds.add(r.quizId());
+                    completedResultsByQuizId.put(r.quizId(), r);
+                }
                 historyLoaded = true;
                 assignedQuizTable.refresh();
                 updateStudentKpis();
@@ -176,10 +182,36 @@ public final class StudentController extends ScreenController {
         TableColumn<QuizInfoDto, String> colTitle = new TableColumn<>("Tiêu đề bài kiểm tra");
         colTitle.setPrefWidth(250);
         colTitle.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().title()));
+        colTitle.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    setText(item);
+                    setTooltip(new Tooltip(item));
+                }
+            }
+        });
 
         TableColumn<QuizInfoDto, String> colCategory = new TableColumn<>("Chủ đề");
         colCategory.setPrefWidth(120);
         colCategory.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().category() == null ? "—" : q.getValue().category()));
+        colCategory.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    setText(item);
+                    setTooltip(new Tooltip(item));
+                }
+            }
+        });
 
         TableColumn<QuizInfoDto, String> colDuration = new TableColumn<>("Thời lượng");
         colDuration.setPrefWidth(95);
@@ -227,7 +259,7 @@ public final class StudentController extends ScreenController {
         });
 
         TableColumn<QuizInfoDto, Void> colAction = new TableColumn<>("Thao tác");
-        colAction.setPrefWidth(120);
+        colAction.setPrefWidth(130);
         colAction.setCellFactory(col -> new TableCell<>() {
             private final Button btn = new Button();
             private final HBox box = new HBox(btn);
@@ -239,6 +271,8 @@ public final class StudentController extends ScreenController {
                     assignedQuizTable.getSelectionModel().select(row);
                     if (row.status() == QuizStatus.OPEN && !completedQuizIds.contains(row.id()) && historyLoaded) {
                         onStartExamClick();
+                    } else if (completedQuizIds.contains(row.id())) {
+                        openReviewForQuiz(row.id());
                     }
                 });
             }
@@ -249,11 +283,14 @@ public final class StudentController extends ScreenController {
                 if (row == null) {
                     setGraphic(null);
                 } else {
-                    btn.getStyleClass().removeAll("primary-button", "secondary-button", "btn-small");
+                    btn.getStyleClass().removeAll("primary-button", "secondary-button", "accent-outline-button", "btn-small");
                     boolean canStart = row.status() == QuizStatus.OPEN && !completedQuizIds.contains(row.id());
                     if (canStart) {
                         btn.setText("🚀 Vào thi");
                         btn.getStyleClass().addAll("primary-button", "btn-small");
+                    } else if (completedQuizIds.contains(row.id())) {
+                        btn.setText("📝 Xem review");
+                        btn.getStyleClass().addAll("accent-outline-button", "btn-small");
                     } else {
                         btn.setText("Xem chi tiết");
                         btn.getStyleClass().addAll("secondary-button", "btn-small");
@@ -266,6 +303,27 @@ public final class StudentController extends ScreenController {
         assignedQuizTable.getColumns().setAll(List.of(colTitle, colCategory, colDuration, colQuestions, colPass, colStatus, colAction));
         assignedQuizTable.setItems(quizList);
         assignedQuizTable.setPlaceholder(new Label("Hiện tại bạn chưa có bài kiểm tra nào được giao."));
+    }
+
+    private void openReviewForQuiz(long quizId) {
+        ResultDto res = completedResultsByQuizId.get(quizId);
+        if (res != null) {
+            navigator.showReview(res);
+        } else {
+            fx.observe(api.listMyHistory(), this::isActive,
+                results -> {
+                    for (ResultDto r : results) {
+                        completedResultsByQuizId.put(r.quizId(), r);
+                        if (r.quizId() == quizId) {
+                            navigator.showReview(r);
+                            return;
+                        }
+                    }
+                },
+                err -> showNotice("Không thể tải kết quả bài thi: " + err.getMessage(), true),
+                () -> {}
+            );
+        }
     }
 
     @FXML
@@ -314,14 +372,29 @@ public final class StudentController extends ScreenController {
             infoStatus.getStyleClass().add("badge-draft");
         }
 
-        btnStartExam.setDisable(!historyLoaded || sel.status() != QuizStatus.OPEN || alreadySubmitted);
         if (alreadySubmitted) {
-            showNotice("Bạn đã hoàn thành bài kiểm tra này trước đó nên không thể làm lại.", true);
-        } else if (!historyLoaded) {
-            showNotice("Đang kiểm tra lịch sử làm bài…", false);
-        } else if (studentNotice.getText() != null && studentNotice.getText().startsWith("Bạn đã hoàn thành bài kiểm tra này")) {
-            studentNotice.setVisible(false);
-            studentNotice.setManaged(false);
+            btnStartExam.setText("📝 Xem review đáp án");
+            btnStartExam.getStyleClass().removeAll("primary-button");
+            if (!btnStartExam.getStyleClass().contains("accent-outline-button")) {
+                btnStartExam.getStyleClass().add("accent-outline-button");
+            }
+            btnStartExam.setDisable(!historyLoaded);
+            btnStartExam.setOnAction(e -> openReviewForQuiz(sel.id()));
+            showNotice("Bạn đã hoàn thành bài kiểm tra này. Bấm 'Xem review đáp án' để xem lại bài làm và kết quả.", false);
+        } else {
+            btnStartExam.setText("🚀 Bắt đầu làm bài");
+            btnStartExam.getStyleClass().removeAll("accent-outline-button");
+            if (!btnStartExam.getStyleClass().contains("primary-button")) {
+                btnStartExam.getStyleClass().add("primary-button");
+            }
+            btnStartExam.setDisable(!historyLoaded || sel.status() != QuizStatus.OPEN);
+            btnStartExam.setOnAction(e -> onStartExamClick());
+            if (!historyLoaded) {
+                showNotice("Đang kiểm tra lịch sử làm bài…", false);
+            } else if (studentNotice.getText() != null && studentNotice.getText().startsWith("Bạn đã hoàn thành bài kiểm tra này")) {
+                studentNotice.setVisible(false);
+                studentNotice.setManaged(false);
+            }
         }
         String description = sel.description() == null ? "" : sel.description().strip();
         boolean autoGeneratedDescription = description.toLowerCase(java.util.Locale.ROOT).startsWith("tạo tự động");

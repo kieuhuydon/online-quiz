@@ -5,18 +5,13 @@
 <?import javafx.scene.layout.*?>
 
 <VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.teacher.TeacherController" spacing="14">
-    <!-- Top Page Header with Primary Creation Actions -->
-    <HBox alignment="CENTER_LEFT" spacing="14">
-        <VBox spacing="2" HBox.hgrow="ALWAYS">
-            <Label text="KHÔNG GIAN GIẢNG DẠY" styleClass="eyebrow"/>
-            <Label text="Quản lý Đề kiểm tra &amp; Lớp học" styleClass="page-heading"/>
-        </VBox>
-        <HBox alignment="CENTER_RIGHT" spacing="10">
-            <ProgressIndicator fx:id="quizProgress" visible="false" prefWidth="22" prefHeight="22"/>
-            <Button fx:id="btnRefreshQuiz" text="🔄 Tải lại" onAction="#loadQuizzes" styleClass="secondary-button"/>
-            <Button fx:id="btnNewQuiz" text="+ Tạo Đề Thủ Công" onAction="#onNewQuizClick" styleClass="accent-outline-button"/>
-            <Button fx:id="btnAutoGenerateQuiz" text="⚡ Tạo Đề Tự Động" onAction="#onAutoGenerateQuizClick" styleClass="primary-button"/>
-        </HBox>
+    <!-- Top Action Toolbar (No redundant page header) -->
+    <HBox alignment="CENTER_RIGHT" spacing="10" style="-fx-padding: 0 0 4 0;">
+        <Region HBox.hgrow="ALWAYS"/>
+        <ProgressIndicator fx:id="quizProgress" visible="false" prefWidth="22" prefHeight="22"/>
+        <Button fx:id="btnRefreshQuiz" text="🔄 Tải lại" onAction="#loadQuizzes" styleClass="secondary-button"/>
+        <Button fx:id="btnNewQuiz" text="+ Tạo Đề Thủ Công" onAction="#onNewQuizClick" styleClass="accent-outline-button"/>
+        <Button fx:id="btnAutoGenerateQuiz" text="⚡ Tạo Đề Tự Động" onAction="#onAutoGenerateQuizClick" styleClass="primary-button"/>
     </HBox>
 
     <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS" styleClass="tab-pane">
@@ -47,18 +42,18 @@
                             </VBox>
                         </HBox>
 
-                        <!-- Contextual Action Bar (Clean single-row SaaS toolbar) -->
-                        <HBox alignment="CENTER_LEFT" spacing="8" styleClass="toolbar-card">
+                        <!-- Contextual Action Bar (Clean single-row SaaS toolbar with comfortable button sizing) -->
+                        <HBox alignment="CENTER_LEFT" spacing="10" styleClass="toolbar-card">
                             <Label text="Thao tác đề đang chọn:" styleClass="muted" style="-fx-font-weight: bold;"/>
-                            <Button fx:id="btnViewDetail" text="✏️ Chi tiết &amp; Sửa đề" onAction="#onViewDetailClick" styleClass="secondary-button, btn-small"/>
-                            <Button fx:id="btnSelectQuestions" text="📑 Chọn câu hỏi" onAction="#onSelectQuestionsClick" styleClass="secondary-button, btn-small"/>
-                            <Button fx:id="btnAssignQuiz" text="🏫 Giao cho lớp" onAction="#onAssignQuizClick" styleClass="secondary-button, btn-small"/>
+                            <Button fx:id="btnViewDetail" text="✏️ Chi tiết &amp; Sửa đề" onAction="#onViewDetailClick" styleClass="secondary-button"/>
+                            <Button fx:id="btnSelectQuestions" text="📑 Chọn câu hỏi" onAction="#onSelectQuestionsClick" visible="false" managed="false"/>
+                            <Button fx:id="btnAssignQuiz" text="🏫 Giao cho lớp" onAction="#onAssignQuizClick" styleClass="secondary-button"/>
                             <Button fx:id="btnEditQuiz" text="Sửa Đề" onAction="#onEditQuizClick" visible="false" managed="false"/>
                             <Region HBox.hgrow="ALWAYS"/>
                             <Separator orientation="VERTICAL"/>
-                            <Button fx:id="btnOpenQuiz" text="🔑 Mở đề (Sinh PIN)" onAction="#onOpenQuizClick" styleClass="success-button, btn-small"/>
-                            <Button text="📡 Giám sát phòng thi" onAction="#onMonitorClick" styleClass="accent-outline-button, btn-small"/>
-                            <Button fx:id="btnCloseQuiz" text="🔒 Đóng đề thi" onAction="#onCloseQuizClick" styleClass="danger-button, btn-small"/>
+                            <Button fx:id="btnOpenQuiz" text="🔑 Mở đề (Sinh PIN)" onAction="#onOpenQuizClick" styleClass="success-button"/>
+                            <Button text="📡 Giám sát phòng thi" onAction="#onMonitorClick" styleClass="accent-outline-button"/>
+                            <Button fx:id="btnCloseQuiz" text="🔒 Đóng đề thi" onAction="#onCloseQuizClick" styleClass="danger-button"/>
                         </HBox>
 
                         <!-- Quizzes Table -->
