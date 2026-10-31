@@ -1,6 +1,7 @@
 package quiz.server.domain;
 
 import quiz.common.enums.Difficulty;
+import quiz.common.enums.QuestionType;
 
 import java.time.Instant;
 
@@ -15,6 +16,7 @@ public record Question(
     char correctOption,
     String topic,
     Difficulty difficulty,
+    QuestionType questionType,
     boolean active,
     long createdBy,
     Instant createdAt,
@@ -37,23 +39,48 @@ public record Question(
         }
         topic = normalizeRequiredText(topic, "Topic", MAX_TOPIC_LENGTH);
         if (difficulty == null) throw new IllegalArgumentException("Difficulty cannot be null");
+        if (questionType == null) questionType = QuestionType.MULTIPLE_CHOICE;
         if (createdBy <= 0) throw new IllegalArgumentException("Creator ID must be positive");
+    }
+
+    public Question(long id, String content, String optionA, String optionB,
+                    String optionC, String optionD, char correctOption,
+                    String topic, Difficulty difficulty, boolean active,
+                    long createdBy, Instant createdAt, Instant updatedAt) {
+        this(id, content, optionA, optionB, optionC, optionD, correctOption,
+             topic, difficulty, QuestionType.MULTIPLE_CHOICE, active, createdBy, createdAt, updatedAt);
+    }
+
+    public static Question createNew(String content, String optionA, String optionB,
+                                     String optionC, String optionD, char correctOption,
+                                     String topic, Difficulty difficulty, QuestionType questionType,
+                                     long createdBy) {
+        return new Question(0, content, optionA, optionB, optionC, optionD,
+            correctOption, topic, difficulty, questionType, true, createdBy, null, null);
     }
 
     public static Question createNew(String content, String optionA, String optionB,
                                      String optionC, String optionD, char correctOption,
                                      String topic, Difficulty difficulty, long createdBy) {
-        return new Question(0, content, optionA, optionB, optionC, optionD,
-            correctOption, topic, difficulty, true, createdBy, null, null);
+        return createNew(content, optionA, optionB, optionC, optionD, correctOption,
+            topic, difficulty, QuestionType.MULTIPLE_CHOICE, createdBy);
+    }
+
+    public static Question restore(long id, String content, String optionA, String optionB,
+                                   String optionC, String optionD, char correctOption,
+                                   String topic, Difficulty difficulty, QuestionType questionType,
+                                   boolean active, long createdBy, Instant createdAt, Instant updatedAt) {
+        if (id <= 0) throw new IllegalArgumentException("Persisted question ID must be positive");
+        return new Question(id, content, optionA, optionB, optionC, optionD,
+            correctOption, topic, difficulty, questionType, active, createdBy, createdAt, updatedAt);
     }
 
     public static Question restore(long id, String content, String optionA, String optionB,
                                    String optionC, String optionD, char correctOption,
                                    String topic, Difficulty difficulty, boolean active,
                                    long createdBy, Instant createdAt, Instant updatedAt) {
-        if (id <= 0) throw new IllegalArgumentException("Persisted question ID must be positive");
-        return new Question(id, content, optionA, optionB, optionC, optionD,
-            correctOption, topic, difficulty, active, createdBy, createdAt, updatedAt);
+        return restore(id, content, optionA, optionB, optionC, optionD, correctOption,
+            topic, difficulty, QuestionType.MULTIPLE_CHOICE, active, createdBy, createdAt, updatedAt);
     }
 
     private static void validateStorageState(long id, Instant createdAt, Instant updatedAt) {
@@ -80,6 +107,6 @@ public record Question(
     @Override
     public String toString() {
         return "Question[id=" + id + ", topic=" + topic + ", difficulty=" + difficulty
-            + ", active=" + active + "]";
+            + ", questionType=" + questionType + ", active=" + active + "]";
     }
 }
