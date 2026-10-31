@@ -11,5 +11,5 @@
         <Label text="Số câu đúng:" GridPane.rowIndex="0" GridPane.columnIndex="0"/><Label fx:id="correct" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
         <Label text="Đã nộp lúc:" GridPane.rowIndex="1" GridPane.columnIndex="0"/><Label fx:id="submitted" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
     </GridPane>
-    <HBox spacing="12"><Button text="Xem lịch sử" onAction="#history" styleClass="secondary-button"/><Button text="Về trang chủ" onAction="#home" styleClass="primary-button"/></HBox>
+    <HBox spacing="12"><Button text="Xem lịch sử" onAction="#history" styleClass="secondary-button"/><Button text="← Về trang chủ" onAction="#home" styleClass="primary-button"/></HBox>
 </VBox>

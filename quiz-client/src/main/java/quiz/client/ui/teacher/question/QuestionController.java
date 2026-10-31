@@ -318,20 +318,44 @@ public final class QuestionController extends ScreenController {
         // Nội dung câu hỏi (hỗ trợ làm nổi bật vị trí điền khuyết ___)
         Node contentNode = createQuestionContentNode(q.content());
 
-        // Các đáp án (2 cột x 2 hàng)
-        GridPane optionsGrid = new GridPane();
-        optionsGrid.setHgap(14);
-        optionsGrid.setVgap(10);
-        ColumnConstraints col1 = new ColumnConstraints();
-        col1.setPercentWidth(50);
-        ColumnConstraints col2 = new ColumnConstraints();
-        col2.setPercentWidth(50);
-        optionsGrid.getColumnConstraints().addAll(col1, col2);
-
-        optionsGrid.add(createOptionBox("A", q.optionA(), q.correctOption() == 'A'), 0, 0);
-        optionsGrid.add(createOptionBox("B", q.optionB(), q.correctOption() == 'B'), 1, 0);
-        optionsGrid.add(createOptionBox("C", q.optionC(), q.correctOption() == 'C'), 0, 1);
-        optionsGrid.add(createOptionBox("D", q.optionD(), q.correctOption() == 'D'), 1, 1);
+        // Các đáp án hiển thị thông minh theo loại câu hỏi
+        Node optionsNode;
+        QuestionType qType = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
+        if (qType == QuestionType.TRUE_FALSE) {
+            GridPane optionsGrid = new GridPane();
+            optionsGrid.setHgap(14);
+            optionsGrid.setVgap(10);
+            ColumnConstraints col1 = new ColumnConstraints();
+            col1.setPercentWidth(50);
+            ColumnConstraints col2 = new ColumnConstraints();
+            col2.setPercentWidth(50);
+            optionsGrid.getColumnConstraints().addAll(col1, col2);
+            String optA = (q.optionA() != null && !q.optionA().isBlank()) ? q.optionA() : "Đúng";
+            String optB = (q.optionB() != null && !q.optionB().isBlank()) ? q.optionB() : "Sai";
+            optionsGrid.add(createOptionBox("A", optA, q.correctOption() == 'A'), 0, 0);
+            optionsGrid.add(createOptionBox("B", optB, q.correctOption() == 'B'), 1, 0);
+            optionsNode = optionsGrid;
+        } else if (qType == QuestionType.SHORT_ANSWER) {
+            String ans = TeacherController.getCorrectOptionText(q);
+            optionsNode = createSingleAnswerBox("Đáp án mẫu / chuẩn:", ans);
+        } else if (qType == QuestionType.FILL_BLANK) {
+            String ans = TeacherController.getCorrectOptionText(q);
+            optionsNode = createSingleAnswerBox("Từ / cụm từ cần điền (Đáp án đúng):", ans);
+        } else {
+            GridPane optionsGrid = new GridPane();
+            optionsGrid.setHgap(14);
+            optionsGrid.setVgap(10);
+            ColumnConstraints col1 = new ColumnConstraints();
+            col1.setPercentWidth(50);
+            ColumnConstraints col2 = new ColumnConstraints();
+            col2.setPercentWidth(50);
+            optionsGrid.getColumnConstraints().addAll(col1, col2);
+            optionsGrid.add(createOptionBox("A", q.optionA(), q.correctOption() == 'A'), 0, 0);
+            optionsGrid.add(createOptionBox("B", q.optionB(), q.correctOption() == 'B'), 1, 0);
+            optionsGrid.add(createOptionBox("C", q.optionC(), q.correctOption() == 'C'), 0, 1);
+            optionsGrid.add(createOptionBox("D", q.optionD(), q.correctOption() == 'D'), 1, 1);
+            optionsNode = optionsGrid;
+        }
 
         // Footer thông tin tạo
         HBox footer = new HBox(8);
@@ -339,7 +363,7 @@ public final class QuestionController extends ScreenController {
         dateLabel.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
         footer.getChildren().add(dateLabel);
 
-        card.getChildren().addAll(header, contentNode, optionsGrid, footer);
+        card.getChildren().addAll(header, contentNode, optionsNode, footer);
         return card;
     }
 
@@ -395,6 +419,27 @@ public final class QuestionController extends ScreenController {
             box.getChildren().add(check);
         }
 
+        return box;
+    }
+
+    private Node createSingleAnswerBox(String label, String text) {
+        HBox box = new HBox(8);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setStyle("-fx-background-color: #f0fdf4; -fx-border-color: #22c55e; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8 12;");
+
+        Label optLabel = new Label(label);
+        optLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #15803d;");
+
+        Label optText = new Label(text == null ? "" : text);
+        optText.setWrapText(true);
+        optText.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(optText, Priority.ALWAYS);
+        optText.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #166534;");
+
+        Label check = new Label("✓ Đáp án đúng");
+        check.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #15803d; -fx-background-color: #dcfce7; -fx-padding: 2 6; -fx-background-radius: 4;");
+
+        box.getChildren().addAll(optLabel, optText, check);
         return box;
     }
 
