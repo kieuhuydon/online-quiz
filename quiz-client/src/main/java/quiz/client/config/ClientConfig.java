@@ -8,7 +8,12 @@ import java.util.Properties;
 
 /** Immutable client configuration; an external file overrides bundled defaults. */
 public record ClientConfig(String host, int port, int connectTimeoutMs, int handshakeTimeoutMs,
-                           int requestTimeoutMs, int maxPendingRequests, int shutdownTimeoutMs, int heartbeatIntervalMs) {
+                           int requestTimeoutMs, int maxPendingRequests, int shutdownTimeoutMs, int heartbeatIntervalMs,
+                           int monitoringIntervalMs) {
+    public ClientConfig(String host,int port,int connectTimeoutMs,int handshakeTimeoutMs,int requestTimeoutMs,
+                        int maxPendingRequests,int shutdownTimeoutMs,int heartbeatIntervalMs) {
+        this(host,port,connectTimeoutMs,handshakeTimeoutMs,requestTimeoutMs,maxPendingRequests,shutdownTimeoutMs,heartbeatIntervalMs,3000);
+    }
     public ClientConfig(String host, int port, int connectTimeoutMs, int handshakeTimeoutMs,
                         int requestTimeoutMs, int maxPendingRequests, int shutdownTimeoutMs) {
         this(host, port, connectTimeoutMs, handshakeTimeoutMs, requestTimeoutMs, maxPendingRequests,
@@ -28,6 +33,7 @@ public record ClientConfig(String host, int port, int connectTimeoutMs, int hand
         positive(maxPendingRequests, "max.pending.requests");
         positive(shutdownTimeoutMs, "shutdown.timeout.ms");
         positive(heartbeatIntervalMs, "heartbeat.interval.ms");
+        positive(monitoringIntervalMs, "monitoring.interval.ms");
     }
 
     public static ClientConfig load() throws IOException {
@@ -66,7 +72,7 @@ public record ClientConfig(String host, int port, int connectTimeoutMs, int hand
             number(properties, "connect.timeout.ms"), number(properties, "handshake.timeout.ms"),
             number(properties, "request.timeout.ms"), number(properties, "max.pending.requests"),
             number(properties, "shutdown.timeout.ms"),
-            number(properties, "heartbeat.interval.ms", "60000"));
+            number(properties, "heartbeat.interval.ms", "60000"),number(properties,"monitoring.interval.ms","3000"));
     }
 
     private static int number(Properties properties, String key) {

@@ -322,7 +322,8 @@ class ClientUiIT {
             peer.success(list, new java.util.ArrayList<AccountDto>());
             awaitAccountsReady();
         } else {
-            for (int i = 0; i < (role == Role.TEACHER ? 2 : 1); i++) {
+            // Student dashboard loads quizzes, history and classes when mounted.
+            for (int i = 0; i < (role == Role.TEACHER ? 2 : 3); i++) {
                 var list = peer.read(); peer.success(list, new java.util.ArrayList<>());
             }
         }

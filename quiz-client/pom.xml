@@ -82,9 +82,12 @@
                         <version>${maven-failsafe-plugin.version}</version>
                         <configuration>
                             <failIfNoTests>true</failIfNoTests>
+                            <!-- Each UI class owns a JavaFX toolkit; Platform.exit cannot be restarted. -->
+                            <reuseForks>false</reuseForks>
                             <useManifestOnlyJar>false</useManifestOnlyJar>
                             <includes>
                                 <include>**/ClientUiIT.java</include>
+                                <include>**/TeacherMonitorUiIT.java</include>
                             </includes>
                         </configuration>
                         <executions>

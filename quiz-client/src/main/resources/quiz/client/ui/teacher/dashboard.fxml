@@ -54,6 +54,7 @@
                         <Button fx:id="btnCloseQuiz" text="Đóng Đề Thi" onAction="#onCloseQuizClick" styleClass="danger-button"/>
                         <Button fx:id="btnAssignQuiz" text="Giao Cho Lớp" onAction="#onAssignQuizClick" styleClass="secondary-button"/>
                         <Button fx:id="btnViewDetail" text="Chi Tiết &amp; Sửa Đề" onAction="#onViewDetailClick" styleClass="secondary-button"/>
+                        <Button text="Giám sát phòng thi" onAction="#onMonitorClick" styleClass="secondary-button"/>
                         <Button fx:id="btnViewResults" text="Kết Quả" onAction="#onViewResultsClick" styleClass="secondary-button" style="-fx-border-color: #2563eb; -fx-text-fill: #1d4ed8;"/>
                         <Region HBox.hgrow="ALWAYS"/>
                         <ProgressIndicator fx:id="quizProgress" visible="false" prefWidth="22" prefHeight="22"/>

@@ -56,6 +56,8 @@ class AntiCheatServiceTest {
         transactionManager = mock(TransactionManager.class);
         clock = Clock.fixed(now, ZoneId.of("UTC"));
 
+        when(attemptRepo.findByIdForUpdate(any(),eq(attemptId))).thenAnswer(i -> attemptRepo.findById(attemptId));
+        when(quizRepo.findById(quizId)).thenReturn(Optional.of(createMockQuiz(AntiCheatPolicyType.LOG_ONLY,3)));
         // By default, executeWithException executes the callback directly with null or mock Connection
         when(transactionManager.executeWithException(any())).thenAnswer(invocation -> {
             TransactionManager.TransactionCallback<?> callback = invocation.getArgument(0);
@@ -94,7 +96,7 @@ class AntiCheatServiceTest {
 
     @Test
     @DisplayName("Tự động nộp bài và đình chỉ thi khi số lần vi phạm đạt hoặc vượt maxViolations")
-    void reportEvent_AutoSubmitsWhenReachingMaxViolations() {
+    void reportEvent_AutoSubmitsWhenReachingMaxViolations() throws Exception {
         when(attemptRepo.findById(attemptId)).thenReturn(Optional.of(createMockAttempt(AttemptStatus.IN_PROGRESS)));
         when(quizRepo.findById(quizId)).thenReturn(Optional.of(createMockQuiz(AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3)));
         when(antiCheatRepo.countViolations(any(), eq(attemptId))).thenReturn(2); // Lần vi phạm thứ 3 (đạt max 3)
@@ -103,7 +105,7 @@ class AntiCheatServiceTest {
         service.reportEvent(dto, studentId);
 
         verify(antiCheatRepo).recordEvent(any(), eq(attemptId), eq(AntiCheatEventType.COPY_ATTEMPT), eq("Ctrl+C"), eq(now), eq(now), eq(3), eq("AUTO_SUBMITTED"));
-        verify(attemptService).submitAttempt(eq(attemptId), eq(studentId), eq(SubmitReason.ANTICHEAT));
+        verify(attemptService).finishLocked(any(), eq(createMockAttempt(AttemptStatus.IN_PROGRESS)), eq(SubmitReason.ANTICHEAT));
         verify(connectionRegistry).sendToUser(eq(studentId), argThat(r -> r.pushType() == MessageType.PUSH_FORCE_SUBMITTED));
     }
 
@@ -152,7 +154,7 @@ class AntiCheatServiceTest {
         );
         when(antiCheatRepo.findEventsByAttemptId(attemptId)).thenReturn(mockEvents);
 
-        UserSession teacherSession = new UserSession(2L, Role.TEACHER, "teacher");
+        UserSession teacherSession = new UserSession(1L, Role.TEACHER, "teacher");
         List<AntiCheatEventDto> result = service.listAttemptEvents(attemptId, teacherSession);
 
         assertEquals(1, result.size());

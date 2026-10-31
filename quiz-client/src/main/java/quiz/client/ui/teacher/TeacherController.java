@@ -297,6 +297,12 @@ public final class TeacherController extends ScreenController {
         loadQuizzes();
         loadClasses();
     }
+    @FXML private void onMonitorClick() {
+        QuizDto selected=quizTable.getSelectionModel().getSelectedItem();
+        if(selected==null) {showQuizNotice("Chọn bài thi cần giám sát",true);return;}
+        TeacherMonitorController monitor=new TeacherMonitorController(api,fx,selected.id(),selected.title(),navigator.stage(),this::isActive);
+        own(monitor);monitor.show();
+    }
 
     // =========================================================================
     // QUIZ TABLE & GENERAL BUTTONS
