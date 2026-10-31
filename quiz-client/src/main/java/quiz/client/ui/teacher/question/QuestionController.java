@@ -78,6 +78,24 @@ public final class QuestionController extends ScreenController {
     @FXML private ComboBox<String> filterStatus;
     @FXML private Button filterApply;
     @FXML private Button filterClear;
+    @FXML private ComboBox<String> filterQuestionType;
+    @FXML private ComboBox<String> questionType;
+    @FXML private TextArea questionExplanation;
+    @FXML private Label questionTypeHint;
+    @FXML private VBox boxCorrectOption;
+    @FXML private VBox boxOptionA;
+    @FXML private VBox boxOptionB;
+    @FXML private VBox boxOptionC;
+    @FXML private VBox boxOptionD;
+    @FXML private Label labelOptionA;
+    @FXML private Label labelOptionB;
+    @FXML private Label labelOptionC;
+    @FXML private Label labelOptionD;
+    @FXML private GridPane optionsGridContainer;
+
+    // True/False inline selector (created dynamically, inserted into form)
+    private HBox trueFalseSelector;
+    private ToggleGroup trueFalseGroup;
 
     private List<QuestionDto> allQuestions = new ArrayList<>();
     private long loadVersion;
@@ -105,6 +123,21 @@ public final class QuestionController extends ScreenController {
         }
         if (searchContent != null) {
             searchContent.textProperty().addListener((obs, oldVal, newVal) -> renderFilteredQuestions());
+        }
+        // Setup filterQuestionType
+        if (filterQuestionType != null) {
+            filterQuestionType.getItems().setAll("Tất cả", "Trắc nghiệm", "Đúng / Sai", "Điền ô trống", "Trả lời ngắn");
+            filterQuestionType.setValue("Tất cả");
+            filterQuestionType.valueProperty().addListener((obs, o, n) -> renderFilteredQuestions());
+        }
+        // Setup questionType
+        if (questionType != null) {
+            questionType.getItems().setAll(
+                "Trac nghiem (4 lua chon)", "Dung / Sai",
+                "Dien vao cho trong (1 o)", "Dien vao cho trong (2 o)", "Tra loi ngan"
+            );
+            questionType.setValue("Trac nghiem (4 lua chon)");
+            questionType.valueProperty().addListener((obs, o, n) -> onQuestionTypeChanged(n));
         }
         updateControls();
     }
@@ -198,6 +231,9 @@ public final class QuestionController extends ScreenController {
         if (filterDifficulty != null) {
             filterDifficulty.setValue(null);
         }
+        if (filterQuestionType != null) {
+            filterQuestionType.setValue("Tất cả");
+        }
         renderFilteredQuestions();
     }
 
@@ -207,6 +243,7 @@ public final class QuestionController extends ScreenController {
         String topicFilter = filterTopic != null && filterTopic.getText() != null
             ? filterTopic.getText().trim() : "";
         Difficulty diffFilter = filterDifficulty != null ? filterDifficulty.getValue() : null;
+        String qtFilter = filterQuestionType != null ? filterQuestionType.getValue() : null;
 
         // Chỉ hiển thị các câu hỏi còn active. Câu hỏi đã xóa sẽ không xuất hiện trong ngân hàng hay tìm kiếm nữa.
         List<QuestionDto> filtered = allQuestions.stream()
@@ -225,6 +262,15 @@ public final class QuestionController extends ScreenController {
                 }
                 if (diffFilter != null && q.difficulty() != diffFilter) {
                     return false;
+                }
+                if (qtFilter != null) {
+                    QuestionType expected = matchFilterQuestionType(qtFilter);
+                    if (expected != null) {
+                        QuestionType actual = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
+                        if (actual != expected) {
+                            return false;
+                        }
+                    }
                 }
                 return true;
             })
@@ -572,10 +618,13 @@ public final class QuestionController extends ScreenController {
         }
         CreateQuestionDto input;
         try {
+            QuestionType selectedType = resolveQuestionType(questionType != null ? questionType.getValue() : null);
+            String explanationText = questionExplanation != null ? questionExplanation.getText() : null;
             input = ClientValidation.question(new CreateQuestionDto(
                 questionContent.getText(), questionOptionA.getText(), questionOptionB.getText(),
                 questionOptionC.getText(), questionOptionD.getText(),
-                questionCorrectOption.getValue(), questionTopic.getText(), questionDifficulty.getValue()));
+                questionCorrectOption.getValue() != null ? questionCorrectOption.getValue() : 'A', questionTopic.getText(), questionDifficulty.getValue(),
+                selectedType, explanationText));
         } catch (ApiException invalid) {
             show(formError, "Kiểm tra thông tin: nội dung tối đa 1000 ký tự, mỗi đáp án tối đa 255 ký tự, chủ đề 1–100 ký tự.", true);
             return;
@@ -593,10 +642,13 @@ public final class QuestionController extends ScreenController {
         }
         UpdateQuestionDto input;
         try {
+            QuestionType updType = resolveQuestionType(questionType != null ? questionType.getValue() : null);
+            String updExplanation = questionExplanation != null ? questionExplanation.getText() : null;
             input = ClientValidation.updateQuestion(new UpdateQuestionDto(
                 editTarget.id(), questionContent.getText(), questionOptionA.getText(),
                 questionOptionB.getText(), questionOptionC.getText(), questionOptionD.getText(),
-                questionCorrectOption.getValue(), questionTopic.getText(), questionDifficulty.getValue()));
+                questionCorrectOption.getValue() != null ? questionCorrectOption.getValue() : 'A', questionTopic.getText(), questionDifficulty.getValue(),
+                updType, updExplanation));
         } catch (ApiException invalid) {
             show(formError, "Kiểm tra thông tin: nội dung tối đa 1000 ký tự, mỗi đáp án tối đa 255 ký tự, chủ đề 1–100 ký tự.", true);
             return;
@@ -691,6 +743,8 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setDisable(writing);
         questionTopic.setDisable(writing);
         questionDifficulty.setDisable(writing);
+        if (questionType != null) questionType.setDisable(writing);
+        if (questionExplanation != null) questionExplanation.setDisable(writing);
         if (selectedQuestion != null) {
             selectedQuestion.setText(selected == null ? "Chọn một câu hỏi để xem/sao chép nội dung."
                 : String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
@@ -720,17 +774,26 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setValue(q.correctOption());
         questionTopic.setText(q.topic());
         questionDifficulty.setValue(q.difficulty());
+        if (questionType != null) questionType.setValue(questionTypeToLabel(q.questionType()));
+        if (questionExplanation != null) questionExplanation.setText(q.explanation() != null ? q.explanation() : "");
+        onQuestionTypeChanged(questionType != null ? questionType.getValue() : null);
     }
 
-    private void clearForm() {
+        private void clearForm() {
         questionContent.clear();
         questionOptionA.clear();
         questionOptionB.clear();
         questionOptionC.clear();
         questionOptionD.clear();
-        questionCorrectOption.setValue('A');
         questionTopic.clear();
         questionDifficulty.setValue(Difficulty.MEDIUM);
+        if (questionType != null) {
+            questionType.setValue("Trac nghiem (4 lua chon)");
+        }
+        if (questionExplanation != null) {
+            questionExplanation.clear();
+        }
+        onQuestionTypeChanged("Trac nghiem (4 lua chon)");
         show(formError, "", false);
     }
 
@@ -832,6 +895,319 @@ public final class QuestionController extends ScreenController {
 
     private List<CreateQuestionDto> parseQuestionFile(File file) throws Exception {
         return QuestionFileParser.parse(file);
+    }
+
+                private void onQuestionTypeChanged(String type) {
+        if (type == null) return;
+        boolean isTrueFalse = type.contains("Sai") || type.contains("Đúng") || type.contains("Dung");
+        boolean isShortAnswer = type.contains("ngắn") || type.contains("ngan") || type.contains("Trả lời") || type.contains("Tra loi");
+        boolean isFillBlank2 = (type.contains("chỗ trống") || type.contains("cho trong") || type.contains("Điền") || type.contains("Dien")) && type.contains("2");
+        boolean isFillBlank1 = !isFillBlank2 && (type.contains("chỗ trống") || type.contains("cho trong") || type.contains("Điền") || type.contains("Dien") || type.contains("1"));
+
+        if (questionTypeHint != null) {
+            String hint = isTrueFalse
+                ? "💡 Dạng Đúng / Sai: Chọn đáp án đúng bên dưới."
+                : isFillBlank1
+                ? "💡 Dạng Điền khuyết (1 ô): Sử dụng '___' trong nội dung câu hỏi. Nhập từ cần điền chuẩn xác vào ô bên dưới."
+                : isFillBlank2
+                ? "💡 Dạng Điền khuyết (2 ô): Sử dụng 2 lần '___' trong nội dung câu hỏi. Nhập từ cần điền cho ô 1 và ô 2 tương ứng."
+                : isShortAnswer
+                ? "💡 Dạng Trả lời ngắn: Nhập nội dung câu hỏi và nhập câu trả lời mẫu / chuẩn xác vào ô bên dưới."
+                : "💡 Dạng Trắc nghiệm (4 lựa chọn): Điền đầy đủ 4 phương án A, B, C, D và chọn phương án đúng.";
+            questionTypeHint.setText(hint);
+        }
+
+        if (isTrueFalse) {
+            // Đúng / Sai: Chỉ hiện lựa chọn A (Đúng) và B (Sai)
+            questionOptionA.setText("Đúng");
+            questionOptionA.setEditable(false);
+            questionOptionB.setText("Sai");
+            questionOptionB.setEditable(false);
+            questionOptionC.setText("-");
+            questionOptionD.setText("-");
+
+            if (boxOptionA != null) { boxOptionA.setVisible(false); boxOptionA.setManaged(false); }
+            if (boxOptionB != null) { boxOptionB.setVisible(false); boxOptionB.setManaged(false); }
+            if (boxOptionC != null) { boxOptionC.setVisible(false); boxOptionC.setManaged(false); }
+            if (boxOptionD != null) { boxOptionD.setVisible(false); boxOptionD.setManaged(false); }
+            if (boxCorrectOption != null) { boxCorrectOption.setVisible(false); boxCorrectOption.setManaged(false); }
+
+            questionCorrectOption.getItems().setAll('A', 'B');
+            if (questionCorrectOption.getValue() == null || questionCorrectOption.getValue() > 'B') {
+                questionCorrectOption.setValue('A');
+            }
+
+            // Tạo và hiện selector Đúng/Sai inline
+            showTrueFalseSelector();
+        } else if (isShortAnswer) {
+            // Trả lời ngắn: Chỉ hiện 1 ô nhập câu trả lời đúng
+            questionOptionA.setEditable(true);
+            if ("Đúng".equals(questionOptionA.getText()) || "Dung".equals(questionOptionA.getText())) {
+                questionOptionA.clear();
+            }
+            questionOptionB.setText("-");
+            questionOptionC.setText("-");
+            questionOptionD.setText("-");
+
+            if (boxOptionA != null) { boxOptionA.setVisible(true); boxOptionA.setManaged(true); }
+            if (boxOptionB != null) { boxOptionB.setVisible(false); boxOptionB.setManaged(false); }
+            if (boxOptionC != null) { boxOptionC.setVisible(false); boxOptionC.setManaged(false); }
+            if (boxOptionD != null) { boxOptionD.setVisible(false); boxOptionD.setManaged(false); }
+            if (boxCorrectOption != null) { boxCorrectOption.setVisible(false); boxCorrectOption.setManaged(false); }
+
+            questionCorrectOption.getItems().setAll('A');
+            questionCorrectOption.setValue('A');
+                    hideTrueFalseSelector();
+        } else if (isFillBlank1) {
+            // Điền vào chỗ trống 1 ô: Chỉ hiện ô nhập từ cần điền cho ô 1
+            questionOptionA.setEditable(true);
+            if ("Đúng".equals(questionOptionA.getText()) || "Dung".equals(questionOptionA.getText())) {
+                questionOptionA.clear();
+            }
+            questionOptionB.setText("-");
+            questionOptionC.setText("-");
+            questionOptionD.setText("-");
+
+            if (boxOptionA != null) { boxOptionA.setVisible(true); boxOptionA.setManaged(true); }
+            if (boxOptionB != null) { boxOptionB.setVisible(false); boxOptionB.setManaged(false); }
+            if (boxOptionC != null) { boxOptionC.setVisible(false); boxOptionC.setManaged(false); }
+            if (boxOptionD != null) { boxOptionD.setVisible(false); boxOptionD.setManaged(false); }
+            if (boxCorrectOption != null) { boxCorrectOption.setVisible(false); boxCorrectOption.setManaged(false); }
+
+            questionCorrectOption.getItems().setAll('A');
+            questionCorrectOption.setValue('A');
+                    hideTrueFalseSelector();
+        } else if (isFillBlank2) {
+            // Điền vào chỗ trống 2 ô: Hiện 2 ô nhập từ cho ô 1 và ô 2
+            questionOptionA.setEditable(true);
+            questionOptionB.setEditable(true);
+            if ("Đúng".equals(questionOptionA.getText()) || "Dung".equals(questionOptionA.getText())) {
+                questionOptionA.clear();
+            }
+            if ("Sai".equals(questionOptionB.getText()) || "-".equals(questionOptionB.getText())) {
+                questionOptionB.clear();
+            }
+            questionOptionC.setText("-");
+            questionOptionD.setText("-");
+
+            if (boxOptionA != null) { boxOptionA.setVisible(true); boxOptionA.setManaged(true); }
+            if (boxOptionB != null) { boxOptionB.setVisible(true); boxOptionB.setManaged(true); }
+            if (boxOptionC != null) { boxOptionC.setVisible(false); boxOptionC.setManaged(false); }
+            if (boxOptionD != null) { boxOptionD.setVisible(false); boxOptionD.setManaged(false); }
+            if (boxCorrectOption != null) { boxCorrectOption.setVisible(false); boxCorrectOption.setManaged(false); }
+
+            questionCorrectOption.getItems().setAll('A');
+            questionCorrectOption.setValue('A');
+        } else {
+            // Trắc nghiệm (4 lựa chọn): Hiện đầy đủ 4 ô A, B, C, D và ô chọn đáp án đúng
+            questionOptionA.setEditable(true);
+            questionOptionB.setEditable(true);
+            questionOptionC.setEditable(true);
+            questionOptionD.setEditable(true);
+            if ("Đúng".equals(questionOptionA.getText()) || "Dung".equals(questionOptionA.getText())) {
+                questionOptionA.clear();
+            }
+            if ("Sai".equals(questionOptionB.getText())) {
+                questionOptionB.clear();
+            }
+            if ("-".equals(questionOptionC.getText())) {
+                questionOptionC.clear();
+            }
+            if ("-".equals(questionOptionD.getText())) {
+                questionOptionD.clear();
+            }
+
+            if (boxOptionA != null) { boxOptionA.setVisible(true); boxOptionA.setManaged(true); }
+            if (boxOptionB != null) { boxOptionB.setVisible(true); boxOptionB.setManaged(true); }
+            if (boxOptionC != null) { boxOptionC.setVisible(true); boxOptionC.setManaged(true); }
+            if (boxOptionD != null) { boxOptionD.setVisible(true); boxOptionD.setManaged(true); }
+            if (boxCorrectOption != null) { boxCorrectOption.setVisible(true); boxCorrectOption.setManaged(true); }
+
+            hideTrueFalseSelector();
+
+            Character prev = questionCorrectOption.getValue();
+            questionCorrectOption.getItems().setAll('A', 'B', 'C', 'D');
+            if (prev != null && questionCorrectOption.getItems().contains(prev)) {
+                questionCorrectOption.setValue(prev);
+            } else if (questionCorrectOption.getValue() == null) {
+                questionCorrectOption.setValue('A');
+            }
+        }
+
+        // Cập nhật nhãn và placeholder gợi ý trực quan theo dạng câu hỏi
+        if (labelOptionA != null) {
+            labelOptionA.setText(
+                isTrueFalse ? "Phương án A (Đúng) *" :
+                isFillBlank1 || isFillBlank2 ? "Từ cần điền (Vị trí 1) *" :
+                isShortAnswer ? "Câu trả lời đúng / mẫu *" :
+                "Đáp án A *"
+            );
+        }
+        if (questionOptionA != null) {
+            questionOptionA.setPromptText(
+                isTrueFalse ? "Đúng" :
+                isFillBlank1 || isFillBlank2 ? "Ví dụ: went, was, are, conditional..." :
+                isShortAnswer ? "Nhập câu trả lời ngắn chuẩn xác..." :
+                "Nội dung đáp án A"
+            );
+        }
+
+        if (labelOptionB != null) {
+            labelOptionB.setText(
+                isTrueFalse ? "Phương án B (Sai) *" :
+                isFillBlank2 ? "Từ cần điền (Vị trí 2) *" :
+                "Đáp án B *"
+            );
+        }
+        if (questionOptionB != null) {
+            questionOptionB.setPromptText(
+                isTrueFalse ? "Sai" :
+                isFillBlank2 ? "Ví dụ: had, would, been..." :
+                "Nội dung đáp án B"
+            );
+        }
+
+        if (questionOptionC != null) questionOptionC.setPromptText("Nội dung đáp án C");
+        if (questionOptionD != null) questionOptionD.setPromptText("Nội dung đáp án D");
+        if (labelOptionC != null) labelOptionC.setText("Đáp án C *");
+        if (labelOptionD != null) labelOptionD.setText("Đáp án D *");
+    }
+
+    /** Creates and shows the inline True/False selector in the form. */
+    private void showTrueFalseSelector() {
+        hideTrueFalseSelector(); // remove previous if any
+        trueFalseGroup = new ToggleGroup();
+
+        ToggleButton btnTrue = new ToggleButton("✓  ĐÚNG");
+        btnTrue.setToggleGroup(trueFalseGroup);
+        btnTrue.setUserData('A');
+        btnTrue.setPrefHeight(40);
+        btnTrue.setMinWidth(130);
+        btnTrue.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 8 24; -fx-background-radius: 8; -fx-cursor: hand;"
+            + "-fx-background-color: #f0fdf4; -fx-text-fill: #166534; -fx-border-color: #86efac; -fx-border-radius: 8; -fx-border-width: 1.5;");
+
+        ToggleButton btnFalse = new ToggleButton("✗  SAI");
+        btnFalse.setToggleGroup(trueFalseGroup);
+        btnFalse.setUserData('B');
+        btnFalse.setPrefHeight(40);
+        btnFalse.setMinWidth(130);
+        btnFalse.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 8 24; -fx-background-radius: 8; -fx-cursor: hand;"
+            + "-fx-background-color: #fef2f2; -fx-text-fill: #991b1b; -fx-border-color: #fca5a5; -fx-border-radius: 8; -fx-border-width: 1.5;");
+
+        // Pre-select based on current correctOption
+        Character current = questionCorrectOption.getValue();
+        if (current != null && current == 'B') {
+            btnFalse.setSelected(true);
+            btnFalse.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 8 24; -fx-background-radius: 8; -fx-cursor: hand;"
+                + "-fx-background-color: #dc2626; -fx-text-fill: white; -fx-border-color: #dc2626; -fx-border-radius: 8; -fx-border-width: 1.5;");
+        } else {
+            btnTrue.setSelected(true);
+            btnTrue.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 8 24; -fx-background-radius: 8; -fx-cursor: hand;"
+                + "-fx-background-color: #16a34a; -fx-text-fill: white; -fx-border-color: #16a34a; -fx-border-radius: 8; -fx-border-width: 1.5;");
+        }
+
+        trueFalseGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
+            if (newToggle != null) {
+                questionCorrectOption.setValue((Character) newToggle.getUserData());
+                btnTrue.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 8 24; -fx-background-radius: 8; -fx-cursor: hand;"
+                    + (newToggle == btnTrue
+                        ? "-fx-background-color: #16a34a; -fx-text-fill: white; -fx-border-color: #16a34a; -fx-border-radius: 8; -fx-border-width: 1.5;"
+                        : "-fx-background-color: #f0fdf4; -fx-text-fill: #166534; -fx-border-color: #86efac; -fx-border-radius: 8; -fx-border-width: 1.5;"));
+                btnFalse.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 8 24; -fx-background-radius: 8; -fx-cursor: hand;"
+                    + (newToggle == btnFalse
+                        ? "-fx-background-color: #dc2626; -fx-text-fill: white; -fx-border-color: #dc2626; -fx-border-radius: 8; -fx-border-width: 1.5;"
+                        : "-fx-background-color: #fef2f2; -fx-text-fill: #991b1b; -fx-border-color: #fca5a5; -fx-border-radius: 8; -fx-border-width: 1.5;"));
+            } else {
+                if (oldToggle != null) oldToggle.setSelected(true);
+            }
+        });
+
+        Label selectorLabel = new Label("Chọn đáp án đúng của câu hỏi: *");
+        selectorLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #1e293b;");
+
+        HBox buttonsBox = new HBox(12, btnTrue, btnFalse);
+        buttonsBox.setAlignment(Pos.CENTER_LEFT);
+
+        trueFalseSelector = new HBox(20, selectorLabel, buttonsBox);
+        trueFalseSelector.setAlignment(Pos.CENTER_LEFT);
+        trueFalseSelector.setStyle("-fx-padding: 12 16; -fx-background-color: #ffffff; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8;");
+
+        if (questionForm != null) {
+            int insertIdx = -1;
+            if (optionsGridContainer != null) {
+                optionsGridContainer.setVisible(false);
+                optionsGridContainer.setManaged(false);
+                insertIdx = questionForm.getChildren().indexOf(optionsGridContainer);
+            }
+            if (insertIdx < 0 && questionContent != null) {
+                Node contentParent = questionContent.getParent();
+                insertIdx = questionForm.getChildren().indexOf(contentParent);
+                if (insertIdx >= 0) insertIdx++;
+            }
+            if (insertIdx >= 0 && insertIdx <= questionForm.getChildren().size()) {
+                questionForm.getChildren().add(insertIdx, trueFalseSelector);
+            } else {
+                questionForm.getChildren().add(trueFalseSelector);
+            }
+        }
+    }
+
+    private void hideTrueFalseSelector() {
+        if (trueFalseSelector != null && questionForm != null) {
+            questionForm.getChildren().remove(trueFalseSelector);
+        }
+        trueFalseSelector = null;
+        trueFalseGroup = null;
+        if (optionsGridContainer != null) {
+            optionsGridContainer.setVisible(true);
+            optionsGridContainer.setManaged(true);
+        }
+    }
+
+    private static QuestionType resolveQuestionType(String label) {
+        if (label == null) return QuestionType.MULTIPLE_CHOICE;
+        String s = label.trim().toLowerCase();
+        if (s.contains("đúng") || s.contains("dung") || s.contains("sai") || s.contains("true")) {
+            return QuestionType.TRUE_FALSE;
+        }
+        if (s.contains("điền") || s.contains("dien") || s.contains("trống") || s.contains("trong") || s.contains("blank") || s.contains("khuyết") || s.contains("khuyet")) {
+            return QuestionType.FILL_BLANK;
+        }
+        if (s.contains("trả lời") || s.contains("tra loi") || s.contains("ngắn") || s.contains("ngan") || s.contains("short")) {
+            return QuestionType.SHORT_ANSWER;
+        }
+        return QuestionType.MULTIPLE_CHOICE;
+    }
+
+    private static QuestionType matchFilterQuestionType(String filterLabel) {
+        if (filterLabel == null) return null;
+        String s = filterLabel.trim().toLowerCase();
+        if (s.isEmpty() || s.contains("tất cả") || s.contains("tat ca") || s.startsWith("t") && s.contains("c")) {
+            return null;
+        }
+        if (s.contains("đúng") || s.contains("dung") || s.contains("sai") || s.contains("true")) {
+            return QuestionType.TRUE_FALSE;
+        }
+        if (s.contains("điền") || s.contains("dien") || s.contains("khuyết") || s.contains("khuyet") || s.contains("trống") || s.contains("trong") || s.contains("blank")) {
+            return QuestionType.FILL_BLANK;
+        }
+        if (s.contains("trả lời") || s.contains("tra loi") || s.contains("ngắn") || s.contains("ngan") || s.contains("short")) {
+            return QuestionType.SHORT_ANSWER;
+        }
+        if (s.contains("trắc nghiệm") || s.contains("trac nghiem") || s.contains("choice")) {
+            return QuestionType.MULTIPLE_CHOICE;
+        }
+        return null;
+    }
+
+        private static String questionTypeToLabel(QuestionType type) {
+        if (type == null) return "Trac nghiem (4 lua chon)";
+        return switch (type) {
+            case TRUE_FALSE -> "Dung / Sai";
+            case FILL_BLANK -> "Dien vao cho trong (1 o)";
+            case SHORT_ANSWER -> "Tra loi ngan";
+            default -> "Trac nghiem (4 lua chon)";
+        };
     }
 
     @Override

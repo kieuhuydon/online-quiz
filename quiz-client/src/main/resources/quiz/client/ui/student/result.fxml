@@ -2,7 +2,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.ResultController" spacing="18" alignment="TOP_CENTER">
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.ResultController" spacing="18" alignment="CENTER">
     <padding><Insets top="36" right="30" bottom="28" left="30"/></padding>
     <Label text="KẾT QUẢ BÀI THI" styleClass="eyebrow"/><Label fx:id="quizTitle" styleClass="page-heading" wrapText="true"/>
     <Label fx:id="score" style="-fx-font-size: 40px; -fx-font-weight: bold;"/>

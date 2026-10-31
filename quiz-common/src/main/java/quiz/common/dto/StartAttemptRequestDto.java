@@ -7,6 +7,8 @@ import java.io.Serializable;
  */
 public record StartAttemptRequestDto(
     long quizId,
-    String pin
+    String pin,
+    String ipAddress
 ) implements Serializable {
+    public StartAttemptRequestDto(long quizId, String pin) { this(quizId, pin, null); }
 }

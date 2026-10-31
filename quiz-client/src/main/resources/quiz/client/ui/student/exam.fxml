@@ -14,7 +14,7 @@
                 <Label fx:id="questionPosition" styleClass="eyebrow"/>
                 <TextArea fx:id="questionText" wrapText="true" editable="false" prefRowCount="3" minHeight="75"
                           style="-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 8; -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #0f172a;"/>
-                <VBox spacing="10" VBox.vgrow="ALWAYS">
+                <VBox fx:id="answerPane" spacing="10" VBox.vgrow="ALWAYS">
                     <RadioButton fx:id="optionA" toggleGroup="$options" onAction="#selectAnswer" wrapText="true" maxWidth="Infinity"/>
                     <RadioButton fx:id="optionB" toggleGroup="$options" onAction="#selectAnswer" wrapText="true" maxWidth="Infinity"/>
                     <RadioButton fx:id="optionC" toggleGroup="$options" onAction="#selectAnswer" wrapText="true" maxWidth="Infinity"/>

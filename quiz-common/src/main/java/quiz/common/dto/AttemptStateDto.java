@@ -13,6 +13,6 @@ public record AttemptStateDto(
     String quizTitle,
     long remainingSeconds,
     List<StudentQuestionDto> questions,
-    Map<Long, Character> savedAnswers
+    Map<Long, ?> savedAnswers
 ) implements Serializable {
 }
