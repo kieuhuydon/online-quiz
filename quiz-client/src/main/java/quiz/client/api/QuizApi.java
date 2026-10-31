@@ -232,6 +232,14 @@ public final class QuizApi implements AutoCloseable {
         return protectedCall(MessageType.CREATE_CLASS, dto, QuizApi::decodeClass);
     }
 
+    public CompletableFuture<Void> deleteClass(long classId) {
+        ClientValidation.positiveId(classId);
+        return protectedCall(MessageType.DELETE_CLASS, classId, payload -> {
+            requireNull(payload);
+            return null;
+        });
+    }
+
     public CompletableFuture<List<ClassDto>> listClasses() {
         return protectedCall(MessageType.LIST_CLASSES, null, QuizApi::decodeClasses);
     }
@@ -252,6 +260,10 @@ public final class QuizApi implements AutoCloseable {
             requireNull(payload);
             return null;
         });
+    }
+
+    public CompletableFuture<List<AccountDto>> listUnenrolledStudents() {
+        return protectedCall(MessageType.LIST_UNENROLLED_STUDENTS, null, QuizApi::decodeAccounts);
     }
 
     public CompletableFuture<List<ClassMemberDto>> listClassMembers(long classId) {

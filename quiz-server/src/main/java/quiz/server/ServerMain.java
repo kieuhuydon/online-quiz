@@ -41,6 +41,7 @@ public final class ServerMain {
             JdbcAttemptRepository attempts = new JdbcAttemptRepository(DataSourceProvider.getDataSource());
             JdbcAntiCheatRepository antiCheatRepo = new JdbcAntiCheatRepository(DataSourceProvider.getDataSource());
             antiCheatRepo.ensureConstraint();
+            questions.ensureSchema();
             ClassService classService = new ClassService(classes, users);
             QuestionService questionService = new QuestionService(questions, users,
                 new TransactionManager(DataSourceProvider.getDataSource()));

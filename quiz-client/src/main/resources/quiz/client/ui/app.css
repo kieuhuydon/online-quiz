@@ -107,6 +107,35 @@
     -fx-opacity: 0.55;
 }
 
+.question-index-button {
+    -fx-padding: 0;
+    -fx-alignment: center;
+    -fx-font-size: 14px;
+    -fx-background-radius: 6;
+}
+
+.question-index-current {
+    -fx-background-color: #285e91;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #1d4ed8;
+    -fx-border-radius: 6;
+    -fx-border-width: 2;
+}
+
+.question-index-answered {
+    -fx-background-color: #d1fae5;
+    -fx-text-fill: #065f46;
+    -fx-border-color: #6ee7b7;
+    -fx-border-radius: 6;
+}
+
+.question-index-unanswered {
+    -fx-background-color: #eff4ff;
+    -fx-text-fill: #434655;
+    -fx-border-color: #c4c5d7;
+    -fx-border-radius: 6;
+}
+
 .preview-badge {
     -fx-background-color: #edf3f9;
     -fx-padding: 6 10;
@@ -373,6 +402,13 @@
     -fx-border-radius: 12;
 }
 
+.badge-completed {
+    -fx-background-color: #dbeafe;
+    -fx-text-fill: #1e40af;
+    -fx-border-color: #93c5fd;
+    -fx-border-radius: 12;
+}
+
 .badge-closed {
     -fx-background-color: #fee2e2;
     -fx-text-fill: #991b1b;
@@ -558,3 +594,49 @@
     -fx-font-weight: bold;
     -fx-background-radius: 4;
 }
+
+/* --- Question Type Badges --- */
+.badge-type-mc {
+    -fx-background-color: #eff6ff;
+    -fx-text-fill: #1d4ed8;
+    -fx-border-color: #bfdbfe;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 3 8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.badge-type-tf {
+    -fx-background-color: #faf5ff;
+    -fx-text-fill: #7e22ce;
+    -fx-border-color: #e9d5ff;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 3 8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.badge-type-fb {
+    -fx-background-color: #fffbeb;
+    -fx-text-fill: #b45309;
+    -fx-border-color: #fde68a;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 3 8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.badge-type-sa {
+    -fx-background-color: #f0fdf4;
+    -fx-text-fill: #15803d;
+    -fx-border-color: #bbf7d0;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 3 8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+

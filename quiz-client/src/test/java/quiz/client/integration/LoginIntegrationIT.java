@@ -46,25 +46,37 @@ class LoginIntegrationIT {
         User owner = fixture(Role.TEACHER), other = fixture(Role.TEACHER), student = fixture(Role.STUDENT);
         QuizApi admin = loginClient(fixture(Role.ADMIN));
         var created = await(admin.createClass(new quiz.common.dto.CreateClassDto(reserveUsername(), "Class test", owner.id())));
+        var second = await(admin.createClass(new quiz.common.dto.CreateClassDto(reserveUsername(), "Other class", owner.id())));
         try {
             assertEquals(owner.id(), created.teacherId());
             assertEquals(owner.fullName(), created.teacherName());
+            assertTrue(await(admin.listUnenrolledStudents()).stream().anyMatch(s -> s.id() == student.id()));
             await(admin.addClassMember(created.id(), student.id()));
+            assertFalse(await(admin.listUnenrolledStudents()).stream().anyMatch(s -> s.id() == student.id()));
+            assertError(ErrorCode.STUDENT_ALREADY_ENROLLED, admin.addClassMember(second.id(), student.id()));
+            assertError(ErrorCode.STUDENT_ALREADY_ENROLLED, admin.addClassMember(created.id(), student.id()));
             assertEquals(student.id(), await(admin.listClassMembers(created.id())).getFirst().studentId());
             QuizApi teacher = loginClient(owner), outsider = loginClient(other), learner = loginClient(student);
             assertTrue(await(teacher.listClasses()).stream().anyMatch(c -> c.id() == created.id()));
             assertTrue(await(outsider.listClasses()).stream().noneMatch(c -> c.id() == created.id()));
             assertError(ErrorCode.FORBIDDEN, outsider.listClassMembers(created.id()));
             assertError(ErrorCode.FORBIDDEN, learner.listClasses());
+            assertError(ErrorCode.FORBIDDEN, teacher.listUnenrolledStudents());
+            assertError(ErrorCode.FORBIDDEN, learner.listUnenrolledStudents());
+            assertEquals(created.id(), await(learner.listMyClasses()).getFirst().id());
             assertEquals(1, await(teacher.listClassMembers(created.id())).size());
             assertError(ErrorCode.FORBIDDEN, teacher.createClass(new quiz.common.dto.CreateClassDto("Forbidden", null, owner.id())));
             assertError(ErrorCode.FORBIDDEN, teacher.addClassMember(created.id(), student.id()));
             assertError(ErrorCode.FORBIDDEN, teacher.removeClassMember(created.id(), student.id()));
             await(admin.removeClassMember(created.id(), student.id()));
             assertTrue(await(admin.listClassMembers(created.id())).isEmpty());
+            assertTrue(await(admin.listUnenrolledStudents()).stream().anyMatch(s -> s.id() == student.id()));
+            await(admin.addClassMember(second.id(), student.id()));
+            assertEquals(List.of(second.id()), await(learner.listMyClasses()).stream().map(quiz.common.dto.ClassDto::id).toList());
         } finally {
             try (Connection connection = dataSource.getConnection(); PreparedStatement delete = connection.prepareStatement("DELETE FROM classes WHERE id = ?")) {
                 delete.setLong(1, created.id()); delete.executeUpdate();
+                delete.setLong(1, second.id()); delete.executeUpdate();
             }
         }
     }

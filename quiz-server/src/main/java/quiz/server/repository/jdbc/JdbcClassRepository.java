@@ -50,6 +50,7 @@ public final class JdbcClassRepository implements ClassRepository {
         INSERT INTO class_members (class_id, student_id)
         VALUES (?, ?)
         """;
+    private static final String DELETE_CLASS = "DELETE FROM classes WHERE id = ?";
     private static final String DELETE_MEMBER = """
         DELETE FROM class_members WHERE class_id = ? AND student_id = ?
         """;
@@ -95,6 +96,17 @@ public final class JdbcClassRepository implements ClassRepository {
                 }
             } catch (SQLException error) {
                 throw translateException(error);
+            }
+        });
+    }
+
+    @Override
+    public boolean deleteById(long classId) {
+        if (classId <= 0) throw new IllegalArgumentException("Class ID must be positive");
+        return withConnection(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(DELETE_CLASS)) {
+                statement.setLong(1, classId);
+                return statement.executeUpdate() == 1;
             }
         });
     }
@@ -254,8 +266,10 @@ public final class JdbcClassRepository implements ClassRepository {
             if (detail != null && "classes_name_key".equals(detail.getConstraint())) {
                 return new ConflictException("Tên lớp học đã tồn tại", error);
             }
-            if (detail != null && "class_members_pkey".equals(detail.getConstraint())) {
-                return new ConflictException("Học viên đã ở trong lớp học này", error);
+            if (detail != null && ("class_members_pkey".equals(detail.getConstraint())
+                || "uq_class_members_student".equals(detail.getConstraint()))) {
+                return new ConflictException(ErrorCode.STUDENT_ALREADY_ENROLLED,
+                    "Học viên đã có lớp. Xóa khỏi lớp hiện tại trước khi chuyển lớp.", error);
             }
             return new ConflictException("Dữ liệu bị trùng lặp", error);
         }

@@ -41,7 +41,7 @@ public final class AuthGuard {
             || (type == MessageType.LOGIN) != roles.isEmpty()) {
             throw new IllegalArgumentException("Only LOGIN may have an empty role policy");
         }
-        if ((type == MessageType.CREATE_CLASS || type == MessageType.ADD_CLASS_MEMBER
+        if ((type == MessageType.CREATE_CLASS || type == MessageType.DELETE_CLASS || type == MessageType.ADD_CLASS_MEMBER
             || type == MessageType.REMOVE_CLASS_MEMBER) && !roles.equals(Set.of(Role.ADMIN))) {
             throw new IllegalArgumentException("Class mutations require an Admin-only role policy");
         }

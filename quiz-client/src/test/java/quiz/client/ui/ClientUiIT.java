@@ -37,6 +37,101 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Real JavaFX/FXML + loopback client API. Requires desktop; no DB and no production fake sessions. */
 @Timeout(20)
 class ClientUiIT {
+    @Test void adminDeleteClassRequiresConfirmationAndWaitsForServer() throws Exception {
+        var peer = openClassForDeletion();
+        fx(() -> {
+            button("deleteClass").fire();
+            assertTrue(label("deleteConfirmationText").getText().contains("ENG-DELETE"));
+            assertTrue(label("deleteConfirmationText").getText().contains("liên kết giao bài"));
+            saveSnapshot("admin-class-delete-confirmation");
+            var warning = label("deleteConfirmationText");
+            assertTrue(warning.getHeight() >= warning.prefHeight(warning.getWidth()) - 1,
+                "The full deletion warning must fit without clipping");
+            button("cancelDelete").fire();
+            assertFalse(stage.getScene().lookup("#deleteConfirmation").isVisible());
+            button("confirmDelete").fire(); // A cancelled confirmation cannot submit.
+            button("deleteClass").fire();
+            ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().clearSelection();
+            assertFalse(stage.getScene().lookup("#deleteConfirmation").isVisible());
+            button("confirmDelete").fire();
+            assertTrue(button("deleteClass").isDisabled());
+            ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().select(0);
+            button("deleteClass").fire();
+            button("confirmDelete").fire(); button("confirmDelete").fire();
+            assertTrue(button("deleteClass").isDisabled());
+            assertTrue(button("refresh").isDisabled());
+            assertEquals(1, ((TableView<?>) stage.getScene().lookup("#classes")).getItems().size());
+            return null;
+        });
+        var pendingLists = List.of(peer.read(), peer.read());
+        assertEquals(java.util.Set.of(MessageType.LIST_CLASS_MEMBERS, MessageType.LIST_UNENROLLED_STUDENTS),
+            pendingLists.stream().map(Request::type).collect(java.util.stream.Collectors.toSet()));
+        var request = peer.read();
+        assertEquals(MessageType.DELETE_CLASS, request.type());
+        assertEquals(10L, request.payload());
+        assertNotNull(request.token());
+        peer.success(request, null);
+        awaitClassControl("refresh");
+        // A late member response must not repopulate the deleted class.
+        for (var pending : pendingLists) {
+            peer.success(pending, pending.type() == MessageType.LIST_CLASS_MEMBERS
+                ? new java.util.ArrayList<>(List.of(new quiz.common.dto.ClassMemberDto(10, 3, "student", "Student", Instant.now())))
+                : new java.util.ArrayList<>(List.of(account(3, Role.STUDENT, true))));
+        }
+        var barrier = api.listClasses();
+        peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassDto>());
+        barrier.get(3, TimeUnit.SECONDS);
+        fx(() -> {
+            assertTrue(((TableView<?>) stage.getScene().lookup("#classes")).getItems().isEmpty());
+            assertTrue(((TableView<?>) stage.getScene().lookup("#members")).getItems().isEmpty());
+            assertTrue(((TableView<?>) stage.getScene().lookup("#students")).getItems().isEmpty());
+            assertTrue(button("deleteClass").isDisabled());
+            assertTrue(label("notice").getText().contains("Đã xóa lớp"));
+            return null;
+        });
+        peer.socket.setSoTimeout(200);
+        assertThrows(java.net.SocketTimeoutException.class, peer::read);
+    }
+
+    @ParameterizedTest @EnumSource(value = ErrorCode.class, names = {"DATABASE_ERROR", "NOT_FOUND"})
+    void adminDeleteClassHandlesFailureWithoutReportingSuccess(ErrorCode code) throws Exception {
+        var peer = openClassForDeletion();
+        fx(() -> { button("deleteClass").fire(); button("confirmDelete").fire(); return null; });
+        var request = peer.read();
+        assertEquals(MessageType.DELETE_CLASS, request.type());
+        peer.send(Response.error(request.requestId(), code, "internal details"));
+        awaitClassControl("refresh");
+        fx(() -> {
+            assertEquals(code == ErrorCode.NOT_FOUND ? 0 : 1,
+                ((TableView<?>) stage.getScene().lookup("#classes")).getItems().size());
+            assertTrue(label("notice").getStyleClass().contains("error-notice"));
+            assertFalse(label("notice").getText().contains("Đã xóa lớp"));
+            assertFalse(label("notice").getText().contains("internal details"));
+            return null;
+        });
+    }
+
+    private SocketFixture.Peer openClassForDeletion() throws Exception {
+        var peer = login(Role.ADMIN);
+        fx(() -> { button("adminClasses").fire(); return null; });
+        for (int i = 0; i < 2; i++) {
+            var request = peer.read();
+            peer.success(request, request.type() == MessageType.LIST_ACCOUNTS
+                ? new java.util.ArrayList<>(List.of(account(3, Role.STUDENT, true)))
+                : new java.util.ArrayList<>(List.of(new quiz.common.dto.ClassDto(
+                    10, "ENG-DELETE", null, 2, "Teacher", Instant.now()))));
+        }
+        awaitClassControl("refresh");
+        fx(() -> {
+            assertTrue(button("deleteClass").isDisabled());
+            ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().select(0);
+            return null;
+        });
+        respondClassLists(peer, List.of(), List.of(account(3, Role.STUDENT, true)));
+        awaitClassControl("selectAllStudents");
+        return peer;
+    }
+
     @Test @SuppressWarnings("unchecked") void adminClassPageCreatesWithTeacherAndManagesMembers() throws Exception {
         var peer = login(Role.ADMIN);
         fx(() -> {
@@ -54,7 +149,8 @@ class ClientUiIT {
         for (int i = 0; i < 2; i++) {
             var request = peer.read();
             peer.success(request, request.type() == MessageType.LIST_ACCOUNTS
-                ? new java.util.ArrayList<>(List.of(teacher, student, account(4, Role.STUDENT, true), account(5, Role.STUDENT, true)))
+                ? new java.util.ArrayList<>(List.of(teacher, student, account(4, Role.STUDENT, true),
+                    account(5, Role.STUDENT, true), account(6, Role.STUDENT, true)))
                 : new java.util.ArrayList<quiz.common.dto.ClassDto>());
         }
         awaitClassControl("createClass");
@@ -68,7 +164,7 @@ class ClientUiIT {
         assertEquals(new quiz.common.dto.CreateClassDto("ENG-ADMIN", "", 2), request.payload());
         var classroom = new quiz.common.dto.ClassDto(10, "ENG-ADMIN", null, 2, "Teacher", Instant.now());
         peer.success(request, classroom);
-        peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        respondClassLists(peer, List.of(), List.of(student, account(4, Role.STUDENT, true), account(5, Role.STUDENT, true)));
         awaitClassControl("selectAllStudents");
         fx(() -> {
             button("selectAllStudents").fire();
@@ -82,14 +178,15 @@ class ClientUiIT {
         request = peer.read(); assertEquals(new quiz.common.dto.AddClassMemberDto(10, 4), request.payload());
         peer.send(Response.error(request.requestId(), ErrorCode.VALIDATION_ERROR, "hidden details"));
         request = peer.read(); assertEquals(new quiz.common.dto.AddClassMemberDto(10, 5), request.payload());
-        peer.send(Response.error(request.requestId(), ErrorCode.CONFLICT, "already enrolled"));
-        peer.success(peer.read(), new java.util.ArrayList<>(List.of(
-            new quiz.common.dto.ClassMemberDto(10, 3, "student3", "Student 3", Instant.now()),
-            new quiz.common.dto.ClassMemberDto(10, 5, "student5", "Student 5", Instant.now()))));
+        peer.send(Response.error(request.requestId(), ErrorCode.STUDENT_ALREADY_ENROLLED, "already in another class"));
+        respondClassLists(peer, List.of(new quiz.common.dto.ClassMemberDto(10, 3, "student3", "Student 3", Instant.now())),
+            List.of(account(4, Role.STUDENT, true)));
         awaitClassControl("selectAllStudents");
         fx(() -> {
             assertTrue(label("notice").getText().contains("1/3"));
             assertTrue(label("notice").getText().contains("1 học viên đã có"));
+            assertFalse(label("notice").getText().contains("đã có trong lớp"), "A conflict may belong to another class");
+            assertEquals(1, ((TableView<?>) stage.getScene().lookup("#members")).getItems().size());
             var candidates = (TableView<AccountDto>) stage.getScene().lookup("#students");
             assertEquals(List.of(4L), candidates.getItems().stream().map(AccountDto::id).toList());
             assertEquals("Đã chọn 1 học viên", label("selectedCount").getText());
@@ -105,7 +202,31 @@ class ClientUiIT {
             button("removeMember").fire(); return null;
         });
         request = peer.read(); assertEquals(MessageType.REMOVE_CLASS_MEMBER, request.type());
-        peer.success(request, null); peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        peer.success(request, null);
+        respondClassLists(peer, List.of(), List.of(student, account(4, Role.STUDENT, true)));
+        awaitClassControl("selectAllStudents");
+        fx(() -> {
+            assertEquals(2, ((TableView<?>) stage.getScene().lookup("#students")).getItems().size(),
+                "Removing a student makes them available again");
+            return null;
+        });
+    }
+
+    private void respondClassLists(SocketFixture.Peer peer, List<quiz.common.dto.ClassMemberDto> members,
+                                   List<AccountDto> candidates) throws Exception {
+        var seen = java.util.EnumSet.noneOf(MessageType.class);
+        for (int i = 0; i < 2; i++) {
+            var request = peer.read();
+            assertTrue(seen.add(request.type()), "Each class list must be requested once");
+            switch (request.type()) {
+                case LIST_CLASS_MEMBERS -> peer.success(request, new java.util.ArrayList<>(members));
+                case LIST_UNENROLLED_STUDENTS -> {
+                    assertNull(request.payload());
+                    peer.success(request, new java.util.ArrayList<>(candidates));
+                }
+                default -> fail("Unexpected request: " + request.type());
+            }
+        }
     }
 
     private void awaitClassControl(String id) throws Exception {
@@ -126,15 +247,13 @@ class ClientUiIT {
         }
         awaitClassControl("refresh");
         fx(() -> { ((TableView<?>) stage.getScene().lookup("#classes")).getSelectionModel().select(0); return null; });
-        peer.success(peer.read(), new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        respondClassLists(peer, List.of(), List.of(account(3, Role.STUDENT, true), account(4, Role.STUDENT, true)));
         awaitClassControl("selectAllStudents");
         fx(() -> { button("selectAllStudents").fire(); button("addMember").fire(); return null; });
         var request = peer.read();
         assertEquals(new quiz.common.dto.AddClassMemberDto(10, 3), request.payload());
         peer.send(Response.error(request.requestId(), ErrorCode.SERVER_BUSY, "busy"));
-        var reload = peer.read();
-        assertEquals(MessageType.LIST_CLASS_MEMBERS, reload.type(), "Do not send further additions or retry on failure");
-        peer.success(reload, new java.util.ArrayList<quiz.common.dto.ClassMemberDto>());
+        respondClassLists(peer, List.of(), List.of(account(3, Role.STUDENT, true), account(4, Role.STUDENT, true)));
         awaitClassControl("selectAllStudents");
         fx(() -> {
             assertTrue(label("notice").getText().contains("0/2"));
@@ -193,6 +312,8 @@ class ClientUiIT {
             assertEquals(Screen.home(role), navigator.currentScreen().orElseThrow());
             assertEquals(Screen.roleLabel(role), label("roleLabel").getText());
             assertEquals("Nguyễn Việt — phiên kiểm thử", label("sessionFullName").getText());
+            assertEquals(role == Role.ADMIN, stage.getScene().lookup("#adminNavigation").isVisible());
+            assertEquals(role == Role.TEACHER, stage.getScene().lookup("#teacherNavigation").isVisible());
             saveSnapshot(role.name().toLowerCase());
             stage.setWidth(900); stage.setHeight(620);
             return null;
@@ -322,7 +443,6 @@ class ClientUiIT {
             peer.success(list, new java.util.ArrayList<AccountDto>());
             awaitAccountsReady();
         } else {
-            // Student dashboard loads quizzes, history and classes when mounted.
             for (int i = 0; i < (role == Role.TEACHER ? 2 : 3); i++) {
                 var list = peer.read(); peer.success(list, new java.util.ArrayList<>());
             }
@@ -389,6 +509,11 @@ class ClientUiIT {
         fx(() -> { assertTrue(label("loginNotice").getText().contains("thời gian")); fillAndSubmit("fixture", "password"); return null; });
         var fresh = server.take();
         fresh.success(fresh.read(), new LoginResultDto("new-token", 1, "fixture", "Fixture", Role.TEACHER));
+        for (int i = 0; i < 2; i++) {
+            var list = fresh.read();
+            assertTrue(list.type() == MessageType.LIST_QUIZZES || list.type() == MessageType.LIST_CLASSES);
+            fresh.success(list, new java.util.ArrayList<>());
+        }
         awaitScreen(Screen.TEACHER_DASHBOARD);
         try { old.success(request, new LoginResultDto("old-token", 2, "old", "Old", Role.ADMIN)); }
         catch (java.io.IOException closed) { assertFalse(api.session().current().orElseThrow().token().equals("old-token")); }

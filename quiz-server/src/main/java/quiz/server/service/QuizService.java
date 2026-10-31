@@ -203,7 +203,7 @@ public final class QuizService {
         for (Question q : questionList) {
             questionDtos.add(new QuestionDto(
                 q.id(), q.content(), q.optionA(), q.optionB(), q.optionC(), q.optionD(),
-                q.correctOption(), q.topic(), q.difficulty(), q.active(), q.createdBy(), q.createdAt()
+                q.correctOption(), q.topic(), q.difficulty(), q.questionType(), q.active(), q.createdBy(), q.createdAt()
             ));
         }
         List<Long> assignedClasses = quizzes.findAssignedClassIds(quizId);
@@ -371,7 +371,7 @@ public final class QuizService {
     private static QuizInfoDto toInfoDto(Quiz q, int questionCount) {
         return new QuizInfoDto(
             q.id(), q.title(), q.description(), q.category(), q.durationMinutes(),
-            q.passScore(), questionCount, q.status(), q.pin(), q.pin() != null, q.openedAt(), q.closedAt()
+            q.passScore(), questionCount, q.status(), null, q.pin() != null, q.openedAt(), q.closedAt()
         );
     }
 

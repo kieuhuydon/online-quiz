@@ -6,9 +6,9 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.TilePane;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.slf4j.Logger;
@@ -20,12 +20,12 @@ import quiz.client.api.ApiException;
 import quiz.client.api.QuizApi;
 import quiz.client.network.PushListener;
 import quiz.client.ui.SceneNavigator;
+import quiz.client.ui.Screen;
 import quiz.client.ui.ScreenController;
 import quiz.client.util.FxAsync;
 import quiz.common.dto.AntiCheatWarningDto;
 import quiz.common.dto.AttemptStateDto;
 import quiz.common.dto.ReportAntiCheatDto;
-import quiz.common.dto.ResultDto;
 import quiz.common.dto.StudentQuestionDto;
 import quiz.common.enums.AntiCheatEventType;
 import quiz.common.protocol.MessageType;
@@ -53,7 +53,7 @@ public final class ExamController extends ScreenController {
     @FXML private TextArea questionText;
     @FXML private RadioButton optionA, optionB, optionC, optionD;
     @FXML private ToggleGroup options;
-    @FXML private GridPane reviewGrid;
+    @FXML private TilePane reviewGrid;
     @FXML private Button previous, next, submit;
 
     // Các thành phần Modal in-scene (tránh thoát Fullscreen hoặc mất window focus)
@@ -348,15 +348,15 @@ public final class ExamController extends ScreenController {
     }
 
     // =========================================================================
-    // 4. LUỒNG CƯỠNG CHẾ NỘP BÀI & CHUYỂN SANG RESULT VIEW (BR-12, FR-S11, NFR-03)
+    // 4. LUỒNG THU HỒI BÀI THI VÀ ĐƯA HỌC VIÊN RA KHỎI MÀN HÌNH THI
     // =========================================================================
 
     /**
      * Phương thức cưỡng chế nộp bài (Force Submit):
      * - Chốt chặn trùng lặp bằng AtomicBoolean (NFR-03).
      * - Dọn dẹp tài nguyên giám sát ngay lập tức (dừng Scanner, gỡ Window listeners, dừng Timer).
-     * - Đồng bộ chấm điểm trên Server (FR-T04).
-     * - Chuyển sang Màn hình Kết quả (ResultController - FR-S11) trên UI thread.
+     * - Server đã tự nộp bài trước khi gửi PUSH_FORCE_SUBMITTED.
+     * - Chuyển ngay về không gian học tập để học viên không tiếp tục ở màn hình thi.
      */
     public void handleForceSubmit(String violationReason) {
         if (!isSubmitting.compareAndSet(false, true)) {
@@ -377,6 +377,7 @@ public final class ExamController extends ScreenController {
         submit.setDisable(true);
 
         // 2. Tắt chế độ toàn màn hình và đóng các hộp thoại trên UI thread
+        log.warn("Đưa học viên ra khỏi bài thi đã bị thu hồi: {}", violationReason);
         fx.run(() -> {
             Stage stage = navigator.stage();
             if (stage != null) {
@@ -385,36 +386,9 @@ public final class ExamController extends ScreenController {
             if (warningOverlay != null) warningOverlay.setVisible(false);
             if (confirmOverlay != null) confirmOverlay.setVisible(false);
             isDialogOpen = false;
+            // Server đã chốt lượt thi và lưu kết quả trước khi đẩy sự kiện này.
+            navigator.show(Screen.STUDENT_DASHBOARD);
         });
-
-        // 3. Đồng bộ nộp bài / lấy kết quả chấm điểm từ Server và chuyển sang ResultController
-        fx.observe(
-            api.submitAttempt(attempt.attemptId()),
-            this::isActive,
-            result -> redirectToResult(result, violationReason),
-            err -> {
-                log.info("submitAttempt trả về lỗi (có thể do Server đã auto-submit theo BR-12), gọi getMyResult: {}", err.getMessage());
-                fx.observe(
-                    api.getMyResult(attempt.attemptId()),
-                    this::isActive,
-                    result -> redirectToResult(result, violationReason),
-                    finalErr -> {
-                        log.error("Không thể tải kết quả bài thi sau khi bị buộc nộp: {}", finalErr.getMessage());
-                        fx.run(() -> {
-                            saveStatus.setText("Bài thi đã bị kết thúc do vi phạm. Vui lòng xem kết quả trong mục Lịch sử.");
-                        });
-                    },
-                    () -> {}
-                );
-            },
-            () -> {}
-        );
-    }
-
-    private void redirectToResult(ResultDto result, String violationReason) {
-        String notice = "Bài thi đã bị buộc nộp sớm do vi phạm quy chế thi"
-            + (violationReason != null && !violationReason.isBlank() ? (": " + violationReason) : ".");
-        navigator.showResult(result, notice);
     }
 
     /**
@@ -502,7 +476,7 @@ public final class ExamController extends ScreenController {
         answers.put(questionId, option);
         saveStatus.setText("Đang lưu câu trả lời...");
         fx.observe(api.saveAnswer(attempt.attemptId(), questionId, option), this::isActive,
-            ignored -> { saveStatus.setText("Đã lưu đáp án."); refreshReview(); },
+            ignored -> { saveStatus.setText(""); refreshReview(); },
             e -> saveStatus.setText("Không lưu được đáp án: " + e.getMessage()),
             () -> {});
     }
@@ -539,18 +513,23 @@ public final class ExamController extends ScreenController {
         for (int i = 0; i < attempt.questions().size(); i++) {
             StudentQuestionDto q = attempt.questions().get(i);
             Button b = new Button(String.valueOf(i + 1));
-            b.setPrefSize(40, 36);
-            if (answers.containsKey(q.id())) {
-                b.getStyleClass().add("primary-button");
+            b.setMinSize(48, 42);
+            b.setPrefSize(48, 42);
+            b.setMaxSize(48, 42);
+            b.getStyleClass().add("question-index-button");
+            if (i == index) {
+                b.getStyleClass().add("question-index-current");
+            } else if (answers.containsKey(q.id())) {
+                b.getStyleClass().add("question-index-answered");
             } else {
-                b.getStyleClass().add("secondary-button");
+                b.getStyleClass().add("question-index-unanswered");
             }
             int targetIndex = i;
             b.setOnAction(e -> {
                 index = targetIndex;
                 render();
             });
-            reviewGrid.add(b, i % 10, i / 10);
+            reviewGrid.getChildren().add(b);
         }
     }
 

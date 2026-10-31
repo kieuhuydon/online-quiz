@@ -122,8 +122,7 @@ public final class SceneNavigator implements AutoCloseable {
         }
         ClientSession.Snapshot session = api.session().current().orElse(null);
         Screen target = session == null ? Screen.LOGIN : Screen.home(session.role());
-        boolean canAccess = session != null && (requested.role() == session.role()
-            || (session.role() == Role.ADMIN && requested.role() == Role.TEACHER));
+        boolean canAccess = session != null && requested.role() == session.role();
         if (canAccess) {
             target = requested;
         }
@@ -136,7 +135,7 @@ public final class SceneNavigator implements AutoCloseable {
             Parent root = content.root();
             if (target == Screen.LOGIN) {
                 ((LoginController) content.controller()).setNotice(notice);
-            } else {
+            } else if (target != Screen.STUDENT_EXAM) {
                 Loaded shell = load("/quiz/client/ui/shell.fxml", created);
                 ((WorkspaceController) shell.controller()).show(session, target, content.root(), notice);
                 root = shell.root();

@@ -39,16 +39,21 @@ public final class AttemptService {
         if(ipAddress!=null && (ipAddress.length()>45 || !ipAddress.matches("[0-9a-fA-F:.%]+")))
             throw new ValidationException("Địa chỉ IP không hợp lệ");
         Quiz quiz=quizzes.findById(quizId).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
-        if(quiz.status()!=QuizStatus.OPEN)throw new ConflictException("Bài kiểm tra hiện không mở");
-        if(!quizzes.findAssignedQuizzesForStudent(studentId).stream().anyMatch(q->q.id()==quizId))throw new ForbiddenException("Bài kiểm tra chưa được giao cho bạn");
-        if(!Objects.equals(quiz.pin(),pin))throw new ForbiddenException("Mã PIN không chính xác");
         Optional<Attempt> existing=attempts.findByStudentAndQuiz(studentId,quizId);
         if(existing.isPresent()) {
             Attempt a=existing.get();
             if(a.status()==AttemptStatus.SUBMITTED)throw new ConflictException("Bạn đã nộp bài kiểm tra này trước đó. Mỗi học viên chỉ được làm bài này một lần.");
+            if(!clock.instant().isBefore(a.deadlineAt())) {
+                submitAttempt(a.id(),studentId,SubmitReason.TIMEOUT);
+                throw new ConflictException("Bài kiểm tra đã hết giờ và được tự động nộp");
+            }
+            if(quiz.status()==QuizStatus.OPEN && !Objects.equals(quiz.pin(),pin))throw new ForbiddenException("Mã PIN không chính xác");
             if(monitoring!=null) transactions.executeWithException(c->{monitoring.create(c,a,ipAddress);return null;});
-            return getAttemptState(a.id(),studentId);
+            return state(a);
         }
+        if(quiz.status()!=QuizStatus.OPEN)throw new ConflictException("Bài kiểm tra hiện không mở");
+        if(!quizzes.findAssignedQuizzesForStudent(studentId).stream().anyMatch(q->q.id()==quizId))throw new ForbiddenException("Bài kiểm tra chưa được giao cho bạn");
+        if(!Objects.equals(quiz.pin(),pin))throw new ForbiddenException("Mã PIN không chính xác");
         Instant start=clock.instant();
         Attempt created=transactions.executeWithException(c->{
             Attempt a=attempts.create(c,new Attempt(0,quizId,studentId,AttemptStatus.IN_PROGRESS,start,start.plusSeconds(quiz.durationMinutes()*60L),null,null));

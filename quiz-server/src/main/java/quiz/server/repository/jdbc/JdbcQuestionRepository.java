@@ -3,6 +3,7 @@ package quiz.server.repository.jdbc;
 import org.postgresql.util.PSQLException;
 import org.postgresql.util.ServerErrorMessage;
 import quiz.common.enums.Difficulty;
+import quiz.common.enums.QuestionType;
 import quiz.server.domain.Question;
 import quiz.server.exception.QuizException;
 import quiz.server.repository.QuestionRepository;
@@ -12,7 +13,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -21,83 +21,131 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * PostgreSQL question persistence. Caller-owned connections retain their transaction lifecycle.
+ * PostgreSQL question persistence.
+ * Hỗ trợ tương thích cả khi database có hoặc chưa có cột question_type.
  */
 public final class JdbcQuestionRepository implements QuestionRepository {
-    private static final String FIND_ID = """
-        SELECT id, content, option_a, option_b, option_c, option_d, correct_option,
-               topic, difficulty, active, created_by, created_at, updated_at
-        FROM questions WHERE id = ?
-        """;
-    private static final String FIND_ALL = """
-        SELECT id, content, option_a, option_b, option_c, option_d, correct_option,
-               topic, difficulty, active, created_by, created_at, updated_at
-        FROM questions ORDER BY id ASC
-        """;
-    private static final String FIND_ACTIVE = """
-        SELECT id, content, option_a, option_b, option_c, option_d, correct_option,
-               topic, difficulty, active, created_by, created_at, updated_at
-        FROM questions WHERE active = TRUE ORDER BY id ASC
-        """;
-    private static final String FIND_BY_FILTER = """
-        SELECT id, content, option_a, option_b, option_c, option_d, correct_option,
-               topic, difficulty, active, created_by, created_at, updated_at
-        FROM questions WHERE active = TRUE
-        AND (? IS NULL OR topic = ?)
-        AND (? IS NULL OR difficulty = ?)
-        ORDER BY id ASC
-        """;
-    private static final String INSERT = """
-        INSERT INTO questions (content, option_a, option_b, option_c, option_d,
-                               correct_option, topic, difficulty, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        RETURNING id, content, option_a, option_b, option_c, option_d, correct_option,
-                  topic, difficulty, active, created_by, created_at, updated_at
-        """;
-    private static final String UPDATE = """
-        UPDATE questions SET content = ?, option_a = ?, option_b = ?, option_c = ?,
-                             option_d = ?, correct_option = ?, topic = ?,
-                             difficulty = ?, updated_at = now()
-        WHERE id = ? AND active = TRUE
-        RETURNING id, content, option_a, option_b, option_c, option_d, correct_option,
-                  topic, difficulty, active, created_by, created_at, updated_at
-        """;
+    private static final String COUNT_ACTIVE = "SELECT COUNT(*) FROM questions WHERE active = TRUE";
     private static final String DEACTIVATE = "UPDATE questions SET active = FALSE, updated_at = now() WHERE id = ?";
     private static final String EXISTS_ID = "SELECT 1 FROM questions WHERE id = ?";
-    private static final String FIND_BY_QUIZ_ID = """
-        SELECT q.id, q.content, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option,
-               q.topic, q.difficulty, q.active, q.created_by, q.created_at, q.updated_at
-        FROM quiz_questions qq
-        JOIN questions q ON qq.question_id = q.id
-        WHERE qq.quiz_id = ?
-        ORDER BY qq.position ASC
-        """;
-    private static final String COUNT_ACTIVE = "SELECT COUNT(*) FROM questions WHERE active = TRUE";
 
     private final DataSource dataSource;
+    private final boolean hasQuestionTypeColumn;
+
+    private final String findIdSql;
+    private final String findAllSql;
+    private final String findActiveSql;
+    private final String findByFilterSql;
+    private final String insertSql;
+    private final String updateSql;
+    private final String findByQuizIdSql;
 
     public JdbcQuestionRepository(DataSource dataSource) {
         this.dataSource = Objects.requireNonNull(dataSource, "DataSource cannot be null");
+        ensureSchema();
+        this.hasQuestionTypeColumn = checkColumnExists();
+
+        if (hasQuestionTypeColumn) {
+            findIdSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                + "FROM questions WHERE id = ?";
+            findAllSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                + "FROM questions ORDER BY id ASC";
+            findActiveSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                + "FROM questions WHERE active = TRUE ORDER BY id ASC";
+            findByFilterSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                + "FROM questions WHERE active = TRUE "
+                + "AND (? IS NULL OR topic = ?) AND (? IS NULL OR difficulty = ?) ORDER BY id ASC";
+            insertSql = "INSERT INTO questions (content, option_a, option_b, option_c, option_d, "
+                + "correct_option, topic, difficulty, question_type, created_by) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, question_type, active, created_by, created_at, updated_at";
+            updateSql = "UPDATE questions SET content = ?, option_a = ?, option_b = ?, option_c = ?, "
+                + "option_d = ?, correct_option = ?, topic = ?, difficulty = ?, question_type = ?, updated_at = now() "
+                + "WHERE id = ? AND active = TRUE "
+                + "RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, question_type, active, created_by, created_at, updated_at";
+            findByQuizIdSql = "SELECT q.id, q.content, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option, "
+                + "q.topic, q.difficulty, q.question_type, q.active, q.created_by, q.created_at, q.updated_at "
+                + "FROM quiz_questions qq "
+                + "JOIN questions q ON qq.question_id = q.id "
+                + "WHERE qq.quiz_id = ? ORDER BY qq.position ASC";
+        } else {
+            findIdSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, active, created_by, created_at, updated_at "
+                + "FROM questions WHERE id = ?";
+            findAllSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, active, created_by, created_at, updated_at "
+                + "FROM questions ORDER BY id ASC";
+            findActiveSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, active, created_by, created_at, updated_at "
+                + "FROM questions WHERE active = TRUE ORDER BY id ASC";
+            findByFilterSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, active, created_by, created_at, updated_at "
+                + "FROM questions WHERE active = TRUE "
+                + "AND (? IS NULL OR topic = ?) AND (? IS NULL OR difficulty = ?) ORDER BY id ASC";
+            insertSql = "INSERT INTO questions (content, option_a, option_b, option_c, option_d, "
+                + "correct_option, topic, difficulty, created_by) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, active, created_by, created_at, updated_at";
+            updateSql = "UPDATE questions SET content = ?, option_a = ?, option_b = ?, option_c = ?, "
+                + "option_d = ?, correct_option = ?, topic = ?, difficulty = ?, updated_at = now() "
+                + "WHERE id = ? AND active = TRUE "
+                + "RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, "
+                + "topic, difficulty, active, created_by, created_at, updated_at";
+            findByQuizIdSql = "SELECT q.id, q.content, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option, "
+                + "q.topic, q.difficulty, q.active, q.created_by, q.created_at, q.updated_at "
+                + "FROM quiz_questions qq "
+                + "JOIN questions q ON qq.question_id = q.id "
+                + "WHERE qq.quiz_id = ? ORDER BY qq.position ASC";
+        }
+    }
+
+    public void ensureSchema() {
+        String addColumn = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS question_type VARCHAR(20) NOT NULL DEFAULT 'MULTIPLE_CHOICE'";
+        try (Connection c = dataSource.getConnection();
+             java.sql.Statement s = c.createStatement()) {
+            s.execute(addColumn);
+        } catch (SQLException ignored) {
+            // Có thể xảy ra nếu user kết nối không phải superuser/owner; repository sẽ tự động dùng fallback mode.
+        }
+    }
+
+    private boolean checkColumnExists() {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                 "SELECT 1 FROM information_schema.columns WHERE table_name = 'questions' AND column_name = 'question_type'")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            return false;
+        }
     }
 
     @Override
     public Optional<Question> findById(long id) {
         validateId(id);
-        return withConnection(connection -> findOne(connection, FIND_ID,
+        return withConnection(connection -> findOne(connection, findIdSql,
             statement -> statement.setLong(1, id)));
     }
 
     @Override
     public Optional<Question> findById(Connection connection, long id) {
         validateId(id);
-        return onConnection(connection, () -> findOne(connection, FIND_ID,
+        return onConnection(connection, () -> findOne(connection, findIdSql,
             statement -> statement.setLong(1, id)));
     }
 
     @Override
     public List<Question> findAll() {
         return withConnection(connection -> {
-            try (PreparedStatement statement = connection.prepareStatement(FIND_ALL);
+            try (PreparedStatement statement = connection.prepareStatement(findAllSql);
                  ResultSet rows = statement.executeQuery()) {
                 List<Question> questions = new ArrayList<>();
                 while (rows.next()) {
@@ -111,7 +159,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
     @Override
     public List<Question> findActive() {
         return withConnection(connection -> {
-            try (PreparedStatement statement = connection.prepareStatement(FIND_ACTIVE);
+            try (PreparedStatement statement = connection.prepareStatement(findActiveSql);
                  ResultSet rows = statement.executeQuery()) {
                 List<Question> questions = new ArrayList<>();
                 while (rows.next()) {
@@ -130,7 +178,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
     @Override
     public List<Question> findByFilter(String topic, Difficulty difficulty) {
         return withConnection(connection -> {
-            try (PreparedStatement statement = connection.prepareStatement(FIND_BY_FILTER)) {
+            try (PreparedStatement statement = connection.prepareStatement(findByFilterSql)) {
                 statement.setString(1, topic);
                 statement.setString(2, topic);
                 statement.setString(3, difficulty == null ? null : difficulty.name());
@@ -153,9 +201,10 @@ public final class JdbcQuestionRepository implements QuestionRepository {
         }
         return withConnection(connection -> {
             String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
-            String sql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, active, created_by, created_at, updated_at "
-                + "FROM questions WHERE id IN (" + placeholders + ") ORDER BY id ASC";
+            String colPart = hasQuestionTypeColumn
+                ? "id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, active, created_by, created_at, updated_at "
+                : "id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, active, created_by, created_at, updated_at ";
+            String sql = "SELECT " + colPart + "FROM questions WHERE id IN (" + placeholders + ") ORDER BY id ASC";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 for (int i = 0; i < ids.size(); i++) {
                     statement.setLong(i + 1, ids.get(i));
@@ -175,7 +224,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
     public List<Question> findQuestionsByQuizId(long quizId) {
         validateId(quizId);
         return withConnection(connection -> {
-            try (PreparedStatement statement = connection.prepareStatement(FIND_BY_QUIZ_ID)) {
+            try (PreparedStatement statement = connection.prepareStatement(findByQuizIdSql)) {
                 statement.setLong(1, quizId);
                 try (ResultSet rows = statement.executeQuery()) {
                     List<Question> questions = new ArrayList<>();
@@ -260,7 +309,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
     }
 
     private Question insert(Connection connection, Question question) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(INSERT)) {
+        try (PreparedStatement statement = connection.prepareStatement(insertSql)) {
             statement.setString(1, question.content());
             statement.setString(2, question.optionA());
             statement.setString(3, question.optionB());
@@ -269,7 +318,12 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             statement.setString(6, String.valueOf(question.correctOption()));
             statement.setString(7, question.topic());
             statement.setString(8, question.difficulty().name());
-            statement.setLong(9, question.createdBy());
+            if (hasQuestionTypeColumn) {
+                statement.setString(9, (question.questionType() != null ? question.questionType() : QuestionType.MULTIPLE_CHOICE).name());
+                statement.setLong(10, question.createdBy());
+            } else {
+                statement.setLong(9, question.createdBy());
+            }
             try (ResultSet rows = statement.executeQuery()) {
                 if (!rows.next()) {
                     throw new SQLException("Question insertion returned no row");
@@ -282,7 +336,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
     }
 
     private boolean updateQuestion(Connection connection, Question question) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(UPDATE)) {
+        try (PreparedStatement statement = connection.prepareStatement(updateSql)) {
             statement.setString(1, question.content());
             statement.setString(2, question.optionA());
             statement.setString(3, question.optionB());
@@ -291,7 +345,12 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             statement.setString(6, String.valueOf(question.correctOption()));
             statement.setString(7, question.topic());
             statement.setString(8, question.difficulty().name());
-            statement.setLong(9, question.id());
+            if (hasQuestionTypeColumn) {
+                statement.setString(9, (question.questionType() != null ? question.questionType() : QuestionType.MULTIPLE_CHOICE).name());
+                statement.setLong(10, question.id());
+            } else {
+                statement.setLong(9, question.id());
+            }
             try (ResultSet rows = statement.executeQuery()) {
                 return rows.next();
             }
@@ -313,17 +372,57 @@ public final class JdbcQuestionRepository implements QuestionRepository {
         try {
             OffsetDateTime createdAt = rows.getObject("created_at", OffsetDateTime.class);
             OffsetDateTime updatedAt = rows.getObject("updated_at", OffsetDateTime.class);
-            return Question.restore(rows.getLong("id"), rows.getString("content"),
-                rows.getString("option_a"), rows.getString("option_b"),
-                rows.getString("option_c"), rows.getString("option_d"),
+            String content = rows.getString("content");
+            String optionA = rows.getString("option_a");
+            String optionB = rows.getString("option_b");
+            String optionC = rows.getString("option_c");
+            String optionD = rows.getString("option_d");
+            QuestionType questionType = QuestionType.MULTIPLE_CHOICE;
+            if (hasQuestionTypeColumn) {
+                try {
+                    String typeStr = rows.getString("question_type");
+                    if (typeStr != null && !typeStr.isBlank()) {
+                        questionType = QuestionType.valueOf(typeStr);
+                    }
+                } catch (SQLException | IllegalArgumentException ignored) {
+                }
+            } else {
+                questionType = inferQuestionType(content, optionA, optionB, optionC, optionD);
+            }
+            return Question.restore(rows.getLong("id"), content,
+                optionA, optionB, optionC, optionD,
                 rows.getString("correct_option").charAt(0),
                 rows.getString("topic"), Difficulty.valueOf(rows.getString("difficulty")),
+                questionType,
                 rows.getBoolean("active"), rows.getLong("created_by"),
                 createdAt == null ? null : createdAt.toInstant(),
                 updatedAt == null ? null : updatedAt.toInstant());
         } catch (IllegalArgumentException | NullPointerException error) {
             throw new SQLException("Invalid stored question data", error);
         }
+    }
+
+    private static QuestionType inferQuestionType(String content, String optA, String optB, String optC, String optD) {
+        if (content != null && (content.contains("___") || content.toLowerCase().contains("[blank]"))) {
+            return QuestionType.FILL_BLANK;
+        }
+        if (isTrueFalseOption(optA) && isTrueFalseOption(optB)) {
+            return QuestionType.TRUE_FALSE;
+        }
+        if (isEmptyOrDash(optC) && isEmptyOrDash(optD)) {
+            return QuestionType.SHORT_ANSWER;
+        }
+        return QuestionType.MULTIPLE_CHOICE;
+    }
+
+    private static boolean isTrueFalseOption(String opt) {
+        if (opt == null) return false;
+        String s = opt.trim().toLowerCase();
+        return s.equals("đúng") || s.equals("sai") || s.equals("true") || s.equals("false");
+    }
+
+    private static boolean isEmptyOrDash(String opt) {
+        return opt == null || opt.isBlank() || opt.trim().equals("-") || opt.trim().equals("—");
     }
 
     private SQLException translateInsertError(SQLException error) {

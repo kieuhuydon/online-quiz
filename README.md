@@ -86,6 +86,7 @@ Trung tâm đào tạo (bối cảnh: trung tâm tiếng Anh) cần tạo ngân 
 | Protocol | **Serialized DTO** (`Request`/`Response` qua `ObjectOutputStream`), có `ObjectInputFilter` whitelist |
 | Quiz PIN | **Có trong MVP** (luồng học viên cần PIN; PIN sinh khi giáo viên mở bài) |
 | Quản lý lớp | Admin tạo lớp, chọn/gán giáo viên phụ trách và thêm/xóa học viên. Giáo viên chỉ xem lớp được gán, danh sách học viên và giao bài cho lớp mình phụ trách. |
+| Số lớp của học viên | Mỗi học viên thuộc tối đa một lớp; được phép chưa có lớp. Chuyển lớp bằng cách xóa khỏi lớp cũ rồi thêm vào lớp mới; kết quả thi đã lưu được giữ nguyên. DB bảo vệ bằng `UNIQUE(student_id)` trên `class_members`. |
 | Tài khoản | Admin cấp sẵn, **không** tự đăng ký |
 | Cấp/khóa tài khoản | API quản trị chỉ tạo TEACHER/STUDENT; không tạo ADMIN hoặc khóa tài khoản ADMIN |
 | Chuẩn hóa thông tin user | Bỏ khoảng trắng đầu/cuối username, fullName, email; giữ hoa/thường; email trống thành null; unique theo schema hiện tại |
@@ -297,8 +298,9 @@ public record Response(long requestId,          // trùng requestId của Reques
 | `LOGIN` | (chưa login) | LoginHandler | Xác thực, trả token + role |
 | `LOGOUT` | mọi role | LoginHandler | Hủy session |
 | `CREATE_ACCOUNT`, `LIST_ACCOUNTS`, `SET_ACCOUNT_ACTIVE` | ADMIN | AccountHandler | FR-AD01 |
-| `CREATE_CLASS`, `ADD_CLASS_MEMBER`, `REMOVE_CLASS_MEMBER` | ADMIN | ClassHandler | FR-A07; tạo lớp phải chọn giáo viên đang hoạt động, chỉ thêm học viên role STUDENT |
+| `CREATE_CLASS`, `DELETE_CLASS`, `ADD_CLASS_MEMBER`, `REMOVE_CLASS_MEMBER` | ADMIN | ClassHandler | FR-A07; tạo lớp phải chọn giáo viên đang hoạt động, chỉ thêm học viên role STUDENT |
 | `LIST_CLASSES`, `LIST_CLASS_MEMBERS` | TEACHER, ADMIN | ClassHandler | Admin xem toàn bộ; Teacher chỉ xem lớp được gán, kiểm tra quyền sở hữu ở server |
+| `LIST_UNENROLLED_STUDENTS` | ADMIN | ClassHandler | Payload null; trả danh sách AccountDto của học viên đang hoạt động và chưa thuộc lớp nào, theo ID tăng |
 | `CREATE_QUESTION`, `UPDATE_QUESTION`, `GET_QUESTION`, `LIST_QUESTIONS`, `DEACTIVATE_QUESTION` | TEACHER, ADMIN | QuestionHandler | FR-A02/A03, BR-05 |
 | `CREATE_QUIZ`, `UPDATE_QUIZ`, `GET_QUIZ`, `LIST_QUIZZES`, `SET_QUIZ_QUESTIONS` | TEACHER, ADMIN | QuizHandler | FR-A04/A05/A06 (chỉ sửa khi DRAFT) |
 | `OPEN_QUIZ` (sinh PIN), `CLOSE_QUIZ`, `ASSIGN_QUIZ` | TEACHER, ADMIN | QuizHandler | FR-A08/A09 |
@@ -310,6 +312,8 @@ public record Response(long requestId,          // trùng requestId của Reques
 | `REPORT_ANTICHEAT_EVENT` | STUDENT | AntiCheatHandler | FR-S13/S14, FR-T09 |
 | **PUSH** `PUSH_ANTICHEAT_WARNING`, `PUSH_FORCE_SUBMITTED` | server → student | (AntiCheatService / Scheduler) | Cảnh báo; Attempt bị tự nộp |
 
+`DELETE_CLASS` nhận `Long classId` dương, trả payload `null` khi thành công; lớp không còn tồn tại trả `NOT_FOUND`. Admin chọn lớp → **Xóa lớp** → xác nhận tên lớp trước khi gửi. Xóa lớp đồng thời xóa thành viên và liên kết giao bài của lớp theo khóa ngoại `ON DELETE CASCADE`; giữ tài khoản, đề thi, lượt làm bài và kết quả đã lưu. Học viên mất quyền tham gia mới qua lớp đã xóa. Client chỉ cập nhật bảng sau response thành công, chặn gửi trùng khi đang xử lý và không tự retry nếu chưa xác nhận được kết quả.
+
 Quy tắc: nếu `type` không có handler → `INVALID_REQUEST`. `AuthGuard` kiểm tra token hợp lệ và role **trước** khi gọi handler (mỗi handler khai báo role cho từng `MessageType`).
 
 ---
@@ -317,6 +321,10 @@ Quy tắc: nếu `type` không có handler → `INVALID_REQUEST`. `AuthGuard` ki
 ## 8. Database (PostgreSQL) – `database/schema.sql`
 
 DDL thực thi trong `database/schema.sql` bổ sung CHECK theo các miền dữ liệu đã chốt (điểm, phần trăm, thời hạn, policy/event/action), cùng vị trí câu hỏi dương và không trùng trong quiz. Script là khởi tạo nguyên tử trên DB mới; không xóa hay tự nâng cấp dữ liệu cũ. Các bảng và quan hệ nghiệp vụ giữ theo thiết kế dưới đây.
+
+**DB đã tồn tại:** chạy `database/migrations/001_single_class_per_student.sql` bằng tài khoản sở hữu bảng, trước khi chạy server/client bản mới (cả `quizdb` và DB test `quizdb_test`). Script khóa ghi bảng thành viên trong transaction, kiểm tra dữ liệu trùng và thêm `uq_class_members_student`; có thể chạy lại. Nếu một học viên đang thuộc nhiều lớp, script dừng và không tự xóa dữ liệu. Liệt kê bằng `SELECT student_id, array_agg(class_id ORDER BY class_id) AS class_ids FROM class_members GROUP BY student_id HAVING count(*) > 1;`, chọn lớp cần giữ rồi xóa các liên kết dư và chạy lại migration. Không chạy lại schema/seed trên DB đang dùng.
+
+`ADD_CLASS_MEMBER` trả `STUDENT_ALREADY_ENROLLED` nếu học viên đã có lớp, kể cả khi hai Admin thêm đồng thời. Giao diện tải lại danh sách học viên chưa có lớp sau mỗi lần thêm/xóa thành viên; danh sách chỉ là gợi ý tại thời điểm tải, server và ràng buộc DB quyết định kết quả cuối cùng. Các API lớp hiện có giữ kiểu danh sách, tối đa một lớp cho mỗi học viên.
 
 ```sql
 CREATE TABLE users (
@@ -343,7 +351,8 @@ CREATE TABLE class_members (
   class_id    BIGINT      NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
   student_id  BIGINT      NOT NULL REFERENCES users(id),
   enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (class_id, student_id)
+  PRIMARY KEY (class_id, student_id),
+  CONSTRAINT uq_class_members_student UNIQUE (student_id)
 );
 
 CREATE TABLE questions (
@@ -733,9 +742,35 @@ Trên `quizdb` vừa tạo schema và còn trống:
 & "$pgBin\psql.exe" -h 127.0.0.1 -p 5432 -U quiz -d quizdb -W -v ON_ERROR_STOP=1 -c "SET quiz.allow_demo_seed = 'on'" -f database/seed.sql
 ```
 
-Seed cần opt-in, bảng users trống và các sequence liên quan chưa dùng. Kết quả phải kết thúc bằng COMMIT. Tài khoản ứng dụng mẫu: `admin`, `teacher1`, `teacher2`, `student01`–`student50`, cùng mật khẩu **password123**. Đây là tài khoản Online Quiz, khác với các role PostgreSQL `postgres`/`quiz`/`quiz_test`; chỉ dùng cho demo, không dùng triển khai thật.
+Seed cần opt-in và cả 11 bảng trống; không yêu cầu sequence bắt đầu từ 1 vì mọi liên kết dùng ID trả về hoặc tra theo username/tên lớp. Script khóa ghi các bảng trong transaction, không xóa dữ liệu và từ chối chạy lại nếu đã có dữ liệu. Kết quả phải kết thúc bằng COMMIT. Tài khoản ứng dụng mẫu: `admin`, `teacher1`, `teacher2`, `student01`–`student50`, cùng mật khẩu **password123**; `student50` bị khóa để thử đăng nhập thất bại. Đây là tài khoản Online Quiz, khác với các role PostgreSQL `postgres`/`quiz`/`quiz_test`; chỉ dùng cho demo.
+
+| Dữ liệu demo | Nội dung |
+|---|---|
+| Lớp B1 · teacher1 | `ENG-B1-01`: student01–student20; đề OPEN `B1 Grammar - Practice`, PIN **123456** |
+| Lớp B2 · teacher2 | `ENG-B2-01`: student21–student35; đề OPEN `B2 Vocabulary - Practice`, PIN **234567** |
+| Lớp TOEIC · teacher1 | `TOEIC-650`: student36–student45; đề OPEN `TOEIC Reading - Practice`, PIN **345678** |
+| Chưa có lớp | student46–student49 đang hoạt động, có thể thêm bằng trang Admin; student50 đang bị khóa |
+| Thi thử thêm · teacher1 | `B1 Grammar - Mock Exam` giao ENG-B1-01, PIN **678901**; `TOEIC Reading - Mock Exam` giao TOEIC-650, PIN **789012**. Mỗi đề 10 câu bổ sung, khác bộ luyện tập. |
+| Ngân hàng câu hỏi | 60 câu: mỗi chủ đề Grammar/Vocabulary/Reading có 20 câu, đủ ba mức độ khó; Reading có các đoạn thông báo/email ngắn |
+| Đề nháp | `General English - Draft` của teacher2: 15 câu; `B2 Vocabulary - Draft` của teacher2 và `B1 Grammar - Draft` của teacher1: mỗi đề 10 câu, chưa giao lớp |
+| Lịch sử/kết quả | Hai đề CLOSED: `B1 Grammar - Completed`, `B2 Vocabulary - Completed`; 8 bài đã nộp, 80 câu trả lời, đủ đạt/trượt và MANUAL/TIMEOUT/ANTICHEAT |
+| Chống gian lận | student04 và student24 có 3 sự kiện FOCUS_LOST/bài; sự kiện cuối AUTO_SUBMITTED. Dữ liệu này là mô phỏng demo, không phải log thực nghiệm. |
+
+Các đề đang OPEN chưa có lượt làm bài để thử luồng nhập PIN và làm bài mới; không seed lượt IN_PROGRESS để tránh bộ hẹn giờ thay đổi dữ liệu ngay khi khởi động server.
 
 Giữ `quizdb_test` **không có seed demo** để integration test tạo fixture riêng.
+
+**Xóa dữ liệu cũ và nạp lại seed trên máy phát triển:** dừng server/client, rồi chạy từ thư mục project:
+
+```powershell
+.\database\reset-and-seed.bat
+# Chọn file cấu hình khác (đặt đường dẫn có dấu cách trong dấu ngoặc kép):
+.\database\reset-and-seed.bat -Config "D:\WorkSpace\Online Quiz\server-local.properties"
+```
+
+File `.bat` là điểm chạy trên Windows, tự gọi `reset-and-seed.ps1` cùng thư mục; giữ cả hai file và `seed.sql`. Đường dẫn mặc định được tính theo vị trí script, không phụ thuộc thư mục terminal đang đứng. Script ưu tiên `server-local.properties` ở gốc project; nếu không có thì dùng `quiz-server/src/main/resources/server.properties` và in rõ đường dẫn đã chọn. Biến `DB_URL`, `DB_USER`, `DB_PASSWORD` có ưu tiên cao hơn file giống cấu hình server; nếu mật khẩu chưa được cấu hình, script hỏi mật khẩu PostgreSQL và không hiển thị ký tự nhập. Chỉ nhận PostgreSQL trên localhost/127.0.0.1. Có thể chọn config bằng `-Config .\server-local.properties` và đường dẫn PostgreSQL bằng `-PsqlPath "C:\Program Files\PostgreSQL\18\bin\psql.exe"`; nếu không truyền, tự tìm psql trên PATH hoặc trong các thư mục cài PostgreSQL. Script hiển thị DB/schema đích và chạy ngay, không hỏi xác nhận. Nó **xóa toàn bộ dữ liệu trong 11 bảng Online Quiz**, đặt lại sequence ID rồi nạp nội dung hiện tại của `database/seed.sql`. Tài khoản, lớp, đề thi, bài làm, điểm và nhật ký cũ được thay bằng dữ liệu demo. Không tạo lại cấu trúc bảng; DB phải có schema hiện hành. `TRUNCATE` không dùng `CASCADE` để tránh lan sang bảng ngoài danh sách. Toàn bộ reset/seed chạy trong một transaction: lỗi SQL hoặc timeout chờ khóa sẽ rollback dữ liệu và sequence. Không chạy reset vào DB có dữ liệu cần giữ. Tham số `-Schema` dành cho schema demo/kiểm thử riêng; mặc định là `public`.
+
+Kiểm thử riêng script bằng `.\database\tests\reset-and-seed.test.ps1`: đọc `db-test-local.properties`, chỉ nhận `quizdb_test`/role `quiz_test`, tạo schema UUID riêng rồi dọn sau khi kiểm tra reset thành công, chạy lại, và rollback dữ liệu/sequence khi seed cố ý gặp lỗi. Không reset schema `public` của DB test.
 
 ### 15.5. Cấu hình JDBC và mật khẩu local
 
@@ -801,6 +836,8 @@ Tạo `server-local.properties` bằng cách sao chép `quiz-server/src/main/res
 .\mvnw.cmd -B -ntp -pl quiz-server -am install '-DskipTests'
 .\mvnw.cmd -B -ntp -pl quiz-server exec:java '-Dexec.args=--config server-local.properties'
 ```
+
+Sau khi pull hoặc sửa `quiz-common`, cần chạy lại bước `install -am` trước khi chạy riêng server/client. `clean verify` kiểm thử bằng dependency trong reactor nhưng chưa cập nhật JAR trong Maven local; chạy riêng `exec:java` có thể nạp JAR cũ và báo `NoSuchFieldError`/`NoSuchMethodError`. Có thể đồng bộ cả hai đầu bằng `.\mvnw.cmd -B -ntp -pl quiz-client -am install '-DskipTests'` sau khi kiểm thử. Tham số `--config` nên dùng đường dẫn tuyệt đối nếu file không nằm trong thư mục chạy của module.
 
 Server kiểm tra truy cập bảng `users` trước khi mở port; không tự chạy schema hoặc seed. Sai cấu hình, thiếu bảng/quyền DB hoặc port đã dùng sẽ làm startup thất bại và đóng pool. Dùng Ctrl+C để shutdown. Port thực tế phải 1–65535; port 0 chỉ dùng khi inject `QuizServer` trong test.
 
@@ -1197,7 +1234,7 @@ xem lớp mình phụ trách và danh sách học viên của các lớp đó.
 
 `CreateClassDto(name, description, teacherId)` truyền giáo viên được chọn;
 không lấy userId của Admin làm teacher_id. Hai đầu phải chạy cùng bản build.
-Schema và lớp cũ được giữ nguyên; không cần migration database.
+Quyền quản lý lớp giữ các lớp cũ; quy tắc mỗi học viên tối đa một lớp cần migration ở mục 8.
 
 
 ### Bố cục sidebar và thêm nhiều học viên
@@ -1208,8 +1245,8 @@ tiếp theo là thành viên và bảng checkbox học viên có thể thêm. Ph
 trong khung thu gọn phía dưới. Có Chọn tất cả, Bỏ chọn và số lượng đang chọn.
 
 Một lần nhấn Thêm học viên đã chọn xử lý lần lượt bằng API hiện có. Học viên đã
-trong lớp được loại khỏi bảng lựa chọn. Nếu phát sinh trùng do thay đổi đồng thời,
-thông báo tách số đã thêm và số đã có trong lớp. Lỗi từng tài khoản giữ lại lựa chọn
+có lớp bất kỳ được loại khỏi bảng lựa chọn. Nếu phát sinh trùng do thay đổi đồng thời,
+thông báo học viên đã có lớp và yêu cầu tải lại; không ghi nhận là thêm thành công. Lỗi từng tài khoản còn hợp lệ giữ lại lựa chọn
 cùng trạng thái trong bảng; lỗi kết nối hoặc máy chủ dừng các yêu cầu tiếp theo,
 không tự thử lại, báo số chưa xác nhận/chưa xử lý và yêu cầu tải lại trước khi thử.
 Đây là thao tác có thể thành công một phần, không phải một transaction cho cả nhóm.

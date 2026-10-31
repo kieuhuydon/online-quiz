@@ -54,4 +54,45 @@ class DtoMapperTest {
         assertEquals(dtos, ((Response) MessageCodec.deserialize(MessageCodec.serialize(Response.success(42, dtos)))).payload());
         assertTrue(DtoMapper.accounts(List.of()).isEmpty());
     }
+
+    @Test
+    void questionAndQuizMappersCopyFieldsAndRejectNulls() throws Exception {
+        java.time.Instant now = java.time.Instant.parse("2026-10-30T00:00:00Z");
+        quiz.server.domain.Question q = quiz.server.domain.Question.restore(
+            10L, "What is JVM?", "Java Virtual Machine", "Java Visual Mode", "None", "All",
+            'A', "Core Java", quiz.common.enums.Difficulty.EASY, true, 2L, now, now
+        );
+        quiz.common.dto.QuestionDto qDto = DtoMapper.question(q);
+        assertEquals(10L, qDto.id());
+        assertEquals("What is JVM?", qDto.content());
+        assertEquals('A', qDto.correctOption());
+        assertEquals(quiz.common.enums.Difficulty.EASY, qDto.difficulty());
+
+        ArrayList<quiz.common.dto.QuestionDto> qDtos = DtoMapper.questions(List.of(q));
+        assertEquals(1, qDtos.size());
+        assertEquals(qDto, qDtos.get(0));
+
+        quiz.server.domain.Quiz quizEntity = quiz.server.domain.Quiz.restore(
+            20L, "Midterm", "Midterm desc", "Java", 45, 60.0,
+            quiz.common.enums.QuizStatus.OPEN, "654321",
+            quiz.common.enums.AntiCheatPolicyType.WARN_THEN_AUTO_SUBMIT, 3,
+            2L, now, now, null
+        );
+        quiz.common.dto.QuizDto quizDto = DtoMapper.quiz(quizEntity);
+        assertEquals(20L, quizDto.id());
+        assertEquals("Midterm", quizDto.title());
+        assertEquals("654321", quizDto.pin());
+
+        ArrayList<quiz.common.dto.QuizDto> quizDtos = DtoMapper.quizzes(List.of(quizEntity));
+        assertEquals(1, quizDtos.size());
+        assertEquals(quizDto, quizDtos.get(0));
+
+        assertThrows(NullPointerException.class, () -> DtoMapper.account(null));
+        assertThrows(NullPointerException.class, () -> DtoMapper.accounts(null));
+        assertThrows(NullPointerException.class, () -> DtoMapper.login(null));
+        assertThrows(NullPointerException.class, () -> DtoMapper.question(null));
+        assertThrows(NullPointerException.class, () -> DtoMapper.questions(null));
+        assertThrows(NullPointerException.class, () -> DtoMapper.quiz(null));
+        assertThrows(NullPointerException.class, () -> DtoMapper.quizzes(null));
+    }
 }

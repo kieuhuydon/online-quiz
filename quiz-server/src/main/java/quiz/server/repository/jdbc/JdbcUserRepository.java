@@ -34,6 +34,13 @@ public final class JdbcUserRepository implements UserRepository {
         SELECT id, username, password_hash, full_name, email, role, active, created_by, created_at
         FROM users ORDER BY id ASC
         """;
+    private static final String FIND_UNENROLLED_STUDENTS = """
+        SELECT id, username, password_hash, full_name, email, role, active, created_by, created_at
+        FROM users u
+        WHERE role = 'STUDENT' AND active = TRUE
+          AND NOT EXISTS (SELECT 1 FROM class_members cm WHERE cm.student_id = u.id)
+        ORDER BY id ASC
+        """;
     private static final String INSERT = """
         INSERT INTO users (username, password_hash, full_name, email, role, active, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -101,8 +108,17 @@ public final class JdbcUserRepository implements UserRepository {
 
     @Override
     public List<User> findAll() {
+        return findUsers(FIND_ALL);
+    }
+
+    @Override
+    public List<User> findUnenrolledStudents() {
+        return findUsers(FIND_UNENROLLED_STUDENTS);
+    }
+
+    private List<User> findUsers(String query) {
         return withConnection(connection -> {
-            try (PreparedStatement statement = connection.prepareStatement(FIND_ALL);
+            try (PreparedStatement statement = connection.prepareStatement(query);
                  ResultSet rows = statement.executeQuery()) {
                 List<User> users = new ArrayList<>();
                 while (rows.next()) {

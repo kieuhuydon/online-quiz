@@ -36,7 +36,17 @@
             <artifactId>javafx-graphics</artifactId>
         </dependency>
 
-        <!-- Logging -->
+        <!-- Document parsing (POI for DOCX, PDFBox for PDF) -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+        </dependency>
+
+                <!-- Logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>

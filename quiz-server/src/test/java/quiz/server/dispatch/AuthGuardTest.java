@@ -24,7 +24,7 @@ import static org.mockito.Mockito.*;
 
 class AuthGuardTest {
     @ParameterizedTest
-    @EnumSource(value = MessageType.class, names = {"CREATE_CLASS", "ADD_CLASS_MEMBER", "REMOVE_CLASS_MEMBER"})
+    @EnumSource(value = MessageType.class, names = {"CREATE_CLASS", "DELETE_CLASS", "ADD_CLASS_MEMBER", "REMOVE_CLASS_MEMBER"})
     void classMutationsCannotBeRegisteredForTeacherOrStudent(MessageType type) {
         assertDoesNotThrow(() -> AuthGuard.validatePolicy(type, Set.of(Role.ADMIN)));
         assertThrows(IllegalArgumentException.class,

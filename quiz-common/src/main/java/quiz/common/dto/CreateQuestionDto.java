@@ -1,6 +1,7 @@
 package quiz.common.dto;
 
 import quiz.common.enums.Difficulty;
+import quiz.common.enums.QuestionType;
 import java.io.Serializable;
 
 /**
@@ -15,6 +16,19 @@ public record CreateQuestionDto(
     String optionD,
     char correctOption,
     String topic,
-    Difficulty difficulty
+    Difficulty difficulty,
+    QuestionType questionType
 ) implements Serializable {
+    public CreateQuestionDto {
+        if (questionType == null) {
+            questionType = QuestionType.MULTIPLE_CHOICE;
+        }
+    }
+
+    public CreateQuestionDto(String content, String optionA, String optionB,
+                             String optionC, String optionD, char correctOption,
+                             String topic, Difficulty difficulty) {
+        this(content, optionA, optionB, optionC, optionD, correctOption,
+             topic, difficulty, QuestionType.MULTIPLE_CHOICE);
+    }
 }

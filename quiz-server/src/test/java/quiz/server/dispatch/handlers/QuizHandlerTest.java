@@ -152,4 +152,25 @@ class QuizHandlerTest {
         assertTrue(res.success());
         assertInstanceOf(ArrayList.class, res.payload());
     }
+
+    @Test
+    void getQuizInfoAndGetClassQuizResultsDispatchToService() {
+        assertEquals(Set.of(Role.TEACHER, Role.ADMIN), handler.allowedRoles(MessageType.GET_CLASS_QUIZ_RESULTS));
+        assertThrows(IllegalArgumentException.class, () -> handler.allowedRoles(MessageType.LOGIN));
+
+        quiz.common.dto.QuizInfoDto infoDto = new quiz.common.dto.QuizInfoDto(
+            1L, "Title", "Desc", "Cat", 30, 50.0, 10, QuizStatus.OPEN, "123456", true, Instant.now(), null
+        );
+        when(quizService.getQuizInfo(1L, 5L)).thenReturn(infoDto);
+        Response infoRes = handler.handle(new Request(10, MessageType.GET_QUIZ_INFO, "token", 1L), studentSession);
+        assertTrue(infoRes.success());
+        assertEquals(infoDto, infoRes.payload());
+
+        quiz.common.dto.ClassQuizResultsDto classResults =
+            new quiz.common.dto.ClassQuizResultsDto(List.of(), List.of());
+        when(quizService.getClassQuizResults(10L, teacherSession)).thenReturn(classResults);
+        Response classRes = handler.handle(new Request(11, MessageType.GET_CLASS_QUIZ_RESULTS, "token", 10L), teacherSession);
+        assertTrue(classRes.success());
+        assertEquals(classResults, classRes.payload());
+    }
 }

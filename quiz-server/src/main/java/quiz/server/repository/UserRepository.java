@@ -118,6 +118,9 @@ public interface UserRepository {
      */
     List<User> findAll();
 
+    /** Lists active students with no class membership, ordered by ID. Results are advisory until enrollment. */
+    List<User> findUnenrolledStudents();
+
     /**
      * Sets the account status without deleting the user or changing other fields.
      * Returns true for an existing user even when its status was already the same.

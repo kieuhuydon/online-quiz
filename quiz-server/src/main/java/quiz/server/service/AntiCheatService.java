@@ -154,10 +154,15 @@ public final class AntiCheatService {
                 new AntiCheatWarningDto(result.countAfter(), result.maxViolations(), warningMsg)
             ));
         } else if ("AUTO_SUBMITTED".equals(result.action())) {
-            connectionRegistry.sendToUser(studentId, Response.push(
-                MessageType.PUSH_FORCE_SUBMITTED,
-                "Bài thi của bạn đã bị tự động nộp do vi phạm quy chế thi vượt quá " + result.maxViolations() + " lần."
-            ));
+            try {
+                attemptService.submitAttempt(dto.attemptId(), studentId, SubmitReason.ANTICHEAT);
+                connectionRegistry.sendToUser(studentId, Response.push(
+                    MessageType.PUSH_FORCE_SUBMITTED,
+                    "Bài thi của bạn đã bị tự động nộp do vi phạm quy chế thi vượt quá " + result.maxViolations() + " lần."
+                ));
+            } catch (Exception e) {
+                log.warn("Lỗi khi tự động nộp bài vi phạm attemptId={}: {}", dto.attemptId(), e.getMessage());
+            }
         }
     }
 
@@ -170,10 +175,15 @@ public final class AntiCheatService {
             throw new ForbiddenException("Chỉ Giáo viên và Quản trị viên mới có quyền xem nhật ký vi phạm");
         }
 
-        Attempt attempt=attemptRepo.findById(attemptId).orElseThrow(() -> new NotFoundException("Lượt làm bài không tồn tại"));
-        Quiz quiz=quizRepo.findById(attempt.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
-        if(session.role()!=Role.ADMIN && quiz.createdBy()!=session.userId())
-            throw new ForbiddenException("Bạn không quản lý bài thi này");
+        Attempt attempt = attemptRepo.findById(attemptId)
+            .orElseThrow(() -> new NotFoundException("Lượt làm bài không tồn tại"));
+        if (session.role() != Role.ADMIN) {
+            Quiz quiz = quizRepo.findById(attempt.quizId())
+                .orElseThrow(() -> new NotFoundException("Bài kiểm tra không tồn tại"));
+            if (quiz.createdBy() != session.userId()) {
+                throw new ForbiddenException("Bạn không có quyền xem nhật ký vi phạm của đề kiểm tra này");
+            }
+        }
         return antiCheatRepo.findEventsByAttemptId(attemptId);
     }
 }

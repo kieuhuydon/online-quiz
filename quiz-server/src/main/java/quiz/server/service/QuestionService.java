@@ -4,6 +4,7 @@ import quiz.common.dto.CreateQuestionDto;
 import quiz.common.dto.QuestionDto;
 import quiz.common.dto.UpdateQuestionDto;
 import quiz.common.enums.Difficulty;
+import quiz.common.enums.QuestionType;
 import quiz.common.enums.Role;
 import quiz.server.db.TransactionManager;
 import quiz.server.domain.Question;
@@ -44,7 +45,8 @@ public final class QuestionService {
         CreateQuestionDto validated = validateCreate(dto);
         Question input = Question.createNew(validated.content(), validated.optionA(),
             validated.optionB(), validated.optionC(), validated.optionD(),
-            validated.correctOption(), validated.topic(), validated.difficulty(), actorId);
+            validated.correctOption(), validated.topic(), validated.difficulty(),
+            validated.questionType(), actorId);
         return transactions.executeInTransaction(connection -> {
             requireTeacherOrAdmin(connection, actorId);
             return questions.save(connection, input);
@@ -84,7 +86,8 @@ public final class QuestionService {
             Question updated = new Question(existing.id(), validated.content(), validated.optionA(),
                 validated.optionB(), validated.optionC(), validated.optionD(),
                 validated.correctOption(), validated.topic(), validated.difficulty(),
-                existing.active(), existing.createdBy(), existing.createdAt(), null);
+                validated.questionType(),
+                existing.active(), existing.createdBy(), existing.createdAt(), existing.updatedAt());
             boolean ok = questions.update(connection, updated);
             if (!ok) {
                 throw new NotFoundException("Question not found");
@@ -131,7 +134,7 @@ public final class QuestionService {
     private static QuestionDto toDto(Question q) {
         return new QuestionDto(
             q.id(), q.content(), q.optionA(), q.optionB(), q.optionC(), q.optionD(),
-            q.correctOption(), q.topic(), q.difficulty(), q.active(), q.createdBy(), q.createdAt()
+            q.correctOption(), q.topic(), q.difficulty(), q.questionType(), q.active(), q.createdBy(), q.createdAt()
         );
     }
 
@@ -149,8 +152,9 @@ public final class QuestionService {
         if (dto.difficulty() == null) {
             throw new ValidationException("Difficulty is required");
         }
+        QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
         return new CreateQuestionDto(content, optionA, optionB, optionC, optionD,
-            correctOption, topic, dto.difficulty());
+            correctOption, topic, dto.difficulty(), questionType);
     }
 
     private UpdateQuestionDto validateUpdate(UpdateQuestionDto dto) {
@@ -168,8 +172,9 @@ public final class QuestionService {
         if (dto.difficulty() == null) {
             throw new ValidationException("Difficulty is required");
         }
+        QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
         return new UpdateQuestionDto(dto.id(), content, optionA, optionB, optionC, optionD,
-            correctOption, topic, dto.difficulty());
+            correctOption, topic, dto.difficulty(), questionType);
     }
 
     private static char normalizeCorrectOption(char correctOption) {
