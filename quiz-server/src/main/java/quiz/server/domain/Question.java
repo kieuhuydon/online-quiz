@@ -21,12 +21,21 @@ public record Question(
     boolean active,
     long createdBy,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    String answerKey,
+    String explanation
 ) {
     private static final int MAX_CONTENT_LENGTH = 1000;
     private static final int MAX_OPTION_LENGTH = 255;
     private static final int MAX_TOPIC_LENGTH = 100;
     private static final int MAX_EXPLANATION_LENGTH = 2000;
+
+    public Question(long id, String content, String optionA, String optionB, String optionC, String optionD,
+                    char correctOption, String topic, Difficulty difficulty, QuestionType questionType,
+                    boolean active, long createdBy, Instant createdAt, Instant updatedAt) {
+        this(id, content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty, questionType,
+            active, createdBy, createdAt, updatedAt, "", "");
+    }
 
     public Question {
         validateStorageState(id, createdAt, updatedAt);

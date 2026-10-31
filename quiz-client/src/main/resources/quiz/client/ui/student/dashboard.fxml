@@ -64,7 +64,7 @@
             <Label text="Trạng thái đề thi:" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
             <Label fx:id="infoStatus" text="" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
 
-            <Label text="Mô tả bài thi:" styleClass="field-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+            <Label fx:id="infoDescriptionLabel" text="Mô tả bài thi:" styleClass="field-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
             <Label fx:id="infoDescription" text="" wrapText="true" GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
         </GridPane>
         <Separator/>

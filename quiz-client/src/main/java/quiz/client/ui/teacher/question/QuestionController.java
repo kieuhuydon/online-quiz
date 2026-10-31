@@ -57,6 +57,9 @@ public final class QuestionController extends ScreenController {
     @FXML private ComboBox<Character> questionCorrectOption;
     @FXML private TextField questionTopic;
     @FXML private ComboBox<Difficulty> questionDifficulty;
+    @FXML private ComboBox<QuestionType> questionType;
+    @FXML private TextField questionAnswerKey;
+    @FXML private TextArea questionExplanation;
     @FXML private Button refreshQuestions;
     @FXML private Button importQuestions;
     @FXML private Button newQuestion;
@@ -118,6 +121,8 @@ public final class QuestionController extends ScreenController {
         questionCorrectOption.setValue('A');
         questionDifficulty.getItems().setAll(Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
         questionDifficulty.setValue(Difficulty.MEDIUM);
+        questionType.getItems().setAll(QuestionType.values());
+        questionType.setValue(QuestionType.MULTIPLE_CHOICE);
         if (filterDifficulty != null) {
             filterDifficulty.getItems().setAll(Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
         }

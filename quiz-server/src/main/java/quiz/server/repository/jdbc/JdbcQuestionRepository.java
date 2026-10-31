@@ -408,10 +408,14 @@ public final class JdbcQuestionRepository implements QuestionRepository {
                 explanation,
                 rows.getBoolean("active"), rows.getLong("created_by"),
                 createdAt == null ? null : createdAt.toInstant(),
-                updatedAt == null ? null : updatedAt.toInstant());
+                updatedAt == null ? null : updatedAt.toInstant(), safeString(rows, "answer_key"), safeString(rows, "explanation"));
         } catch (IllegalArgumentException | NullPointerException error) {
             throw new SQLException("Invalid stored question data", error);
         }
+    }
+
+    private static String safeString(ResultSet rows, String column) {
+        try { return rows.getString(column); } catch (SQLException ignored) { return ""; }
     }
 
     private static QuestionType inferQuestionType(String content, String optA, String optB, String optC, String optD) {

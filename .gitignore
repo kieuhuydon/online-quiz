@@ -16,3 +16,4 @@ Thumbs.db
 *.properties
 docs/*
 !docs/WORK_PLAN.md
+!docs/TEACHER_MONITORING.md

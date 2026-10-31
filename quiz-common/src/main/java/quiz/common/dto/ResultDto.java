@@ -17,6 +17,12 @@ public record ResultDto(
     int totalQuestions,
     boolean passed,
     SubmitReason submitReason,
-    Instant submittedAt
+    Instant submittedAt,
+    java.util.List<QuestionReviewDto> review
 ) implements Serializable {
+    public ResultDto(long attemptId, long quizId, String quizTitle, String studentName, double score,
+                     int correctCount, int totalQuestions, boolean passed, SubmitReason submitReason, Instant submittedAt) {
+        this(attemptId, quizId, quizTitle, studentName, score, correctCount, totalQuestions, passed,
+            submitReason, submittedAt, java.util.List.of());
+    }
 }

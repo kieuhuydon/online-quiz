@@ -22,7 +22,9 @@ public record QuestionDto(
     String explanation,
     boolean active,
     long createdBy,
-    Instant createdAt
+    Instant createdAt,
+    String answerKey,
+    String explanation
 ) implements Serializable {
     public QuestionDto {
         if (questionType == null) {

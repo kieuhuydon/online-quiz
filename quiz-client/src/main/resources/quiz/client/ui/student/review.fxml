@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.ReviewController" spacing="16" fillWidth="true">
+    <padding><Insets top="20" right="24" bottom="24" left="24"/></padding>
+    <HBox alignment="CENTER_LEFT" spacing="12">
+        <VBox spacing="4" HBox.hgrow="ALWAYS">
+            <Label text="REVIEW BÀI THI" styleClass="eyebrow"/>
+            <Label fx:id="quizTitle" styleClass="page-heading" wrapText="true"/>
+            <Label fx:id="summary" styleClass="muted"/>
+        </VBox>
+        <Button text="← Lịch sử" onAction="#history" styleClass="secondary-button"/>
+    </HBox>
+    <Separator/>
+    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent; -fx-background: transparent;">
+        <content><VBox fx:id="questionCards" spacing="14" fillWidth="true" style="-fx-padding: 2 4 16 2;"/></content>
+    </ScrollPane>
+</VBox>

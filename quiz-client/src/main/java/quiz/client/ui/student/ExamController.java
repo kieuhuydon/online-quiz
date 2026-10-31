@@ -9,6 +9,9 @@ import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.TilePane;
+import javafx.scene.layout.VBox;
+import javafx.scene.control.TextField;
+import quiz.common.enums.QuestionType;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.slf4j.Logger;
@@ -53,6 +56,7 @@ public final class ExamController extends ScreenController {
     @FXML private TextArea questionText;
     @FXML private RadioButton optionA, optionB, optionC, optionD;
     @FXML private ToggleGroup options;
+    @FXML private VBox answerPane;
     @FXML private TilePane reviewGrid;
     @FXML private Button previous, next, submit;
 
@@ -64,8 +68,11 @@ public final class ExamController extends ScreenController {
     @FXML private HBox remediationBox;
     @FXML private Button btnKillProcesses, btnGracePeriod, btnDismissWarning;
 
-    private final Map<Long, Character> answers = new HashMap<>();
+    private final Map<Long, String> answers = new HashMap<>();
     private Timeline countdown;
+    private final quiz.client.anticheat.StudentAntiCheatService monitoring = new quiz.client.anticheat.StudentAntiCheatService();
+    private double deductedScore;
+    private int deductedSeconds;
     private long seconds;
     private int index;
 
@@ -86,7 +93,8 @@ public final class ExamController extends ScreenController {
         this.navigator = navigator;
         this.fx = fx;
         this.attempt = attempt;
-        answers.putAll(attempt.savedAnswers());
+        attempt.savedAnswers().forEach((questionId, answer) ->
+            answers.put(questionId, answer == null ? null : String.valueOf(answer)));
         seconds = attempt.remainingSeconds();
 
         if (customController != null) {
@@ -176,12 +184,38 @@ public final class ExamController extends ScreenController {
             }
         };
         own(api.addPushListener(pushListener));
+        own(monitoring);
+        monitoring.start(api,attempt.attemptId(),this::applyMonitoringState,
+            error->{if(isActive()&&!isSubmitting.get()) saveStatus.setText("Chưa đồng bộ được giám sát: "+FxAsync.unwrap(error).getMessage());});
 
         // 3. Kích hoạt giám sát FullScreen & Chống gian lận (WindowFocusMonitor + ProcessScanner 10s)
         Stage stage = navigator.stage();
         if (stage != null) {
-            antiCheatController.startMonitoring(stage, examRoot);
+            antiCheatController.startMonitoring(stage, examRoot,Math.max(1,(api.monitoringIntervalMs()+999)/1000));
         }
+    }
+
+    private void applyMonitoringState(quiz.common.dto.ExamSession state) {
+        if(!isActive()||isSubmitting.get()) return;
+        seconds=state.remainingSeconds();
+        updateTimer();
+        if(state.forceStopped()) {
+            handleForceSubmit("Bài thi đã bị kết thúc bởi giảng viên coi thi");
+            return;
+        }
+        if(state.status()==quiz.common.enums.MonitoringStatus.SUBMITTED) { executeSubmit();return; }
+        double scoreChange=state.deductedScore()-deductedScore;
+        int timeChange=state.deductedTimeSeconds()-deductedSeconds;
+        deductedScore=state.deductedScore();deductedSeconds=state.deductedTimeSeconds();
+        if(scoreChange>0||timeChange>0) {
+            String message="Giảng viên xử phạt: trừ "+String.format("%.2f",Math.max(0,scoreChange))+" điểm, "
+                +Math.max(0,timeChange)+" giây. Tổng điểm trừ: "+String.format("%.2f",deductedScore);
+            saveStatus.setText(message);
+            warningHeader.setText("THÔNG BÁO XỬ PHẠT");warningDetail.setText(message);
+            remediationBox.setVisible(false);remediationBox.setManaged(false);
+            warningOverlay.setVisible(true);warningOverlay.toFront();
+        }
+        if(seconds==0) executeSubmit();
     }
 
     // ========================================================
@@ -334,6 +368,9 @@ public final class ExamController extends ScreenController {
             return;
         }
         log.warn("Kích hoạt cưỡng chế nộp bài (Force Submit): {}", violationReason);
+        monitoring.close();
+        optionA.setDisable(true);optionB.setDisable(true);optionC.setDisable(true);optionD.setDisable(true);
+        previous.setDisable(true);next.setDisable(true);reviewGrid.setDisable(true);
 
         // 1. Dọn dẹp tài nguyên giám sát ngay lập tức
         if (countdown != null) {
@@ -421,17 +458,54 @@ public final class ExamController extends ScreenController {
         optionB.setText("B. " + q.optionB());
         optionC.setText("C. " + q.optionC());
         optionD.setText("D. " + q.optionD());
-        Character selected = answers.get(q.id());
-        options.selectToggle(selected == null ? null : switch (selected) {
-            case 'A' -> optionA;
-            case 'B' -> optionB;
-            case 'C' -> optionC;
-            case 'D' -> optionD;
-            default -> null;
-        });
+        renderAnswerInput(q);
         previous.setDisable(index == 0);
         next.setDisable(index >= attempt.questions().size() - 1);
         refreshReview();
+    }
+
+    private void renderAnswerInput(StudentQuestionDto q) {
+        answerPane.getChildren().clear();
+        options.selectToggle(null);
+        String saved = answers.get(q.id());
+        if (q.questionType() == QuestionType.MULTIPLE_CHOICE || q.questionType() == QuestionType.TRUE_FALSE) {
+            if (q.questionType() == QuestionType.TRUE_FALSE) {
+                optionA.setText("Đúng"); optionB.setText("Sai");
+                optionA.setUserData("TRUE"); optionB.setUserData("FALSE");
+                optionC.setVisible(false); optionC.setManaged(false); optionD.setVisible(false); optionD.setManaged(false);
+            } else {
+                optionA.setText("A. " + q.optionA()); optionB.setText("B. " + q.optionB());
+                optionC.setText("C. " + q.optionC()); optionD.setText("D. " + q.optionD());
+                optionA.setUserData("A"); optionB.setUserData("B"); optionC.setUserData("C"); optionD.setUserData("D");
+                optionC.setVisible(true); optionC.setManaged(true); optionD.setVisible(true); optionD.setManaged(true);
+            }
+            answerPane.getChildren().setAll(optionA, optionB, optionC, optionD);
+            if (saved != null) for (Toggle t : options.getToggles()) if (saved.equals(t.getUserData())) options.selectToggle(t);
+        } else {
+            String[] values = saved == null ? new String[0] : saved.split("\\|", -1);
+            int count = q.questionType() == QuestionType.FILL_BLANK ? Math.max(1, q.blankCount()) : 1;
+            for (int i = 0; i < count; i++) {
+                TextField field = new TextField(i < values.length ? values[i].strip() : "");
+                field.setPromptText(q.questionType() == QuestionType.FILL_BLANK ? "Từ cho ô trống " + (i + 1) : "Nhập câu trả lời ngắn");
+                field.textProperty().addListener((o, old, value) -> saveTextAnswer(q.id()));
+                answerPane.getChildren().add(field);
+            }
+        }
+    }
+
+    private void saveTextAnswer(long questionId) {
+        if (!isActive() || isSubmitting.get()) return;
+        String value = answerPane.getChildren().stream().filter(TextField.class::isInstance).map(TextField.class::cast)
+            .map(TextField::getText).reduce((a, b) -> a + " | " + b).orElse("");
+        saveAnswer(questionId, value);
+    }
+
+    private void saveAnswer(long questionId, String answer) {
+        answers.put(questionId, answer);
+        saveStatus.setText("Đang lưu câu trả lời...");
+        fx.observe(api.saveAnswer(attempt.attemptId(), questionId, answer), this::isActive,
+            ignored -> { saveStatus.setText(""); refreshReview(); },
+            e -> saveStatus.setText("Không lưu được đáp án: " + e.getMessage()), () -> {});
     }
 
     @FXML
@@ -439,14 +513,8 @@ public final class ExamController extends ScreenController {
         if (!isActive() || isSubmitting.get() || attempt.questions().isEmpty()) return;
         Toggle sel = options.getSelectedToggle();
         if (sel == null) return;
-        char option = sel == optionA ? 'A' : sel == optionB ? 'B' : sel == optionC ? 'C' : 'D';
         long questionId = current().id();
-        answers.put(questionId, option);
-        saveStatus.setText("Đang lưu câu trả lời...");
-        fx.observe(api.saveAnswer(attempt.attemptId(), questionId, option), this::isActive,
-            ignored -> { saveStatus.setText(""); refreshReview(); },
-            e -> saveStatus.setText("Không lưu được đáp án: " + e.getMessage()),
-            () -> {});
+        saveAnswer(questionId, String.valueOf(sel.getUserData()));
     }
 
     @FXML

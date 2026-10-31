@@ -14,6 +14,11 @@ public interface AttemptRepository {
     void submit(Connection connection, long id, java.time.Instant submittedAt, quiz.common.enums.SubmitReason reason);
     void saveAnswer(Connection connection, AnswerRecord record);
     Map<Long, Character> getAnswers(Connection connection, long attemptId);
+    default Map<Long, String> getTextAnswers(Connection connection, long attemptId) {
+        Map<Long, String> converted = new HashMap<>();
+        getAnswers(connection, attemptId).forEach((id, value) -> converted.put(id, value == null ? null : value.toString()));
+        return Map.copyOf(converted);
+    }
     void saveResult(Connection connection, ExamResult result);
     Optional<ExamResult> findResult(long attemptId);
     List<ExamResult> findResultsByStudent(long studentId);

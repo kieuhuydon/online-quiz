@@ -8,6 +8,17 @@
 
 ## 0. Quy tắc cho AI agent (đọc trước khi code)
 
+### Bổ sung phạm vi: Teacher Live Monitoring
+
+Module Nam bổ sung `exam_sessions` (1:1 với attempts), bảng lịch sử xử phạt,
+dashboard giáo viên và đồng bộ sinh viên mỗi 3 giây. Client lấy IP cục bộ bằng
+InetAddress trên luồng nền và gửi qua API; JDBC chỉ chạy trên server.
+Server kiểm tra quyền sở hữu quiz, khóa attempt khi xử phạt/nộp bài, quản lý
+deadline và điểm cuối. Các mức phạt được cộng dồn và lưu lý do/người thực hiện.
+`CHEATING` là nhãn phát hiện ứng dụng cấm, cần giáo viên xem bằng chứng.
+IP client khai báo phục vụ đối chiếu, không dùng để xác thực hay kết luận gian lận.
+Xem `docs/TEACHER_MONITORING.md` để chạy migration và kiểm thử.
+
 1. **Chỉ làm đúng milestone/task được giao** (xem mục 19). Không tự thêm tính năng ngoài phạm vi (mục 2.3).
 2. **Tuân thủ phụ thuộc một chiều giữa các tầng** (mục 4.2). Vi phạm = sai thiết kế.
 3. **Server là nguồn sự thật**: deadline, chấm điểm, trạng thái Attempt, quyền truy cập đều do server quyết định. Không bao giờ tin dữ liệu từ client (điểm, thời gian, role).

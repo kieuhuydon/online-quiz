@@ -41,6 +41,7 @@ public final class ClientValidation {
         if (input == null || input.difficulty() == null) {
             throw invalid();
         }
+        quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
         return new CreateQuestionDto(text(input.content(), 1000),
             text(input.optionA(), 255), text(input.optionB(), 255),
             text(input.optionC(), 255), text(input.optionD(), 255),
@@ -52,6 +53,7 @@ public final class ClientValidation {
             throw invalid();
         }
         positiveId(input.id());
+        quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
         return new UpdateQuestionDto(input.id(), text(input.content(), 1000),
             text(input.optionA(), 255), text(input.optionB(), 255),
             text(input.optionC(), 255), text(input.optionD(), 255),
@@ -116,6 +118,11 @@ public final class ClientValidation {
             throw invalid();
         }
         return value;
+    }
+
+    private static String option(String input, quiz.common.enums.QuestionType type, String fallback) {
+        return type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? text(input, 255)
+            : (input == null || input.isBlank() ? fallback : text(input, 255));
     }
 
     private static String password(String value, boolean creating) {

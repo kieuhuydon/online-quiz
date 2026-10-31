@@ -112,7 +112,8 @@ CREATE TABLE attempts (
 CREATE TABLE attempt_answers (
     attempt_id      BIGINT NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
     question_id     BIGINT NOT NULL REFERENCES questions(id),
-    selected_option CHAR(1) CHECK (selected_option IN ('A', 'B', 'C', 'D')), -- NULL nếu chưa chọn
+    selected_option CHAR(1) CHECK (selected_option IN ('A', 'B', 'C', 'D')), -- tương thích dữ liệu cũ
+    answer_text     TEXT,
     is_correct      BOOLEAN,                                                -- Server chấm khi nộp bài
     answered_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (attempt_id, question_id)
@@ -148,5 +149,31 @@ CREATE INDEX idx_attempts_student   ON attempts(student_id);
 CREATE INDEX idx_ac_events_attempt  ON anticheat_events(attempt_id);
 CREATE INDEX idx_questions_filter   ON questions(topic, difficulty) WHERE active;
 CREATE INDEX idx_class_members_user ON class_members(student_id);
+
+CREATE TABLE exam_sessions (
+    session_id BIGINT PRIMARY KEY REFERENCES attempts(id) ON DELETE CASCADE,
+    exam_id BIGINT NOT NULL REFERENCES quizzes(id),
+    student_id BIGINT NOT NULL REFERENCES users(id),
+    ip_address VARCHAR(45),
+    status VARCHAR(16) NOT NULL DEFAULT 'IN_PROGRESS'
+        CHECK (status IN ('IN_PROGRESS','WARNING','CHEATING','SUBMITTED','TERMINATED')),
+    violation_count INT NOT NULL DEFAULT 0 CHECK (violation_count >= 0),
+    violation_details TEXT,
+    deducted_score DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (deducted_score BETWEEN 0 AND 10),
+    deducted_time_seconds INT NOT NULL DEFAULT 0 CHECK (deducted_time_seconds >= 0),
+    is_force_stopped BOOLEAN NOT NULL DEFAULT FALSE,
+    last_updated TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_exam_sessions_exam ON exam_sessions(exam_id);
+CREATE TABLE monitoring_penalties (
+    operation_id VARCHAR(36) PRIMARY KEY,
+    session_id BIGINT NOT NULL REFERENCES exam_sessions(session_id),
+    teacher_id BIGINT NOT NULL REFERENCES users(id),
+    penalty_type VARCHAR(16) NOT NULL CHECK (penalty_type IN ('DEDUCT_SCORE','DEDUCT_TIME','TERMINATE')),
+    amount DOUBLE PRECISION NOT NULL CHECK (amount >= 0 AND amount < 'Infinity'::float8),
+    reason VARCHAR(255) NOT NULL,
+    applied_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX idx_monitoring_penalties_session ON monitoring_penalties(session_id);
 
 COMMIT;
