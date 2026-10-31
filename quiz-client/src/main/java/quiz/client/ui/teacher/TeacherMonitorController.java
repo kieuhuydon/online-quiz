@@ -24,7 +24,7 @@ public final class TeacherMonitorController implements AutoCloseable {
     private final Dialog<Void> dialog=new Dialog<>();
     private final TableView<ExamSession> table=new TableView<>();
     private final Label notice=new Label("Đang tải...");
-    private final Button score=new Button("Trừ điểm"),time=new Button("Trừ thời gian"),stop=new Button("Kết thúc bài thi");
+    private final Button score=new Button("Trừ điểm"),stop=new Button("Kết thúc bài thi");
     private final Timeline refresh;
     private boolean loading,mutating,closed;
     private static final DateTimeFormatter DATE=DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy").withZone(ZoneId.systemDefault());
@@ -34,17 +34,16 @@ public final class TeacherMonitorController implements AutoCloseable {
         dialog.setTitle("Giám sát: "+title);dialog.setHeaderText("Giám sát phòng thi · cập nhật mỗi "+api.monitoringIntervalMs()/1000.0+" giây");
         if(owner!=null) dialog.initOwner(owner);
         dialog.setResizable(true);dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        table.setId("monitorTable");score.setId("monitorScore");time.setId("monitorTime");stop.setId("monitorStop");
+        table.setId("monitorTable");score.setId("monitorScore");stop.setId("monitorStop");
         configureTable();
         score.setOnAction(e->penalty(PenaltyType.DEDUCT_SCORE));
-        time.setOnAction(e->penalty(PenaltyType.DEDUCT_TIME));
         stop.setOnAction(e->penalty(PenaltyType.TERMINATE));
         Button history=new Button("Nhật ký / Lịch sử xử phạt");history.setOnAction(e->history());
         Button reload=new Button("Tải lại");reload.setOnAction(e->refresh());
         notice.setWrapText(true);
         Label legend=new Label("Vàng: cảnh báo · Đỏ: phát hiện ứng dụng cấm, cần xem bằng chứng. IP do máy sinh viên báo cáo.");
         legend.setWrapText(true);
-        VBox content=new VBox(10,legend,table,new HBox(8,score,time,stop,history,reload),notice);
+        VBox content=new VBox(10,legend,table,new HBox(8,score,stop,history,reload),notice);
         VBox.setVgrow(table,Priority.ALWAYS);
         dialog.getDialogPane().setContent(content);
         refresh=new Timeline(new KeyFrame(Duration.millis(api.monitoringIntervalMs()),e->refresh()));
@@ -59,21 +58,14 @@ public final class TeacherMonitorController implements AutoCloseable {
     private void configureTable() {
         table.setPrefSize(1120,470);table.setPlaceholder(new Label("Chưa có sinh viên bắt đầu bài thi"));
         column("Mã SV / Họ tên",180,s->s.studentId()+" / "+s.studentName());
-        column("IP",125,s->Objects.toString(s.ipAddress(),"Chưa xác định"));
+        column("IP",150,s->s.ipAddress()==null||s.ipAddress().isBlank()?"Chưa xác định":s.ipAddress());
         column("Trạng thái",140,s->status(s.status()));
         column("Vi phạm",70,s->Integer.toString(s.violationCount()));
         column("Chi tiết gần nhất",260,s->Objects.toString(s.violationDetails(),"—"));
         column("Điểm đã trừ",95,s->String.format("%.2f",s.deductedScore()));
-        column("Giây đã trừ",95,s->Integer.toString(s.deductedTimeSeconds()));
         column("Còn lại",85,s->String.format("%02d:%02d",s.remainingSeconds()/60,s.remainingSeconds()%60));
         column("Cập nhật",140,s->DATE.format(s.lastUpdated()));
-        table.setRowFactory(t->new TableRow<>() {
-            @Override protected void updateItem(ExamSession s,boolean empty) {
-                super.updateItem(s,empty);
-                setStyle(empty||s==null?"":s.status()==MonitoringStatus.CHEATING?"-fx-background-color: #fecaca;"
-                    :s.status()==MonitoringStatus.WARNING?"-fx-background-color: #fef08a;":"");
-            }
-        });
+        ViolationTableStyle.install(table,ExamSession::status);
     }
     private void column(String name,double width,Function<ExamSession,String> value) {
         TableColumn<ExamSession,String> c=new TableColumn<>(name);c.setPrefWidth(width);
@@ -93,7 +85,7 @@ public final class TeacherMonitorController implements AutoCloseable {
     private void buttons() {
         ExamSession s=table.getSelectionModel().getSelectedItem();
         boolean disabled=loading||mutating||s==null||s.status()==MonitoringStatus.SUBMITTED||s.status()==MonitoringStatus.TERMINATED;
-        score.setDisable(disabled);time.setDisable(disabled);stop.setDisable(disabled);
+        score.setDisable(disabled);stop.setDisable(disabled);
     }
     private void penalty(PenaltyType type) {
         ExamSession selected=table.getSelectionModel().getSelectedItem();
@@ -101,9 +93,9 @@ public final class TeacherMonitorController implements AutoCloseable {
         Dialog<ButtonType> confirm=new Dialog<>();confirm.initOwner(dialog.getDialogPane().getScene().getWindow());
         confirm.setTitle("Xác nhận xử phạt");
         confirm.setHeaderText(selected.studentName()+" (SV "+selected.studentId()+") · "+action(type));
-        TextField amount=new TextField(type==PenaltyType.DEDUCT_SCORE?"1":"300");
+        TextField amount=new TextField("1");
         TextField reason=new TextField();reason.setPromptText("Lý do xử phạt (bắt buộc, tối đa 255 ký tự)");
-        VBox fields=new VBox(10,new Label(type==PenaltyType.DEDUCT_SCORE?"Số điểm trừ trên thang 10":"Số giây trừ"),amount,reason);
+        VBox fields=new VBox(10,new Label("Số điểm trừ trên thang 10"),amount,reason);
         if(type==PenaltyType.TERMINATE) fields.getChildren().setAll(new Label("Kết thúc và chấm các đáp án đã lưu."),reason);
         confirm.getDialogPane().setContent(fields);confirm.getDialogPane().getButtonTypes().addAll(ButtonType.OK,ButtonType.CANCEL);
         mutating=true;buttons();
@@ -130,17 +122,30 @@ public final class TeacherMonitorController implements AutoCloseable {
         view.getDialogPane().setContent(text);
         var data=api.listAttemptEvents(selected.sessionId()).thenCombine(api.listMonitoringPenalties(selected.sessionId()),(events,penalties)->{
             StringBuilder b=new StringBuilder("SỰ KIỆN\n");
-            events.forEach(e->b.append(DATE.format(e.serverTime())).append(" · ").append(e.eventType()).append(" · ").append(e.detail()).append('\n'));
+            if(events.isEmpty()) b.append("Không có sự kiện vi phạm nào.\n");
+            else events.forEach(e->b.append(DATE.format(e.serverTime())).append(" · ").append(e.eventType()).append(" · ").append(e.detail()).append('\n'));
             b.append("\nXỬ PHẠT\n");
-            penalties.forEach(p->b.append(DATE.format(p.appliedAt())).append(" · GV ").append(p.teacherId()).append(" · ")
-                .append(action(p.type())).append(" ").append(p.amount()).append(" · ").append(p.reason()).append('\n'));
+            var activePenalties=penalties.stream().filter(p->{
+                try { PenaltyType.valueOf(p.type()); return true; } catch(Exception e) { return false; }
+            }).toList();
+            if(activePenalties.isEmpty()) {
+                b.append("Chưa có xử phạt nào.\n");
+            } else {
+                activePenalties.forEach(p->{
+                    PenaltyType t=PenaltyType.valueOf(p.type());
+                    b.append(DATE.format(p.appliedAt())).append(" · GV ").append(p.teacherId()).append(" · ")
+                        .append(action(t));
+                    if(t==PenaltyType.DEDUCT_SCORE) b.append(" (").append(String.format("%.2f",p.amount())).append(" điểm)");
+                    b.append(" · ").append(p.reason()).append('\n');
+                });
+            }
             return b.toString();
         });
         fx.observe(data,()->active()&&view.isShowing(),text::setText,e->text.setText(e.getMessage()),()->{});
         view.showAndWait();
     }
     private static String action(PenaltyType t) { return switch(t) {
-        case DEDUCT_SCORE->"Trừ điểm";case DEDUCT_TIME->"Trừ thời gian (giây)";case TERMINATE->"Kết thúc bài thi";}; }
+        case DEDUCT_SCORE->"Trừ điểm";case TERMINATE->"Kết thúc bài thi";}; }
     private static String status(MonitoringStatus s) { return switch(s) {
         case IN_PROGRESS->"Đang thi";case WARNING->"Cảnh báo";case CHEATING->"Nghi vấn ứng dụng cấm";
         case SUBMITTED->"Đã nộp";case TERMINATED->"Bị kết thúc";}; }

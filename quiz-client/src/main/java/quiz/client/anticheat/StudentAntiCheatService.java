@@ -31,7 +31,7 @@ public final class StudentAntiCheatService implements AutoCloseable {
                             long elapsed=TimeUnit.NANOSECONDS.toSeconds(System.nanoTime()-start);
                             update.accept(new ExamSession(state.sessionId(),state.examId(),state.studentId(),state.studentName(),
                                 state.ipAddress(),state.status(),state.violationCount(),state.violationDetails(),state.deductedScore(),
-                                state.deductedTimeSeconds(),state.forceStopped(),state.lastUpdated(),Math.max(0,state.remainingSeconds()-elapsed)));
+                                state.forceStopped(),state.lastUpdated(),Math.max(0,state.remainingSeconds()-elapsed)));
                         }
                     } finally { pending.set(false); }
                 });

@@ -1853,13 +1853,8 @@ public final class TeacherController extends ScreenController {
         classResultsTable.getColumns().setAll(List.of(student, score, correct, passed, reason, submitted, log));
         classResultsTable.setItems(classResultsList);
         classResultsTable.setPlaceholder(new Label("Chọn lớp và bài kiểm tra để xem kết quả."));
-        classResultsTable.setRowFactory(table -> new TableRow<>() {
-            @Override protected void updateItem(ResultDto item, boolean empty) {
-                super.updateItem(item, empty);
-                setStyle(!empty && item != null && item.submitReason() == SubmitReason.ANTICHEAT
-                    ? "-fx-background-color: #fee2e2; -fx-text-fill: #991b1b;" : "");
-            }
-        });
+        ViolationTableStyle.install(classResultsTable,item->item.submitReason()==SubmitReason.ANTICHEAT
+            ? quiz.common.enums.MonitoringStatus.CHEATING : quiz.common.enums.MonitoringStatus.SUBMITTED);
     }
 
     private void loadResultsForClass(ClassDto selected) {
@@ -1966,6 +1961,9 @@ public final class TeacherController extends ScreenController {
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
 
         TableView<AntiCheatEventDto> logTable = new TableView<>();
+        ViolationTableStyle.install(logTable,event->event.eventType()==quiz.common.enums.AntiCheatEventType.PROHIBITED_PROCESS
+            || "AUTO_SUBMITTED".equals(event.actionTaken()) ? quiz.common.enums.MonitoringStatus.CHEATING
+            : quiz.common.enums.MonitoringStatus.WARNING);
         logTable.setPrefWidth(720);
         logTable.setPrefHeight(350);
 

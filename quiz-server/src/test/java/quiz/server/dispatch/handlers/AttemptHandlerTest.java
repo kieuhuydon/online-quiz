@@ -60,14 +60,15 @@ class AttemptHandlerTest {
     @DisplayName("Xử lý START_ATTEMPT, SAVE_ANSWER, SUBMIT_ATTEMPT, GET_ATTEMPT_STATE thành công")
     void handleAllAttemptCommands() {
         AttemptStateDto stateDto = new AttemptStateDto(1L, 2L, "Quiz", 1800L, List.of(), Map.of());
-        when(service.startAttempt(2L, "123456", 10L)).thenReturn(stateDto);
+        when(service.startAttempt(2L, "123456", 10L, "192.168.1.23")).thenReturn(stateDto);
 
         Response startResp = handler.handle(
-            new Request(1L, MessageType.START_ATTEMPT, "t", new StartAttemptRequestDto(2L, "123456")),
+            new Request(1L, MessageType.START_ATTEMPT, "t", new StartAttemptRequestDto(2L, "123456", "192.168.1.23")),
             studentSession
         );
         assertTrue(startResp.success());
         assertEquals(stateDto, startResp.payload());
+        verify(service).startAttempt(2L,"123456",10L,"192.168.1.23");
 
         Response saveResp = handler.handle(
             new Request(2L, MessageType.SAVE_ANSWER, "t", new SaveAnswerDto(1L, 100L, 'A')),
