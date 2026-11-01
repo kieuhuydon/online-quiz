@@ -78,6 +78,31 @@ public final class AccountService {
         });
     }
 
+    /** Deletes an account (student or teacher) and reassigns/cleans up associated records. */
+    public void deleteAccount(long userId, long adminId) {
+        ServiceValidation.positiveId(userId);
+        requireAdmin(adminId);
+        if (userId == adminId) {
+            throw new ForbiddenException("Không thể tự xóa tài khoản của chính mình");
+        }
+        sessions.withUserLock(userId, () -> {
+            transactions.executeInTransaction(connection -> {
+                requireAdmin(connection, adminId);
+                User target = users.findById(connection, userId)
+                    .orElseThrow(() -> new NotFoundException("Tài khoản không tồn tại"));
+                if (target.role() == Role.ADMIN) {
+                    throw new ForbiddenException("Không thể xóa tài khoản Quản trị viên");
+                }
+                if (!users.deleteById(connection, userId, adminId)) {
+                    throw new NotFoundException("Tài khoản không tồn tại");
+                }
+                return null;
+            });
+            sessions.revokeUser(userId);
+            return null;
+        });
+    }
+
     private CreateAccountDto validateAccount(CreateAccountDto dto) {
         if (dto == null) {
             throw new ValidationException("Account data is required");

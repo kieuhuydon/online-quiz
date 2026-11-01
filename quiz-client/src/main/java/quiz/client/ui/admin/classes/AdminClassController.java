@@ -5,6 +5,7 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
 import javafx.scene.layout.VBox;
 import javafx.scene.control.*;
 import javafx.util.StringConverter;
@@ -27,6 +28,8 @@ import java.util.function.Function;
 public final class AdminClassController extends ScreenController {
     private final QuizApi api;
     private final FxAsync fx;
+    @FXML private VBox classOverviewPanel;
+    @FXML private VBox classCreatePanel;
     @FXML private TableView<ClassDto> classes;
     @FXML private TableView<ClassMemberDto> members;
     @FXML private ComboBox<AccountDto> teacher;
@@ -35,14 +38,23 @@ public final class AdminClassController extends ScreenController {
     @FXML private Label notice, memberTitle, selectedCount;
     @FXML private Button createClass, addMember, removeMember, refresh;
     @FXML private Button deleteClass, confirmDelete, cancelDelete;
+    @FXML private Button btnToggleCreateClass, btnBackToClasses, btnCancelCreate, btnOpenAddStudent;
+    @FXML private Button selectAllMembers, clearMembers;
     @FXML private VBox deleteConfirmation;
+    @FXML private TitledPane createPane;
     @FXML private Label deleteConfirmationText;
     private ClassDto deletionTarget;
     @FXML private Button selectAllStudents, clearStudents;
+    @FXML private VBox candidatePanel;
+    @FXML private Button btnCloseCandidatePanel;
+    @FXML private VBox overviewCandidateHost;
+    @FXML private VBox createCandidateHost;
+    @FXML private VBox candidateContent;
     private boolean busy;
     private boolean membersFresh;
     private long memberRevision;
     private final Map<Long, BooleanProperty> picked = new LinkedHashMap<>();
+    private final Map<Long, BooleanProperty> memberPicked = new LinkedHashMap<>();
     private final Map<Long, String> enrollmentNotes = new LinkedHashMap<>();
 
     public AdminClassController(QuizApi api, FxAsync fx) { this.api = api; this.fx = fx; }
@@ -51,34 +63,246 @@ public final class AdminClassController extends ScreenController {
         column(classes, "Tên lớp", ClassDto::name);
         column(classes, "Giáo viên phụ trách", ClassDto::teacherName);
         column(classes, "Mô tả", row -> row.description() == null ? "" : row.description());
+
+        // Cột STT cho bảng thành viên lớp
+        TableColumn<ClassMemberDto, Void> colStt = new TableColumn<>("STT");
+        colStt.setPrefWidth(52);
+        colStt.setMaxWidth(60);
+        colStt.setSortable(false);
+        colStt.setStyle("-fx-alignment: CENTER;");
+        colStt.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || getIndex() < 0) {
+                    setText(null);
+                } else {
+                    setText(String.valueOf(getIndex() + 1));
+                }
+            }
+        });
+        members.getColumns().add(colStt);
+
+        members.setEditable(true);
+        students.setEditable(true);
+
+        // Cột Checkbox cho bảng thành viên lớp (xóa nhiều thành viên)
+        TableColumn<ClassMemberDto, Boolean> memberCheck = new TableColumn<>("Chọn");
+        memberCheck.setSortable(false);
+        memberCheck.setMinWidth(55);
+        memberCheck.setMaxWidth(65);
+        memberCheck.setCellValueFactory(row -> memberSelection(row.getValue().studentId()));
+        memberCheck.setCellFactory(col -> new TableCell<>() {
+            private final CheckBox cb = new CheckBox();
+            {
+                cb.setCursor(javafx.scene.Cursor.HAND);
+                cb.setOnAction(e -> {
+                    ClassMemberDto item = getTableRow() != null ? getTableRow().getItem() : null;
+                    if (item != null) {
+                        memberSelection(item.studentId()).set(cb.isSelected());
+                    }
+                });
+                setAlignment(Pos.CENTER);
+            }
+            @Override
+            protected void updateItem(Boolean item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
+                    setGraphic(null);
+                } else {
+                    ClassMemberDto m = getTableRow().getItem();
+                    cb.setSelected(memberSelection(m.studentId()).get());
+                    setGraphic(cb);
+                }
+            }
+        });
+        members.getColumns().add(memberCheck);
+
         column(members, "Tên đăng nhập", ClassMemberDto::studentUsername);
         column(members, "Họ và tên", ClassMemberDto::studentFullName);
         classes.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         members.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         classes.setPlaceholder(new Label("Chưa có lớp học."));
         members.setPlaceholder(new Label("Chọn lớp để xem học viên."));
+
+        members.setRowFactory(tv -> {
+            TableRow<ClassMemberDto> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (!row.isEmpty() && event.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                    if (!(event.getTarget() instanceof CheckBox)) {
+                        ClassMemberDto item = row.getItem();
+                        if (item != null) {
+                            BooleanProperty prop = memberSelection(item.studentId());
+                            prop.set(!prop.get());
+                        }
+                    }
+                }
+            });
+            return row;
+        });
+
         StringConverter<AccountDto> names = new StringConverter<>() {
             @Override public String toString(AccountDto row) { return row == null ? "" : row.fullName() + " (@" + row.username() + ")"; }
             @Override public AccountDto fromString(String text) { throw new UnsupportedOperationException(); }
         };
         teacher.setConverter(names);
+
+        // Cột Checkbox cho bảng học viên chưa có lớp
         TableColumn<AccountDto, Boolean> check = new TableColumn<>("Chọn");
+        check.setSortable(false);
+        check.setMinWidth(55);
+        check.setMaxWidth(65);
         check.setCellValueFactory(row -> selection(row.getValue().id()));
-        check.setCellFactory(CheckBoxTableCell.forTableColumn(check));
-        check.setMaxWidth(65); check.setMinWidth(55); check.setSortable(false);
+        check.setCellFactory(col -> new TableCell<>() {
+            private final CheckBox cb = new CheckBox();
+            {
+                cb.setCursor(javafx.scene.Cursor.HAND);
+                cb.setOnAction(e -> {
+                    AccountDto item = getTableRow() != null ? getTableRow().getItem() : null;
+                    if (item != null) {
+                        selection(item.id()).set(cb.isSelected());
+                    }
+                });
+                setAlignment(Pos.CENTER);
+            }
+            @Override
+            protected void updateItem(Boolean item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || getTableRow() == null || getTableRow().getItem() == null) {
+                    setGraphic(null);
+                } else {
+                    AccountDto acc = getTableRow().getItem();
+                    cb.setSelected(selection(acc.id()).get());
+                    setGraphic(cb);
+                }
+            }
+        });
         students.getColumns().add(check);
         column(students, "Họ và tên", AccountDto::fullName);
         column(students, "Tên đăng nhập", AccountDto::username);
         column(students, "Trạng thái", row -> enrollmentNotes.getOrDefault(row.id(), ""));
         students.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         students.setPlaceholder(new Label("Chọn lớp để tải học viên có thể thêm."));
+
+        students.setRowFactory(tv -> {
+            TableRow<AccountDto> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (!row.isEmpty() && event.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                    if (!(event.getTarget() instanceof CheckBox)) {
+                        AccountDto item = row.getItem();
+                        if (item != null) {
+                            BooleanProperty prop = selection(item.id());
+                            prop.set(!prop.get());
+                        }
+                    }
+                }
+            });
+            return row;
+        });
+
+        classes.setOnScroll(javafx.event.Event::consume);
+        members.setOnScroll(javafx.event.Event::consume);
+        students.setOnScroll(javafx.event.Event::consume);
+
         classes.getSelectionModel().selectedItemProperty().addListener((o, before, selected) -> loadMembers());
         members.getSelectionModel().selectedItemProperty().addListener((o, before, selected) -> controls());
+
+        // Lắng nghe trạng thái mở/đóng của createPane để chuyển đổi chế độ xem toàn trang
+        if (overviewCandidateHost != null && candidateContent != null) {
+            overviewCandidateHost.getChildren().setAll(candidateContent);
+        }
+        if (createPane != null) {
+            createPane.expandedProperty().addListener((o, oldV, isExpanded) -> {
+                if (classOverviewPanel != null) {
+                    classOverviewPanel.setVisible(!isExpanded);
+                    classOverviewPanel.setManaged(!isExpanded);
+                }
+                if (isExpanded) {
+                    if (createCandidateHost != null && candidateContent != null) {
+                        createCandidateHost.getChildren().setAll(candidateContent);
+                    }
+                    if (className != null) {
+                        className.requestFocus();
+                    }
+                } else {
+                    if (overviewCandidateHost != null && candidateContent != null) {
+                        overviewCandidateHost.getChildren().setAll(candidateContent);
+                    }
+                }
+                controls();
+            });
+        }
+
+        if (notice != null) {
+            notice.setCursor(javafx.scene.Cursor.HAND);
+            notice.setTooltip(new Tooltip("Nhấp để tắt thông báo"));
+            notice.setOnMouseClicked(e -> {
+                notice.setVisible(false);
+                notice.setManaged(false);
+            });
+        }
+
         controls();
+    }
+
+    @FXML private void openCreateClass() {
+        if (createPane != null) {
+            createPane.setExpanded(true);
+        }
+    }
+
+    @FXML private void toggleCandidatePanel() {
+        if (candidatePanel != null) {
+            if (candidatePanel.isVisible()) {
+                closeCandidatePanel();
+            } else {
+                openCandidatePanel();
+            }
+        }
+    }
+
+    @FXML private void openCandidatePanel() {
+        ClassDto selected = classes.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            message("Vui lòng chọn một lớp học trong danh sách trước khi thêm học viên.", true);
+            return;
+        }
+        if (candidatePanel != null) {
+            if (overviewCandidateHost != null && candidateContent != null && !overviewCandidateHost.getChildren().contains(candidateContent)) {
+                overviewCandidateHost.getChildren().setAll(candidateContent);
+            }
+            candidatePanel.setVisible(true);
+            candidatePanel.setManaged(true);
+            controls();
+        }
+    }
+
+    @FXML private void closeCandidatePanel() {
+        if (candidatePanel != null) {
+            candidatePanel.setVisible(false);
+            candidatePanel.setManaged(false);
+            controls();
+        }
+    }
+
+    @FXML private void closeCreateClass() {
+        if (createPane != null) {
+            createPane.setExpanded(false);
+        }
+    }
+
+    @FXML private void toggleCreatePane() {
+        if (createPane != null) {
+            createPane.setExpanded(!createPane.isExpanded());
+            if (createPane.isExpanded() && className != null) {
+                className.requestFocus();
+            }
+        }
     }
 
     private static <T> void column(TableView<T> table, String title, Function<T, String> text) {
         TableColumn<T, String> column = new TableColumn<>(title);
+        column.setSortable(false);
         column.setCellValueFactory(row -> new ReadOnlyStringWrapper(text.apply(row.getValue())));
         table.getColumns().add(column);
     }
@@ -89,6 +313,7 @@ public final class AdminClassController extends ScreenController {
         if (!isActive() || busy) return;
         cancelDelete();
         setBusy(true);
+        memberPicked.clear();
         fx.observe(api.listAccounts().thenCombine(api.listClasses(), Data::new), this::isActive, data -> {
             var selected = classes.getSelectionModel().getSelectedItem();
             teacher.getItems().setAll(data.accounts().stream().filter(a -> a.role() == Role.TEACHER && a.active()).toList());
@@ -101,6 +326,7 @@ public final class AdminClassController extends ScreenController {
     private void loadMembers() {
         cancelDelete();
         picked.clear();
+        memberPicked.clear();
         enrollmentNotes.clear();
         refreshMembers();
     }
@@ -110,6 +336,7 @@ public final class AdminClassController extends ScreenController {
         membersFresh = false;
         members.getItems().clear();
         students.getItems().clear();
+        memberPicked.clear();
         ClassDto selected = classes.getSelectionModel().getSelectedItem();
         memberTitle.setText(selected == null ? "Học viên trong lớp" : "Học viên lớp " + selected.name());
         controls();
@@ -132,15 +359,31 @@ public final class AdminClassController extends ScreenController {
         if (!isActive() || busy) return;
         String name = className.getText().strip();
         String desc = description.getText().strip();
-        AccountDto selected = teacher.getValue();
-        if (name.isBlank() || name.length() > 100 || desc.length() > 255 || selected == null) {
+        AccountDto selectedTeacher = teacher.getValue();
+        if (name.isBlank() || name.length() > 100 || desc.length() > 255 || selectedTeacher == null) {
             message("Nhập tên lớp (tối đa 100 ký tự), mô tả (tối đa 255 ký tự) và chọn giáo viên.", true); return;
         }
-        write(api.createClass(new CreateClassDto(name, desc, selected.id())), created -> {
-            message("Đã tạo lớp “" + created.name() + "”.", false);
+
+        List<Long> idsToEnroll = students.getItems().stream()
+            .filter(a -> selection(a.id()).get())
+            .map(AccountDto::id)
+            .toList();
+
+        write(api.createClass(new CreateClassDto(name, desc, selectedTeacher.id())), created -> {
             className.clear(); description.clear();
             classes.getItems().add(created);
             classes.getSelectionModel().select(created);
+            closeCreateClass();
+            openCandidatePanel();
+            if (!idsToEnroll.isEmpty()) {
+                write(enroll(created.id(), idsToEnroll), result -> {
+                    result.added.forEach(picked::remove);
+                    message("Đã tạo lớp “" + created.name() + "” và thêm " + result.added.size() + " học viên vào lớp.", false);
+                    refreshMembers();
+                });
+            } else {
+                message("Đã tạo lớp “" + created.name() + "”.", false);
+            }
         });
     }
 
@@ -243,17 +486,51 @@ public final class AdminClassController extends ScreenController {
     private BooleanProperty selection(long id) {
         return picked.computeIfAbsent(id, ignored -> {
             BooleanProperty value = new SimpleBooleanProperty();
-            value.addListener((o, before, after) -> controls());
+            value.addListener((o, before, after) -> {
+                students.refresh();
+                controls();
+            });
+            return value;
+        });
+    }
+
+    private BooleanProperty memberSelection(long studentId) {
+        return memberPicked.computeIfAbsent(studentId, ignored -> {
+            BooleanProperty value = new SimpleBooleanProperty();
+            value.addListener((o, before, after) -> {
+                members.refresh();
+                controls();
+            });
             return value;
         });
     }
 
     @FXML private void selectAll() {
-        if (!busy && membersFresh) students.getItems().forEach(a -> selection(a.id()).set(true));
+        if (!busy && membersFresh) {
+            students.getItems().forEach(a -> selection(a.id()).set(true));
+            students.refresh();
+        }
     }
 
     @FXML private void clearSelection() {
-        if (!busy) picked.values().forEach(value -> value.set(false));
+        if (!busy) {
+            picked.values().forEach(value -> value.set(false));
+            students.refresh();
+        }
+    }
+
+    @FXML private void selectAllMembersAction() {
+        if (!busy && membersFresh) {
+            members.getItems().forEach(m -> memberSelection(m.studentId()).set(true));
+            members.refresh();
+        }
+    }
+
+    @FXML private void clearMembersAction() {
+        if (!busy) {
+            memberPicked.values().forEach(value -> value.set(false));
+            members.refresh();
+        }
     }
 
     private static final class Enrollment {
@@ -267,8 +544,30 @@ public final class AdminClassController extends ScreenController {
     @FXML private void remove() {
         if (!isActive() || busy) return;
         var selected = classes.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
+
+        // Xóa nhiều thành viên được tích chọn
+        List<Long> checkedStudentIds = members.getItems().stream()
+            .filter(m -> memberPicked.containsKey(m.studentId()) && memberPicked.get(m.studentId()).get())
+            .map(ClassMemberDto::studentId)
+            .toList();
+
+        if (!checkedStudentIds.isEmpty()) {
+            setBusy(true);
+            var futures = checkedStudentIds.stream()
+                .map(id -> api.removeClassMember(selected.id(), id))
+                .toArray(CompletableFuture[]::new);
+            fx.observe(CompletableFuture.allOf(futures), this::isActive, ignored -> {
+                memberPicked.clear();
+                message("Đã xóa " + checkedStudentIds.size() + " học viên khỏi lớp.", false);
+                refreshMembers();
+            }, this::failed, () -> setBusy(false));
+            return;
+        }
+
+        // Nếu không có checkbox nào tích, fallback vào dòng đang được chọn
         var member = members.getSelectionModel().getSelectedItem();
-        if (selected == null || member == null) return;
+        if (member == null) return;
         write(api.removeClassMember(selected.id(), member.studentId()), ignored -> {
             message("Đã xóa học viên khỏi lớp.", false); refreshMembers();
         });
@@ -299,6 +598,7 @@ public final class AdminClassController extends ScreenController {
     }
 
     private void setBusy(boolean value) { busy = value; controls(); }
+
     private void controls() {
         createClass.setDisable(busy); refresh.setDisable(busy); classes.setDisable(busy);
         deleteClass.setDisable(busy || classes.getSelectionModel().getSelectedItem() == null);
@@ -309,7 +609,26 @@ public final class AdminClassController extends ScreenController {
         selectAllStudents.setDisable(busy || !membersFresh || students.getItems().isEmpty());
         clearStudents.setDisable(busy || count == 0);
         addMember.setDisable(busy || !membersFresh || count == 0);
-        removeMember.setDisable(busy || !membersFresh || members.getSelectionModel().getSelectedItem() == null);
+
+        long memberCheckedCount = members.getItems().stream()
+            .filter(m -> memberPicked.containsKey(m.studentId()) && memberPicked.get(m.studentId()).get())
+            .count();
+        if (selectAllMembers != null) {
+            selectAllMembers.setDisable(busy || !membersFresh || members.getItems().isEmpty());
+        }
+        if (clearMembers != null) {
+            clearMembers.setDisable(busy || memberCheckedCount == 0);
+        }
+        removeMember.setDisable(busy || !membersFresh || (members.getSelectionModel().getSelectedItem() == null && memberCheckedCount == 0));
+        ClassDto selectedClass = classes.getSelectionModel().getSelectedItem();
+        if (btnOpenAddStudent != null) {
+            btnOpenAddStudent.setDisable(busy || selectedClass == null);
+            if (candidatePanel != null && candidatePanel.isVisible()) {
+                btnOpenAddStudent.setText("✕ Đóng thêm học viên");
+            } else {
+                btnOpenAddStudent.setText("➕ Thêm học viên vào lớp");
+            }
+        }
     }
     private record Data(List<AccountDto> accounts, List<ClassDto> classes) { }
     private record MembersData(List<ClassMemberDto> members, List<AccountDto> students) { }

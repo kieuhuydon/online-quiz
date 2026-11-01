@@ -147,4 +147,8 @@ public interface UserRepository {
      * @see #updateActiveStatus(long, boolean)
      */
     boolean updateActiveStatus(Connection connection, long id, boolean active);
+
+    boolean deleteById(long id, long adminId);
+
+    boolean deleteById(Connection connection, long id, long adminId);
 }

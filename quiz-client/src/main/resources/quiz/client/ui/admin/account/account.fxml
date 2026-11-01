@@ -1,31 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.admin.account.AccountController" spacing="18" minWidth="0">
-    <VBox spacing="8">
-        <Label text="QUẢN TRỊ TRUNG TÂM" styleClass="eyebrow"/>
-        <Label text="Quản lý tài khoản" styleClass="page-heading" wrapText="true"/>
-    </VBox>
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.admin.account.AccountController" spacing="14" minWidth="0">
     <Label fx:id="accountNotice" styleClass="notice" wrapText="true" visible="false" managed="false" maxWidth="Infinity"/>
-    <VBox spacing="14" styleClass="account-card" minWidth="0" VBox.vgrow="ALWAYS">
+    <VBox spacing="14" styleClass="account-card" style="-fx-padding: 20;" minWidth="0" VBox.vgrow="ALWAYS">
         <HBox spacing="10" alignment="CENTER_LEFT">
-            <Label text="Tài khoản trung tâm" styleClass="card-heading" wrapText="true" minWidth="100"/>
+            <Label text="Danh sách tài khoản người dùng" styleClass="card-heading" wrapText="true" minWidth="100"/>
             <Region HBox.hgrow="ALWAYS"/>
             <ProgressIndicator fx:id="accountProgress" prefWidth="20" prefHeight="20" maxWidth="20" maxHeight="20"/>
-            <Button fx:id="refreshAccounts" text="Tải lại" onAction="#reload" styleClass="secondary-button"/>
-            <Button fx:id="createAccount" text="Tạo tài khoản" onAction="#create" styleClass="primary-button"/>
+            <Button fx:id="refreshAccounts" text="🔄 Tải lại" onAction="#reload" styleClass="secondary-button"/>
+            <Button fx:id="createAccount" text="➕ Tạo tài khoản" onAction="#create" styleClass="primary-button"/>
         </HBox>
-        <Label fx:id="listStatus" wrapText="true" styleClass="muted"/>
+        <HBox spacing="8" alignment="CENTER_LEFT">
+            <Button fx:id="btnSelectAllStudentsAccount" text="Chọn tất cả học viên" onAction="#selectAllStudentsAction" styleClass="secondary-button, btn-small"/>
+            <Button fx:id="btnSelectAllTeachersAccount" text="Chọn tất cả giáo viên" onAction="#selectAllTeachersAction" styleClass="secondary-button, btn-small"/>
+            <Button fx:id="btnClearAccountSelection" text="Bỏ chọn" onAction="#clearAccountSelectionAction" styleClass="secondary-button, btn-small"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="listStatus" wrapText="true" styleClass="muted"/>
+        </HBox>
         <TableView fx:id="accountTable" minHeight="200" minWidth="0" VBox.vgrow="ALWAYS"/>
         <HBox fx:id="accountActions" spacing="12" alignment="CENTER_LEFT" visible="false" managed="false">
             <Label fx:id="selectedAccount" wrapText="true" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
-            <Button fx:id="toggleAccount" text="Khóa tài khoản" onAction="#toggle" styleClass="secondary-button"/>
+            <Button fx:id="toggleAccount" text="Khóa tài khoản" onAction="#toggle" styleClass="danger-button"/>
+            <Button fx:id="deleteAccount" text="Xóa tài khoản" onAction="#deleteAccountAction" styleClass="danger-button"/>
         </HBox>
         <VBox fx:id="confirmation" spacing="10" styleClass="note" visible="false" managed="false">
             <Label fx:id="confirmationText" wrapText="true"/>
             <HBox spacing="10">
                 <Button fx:id="cancelLock" text="Hủy" onAction="#cancelLock" styleClass="secondary-button"/>
                 <Button fx:id="confirmLock" text="Xác nhận khóa" onAction="#confirmLock" styleClass="danger-button"/>
+            </HBox>
+        </VBox>
+        <VBox fx:id="deleteConfirmation" spacing="10" styleClass="note" visible="false" managed="false">
+            <Label fx:id="deleteConfirmationText" wrapText="true"/>
+            <HBox spacing="10">
+                <Button fx:id="cancelDelete" text="Hủy" onAction="#cancelDelete" styleClass="secondary-button"/>
+                <Button fx:id="confirmDelete" text="Xác nhận xóa" onAction="#confirmDelete" styleClass="danger-button"/>
             </HBox>
         </VBox>
     </VBox>

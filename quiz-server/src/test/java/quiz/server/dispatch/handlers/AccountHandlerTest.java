@@ -55,10 +55,14 @@ class AccountHandlerTest {
         assertTrue(update.success());
         assertNull(update.payload());
         verify(accounts).setAccountActive(8, false, 7);
+        var delete = handler.handle(new Request(44, MessageType.DELETE_ACCOUNT, "token", 8L), session);
+        assertTrue(delete.success());
+        assertNull(delete.payload());
+        verify(accounts).deleteAccount(8L, 7);
     }
 
     @ParameterizedTest
-    @EnumSource(value = MessageType.class, names = {"CREATE_ACCOUNT", "LIST_ACCOUNTS", "SET_ACCOUNT_ACTIVE"})
+    @EnumSource(value = MessageType.class, names = {"CREATE_ACCOUNT", "LIST_ACCOUNTS", "SET_ACCOUNT_ACTIVE", "DELETE_ACCOUNT"})
     void accountPoliciesRequireAdminAndRejectWrongOrMissingPayload(MessageType type) {
         assertEquals(Set.of(Role.ADMIN), handler.allowedRoles(type));
         assertEquals(ErrorCode.INVALID_REQUEST, assertThrows(QuizException.class,

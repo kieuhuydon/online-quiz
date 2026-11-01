@@ -1,16 +1,20 @@
 package quiz.client.ui.student;
 
+import javafx.animation.Animation;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 import quiz.client.api.QuizApi;
 import quiz.client.api.ApiException;
 import quiz.client.ui.SceneNavigator;
@@ -19,11 +23,11 @@ import quiz.client.util.FxAsync;
 import quiz.common.dto.QuizInfoDto;
 import quiz.common.dto.ClassDto;
 import quiz.common.dto.ResultDto;
-import quiz.common.protocol.ErrorCode;
 import quiz.common.enums.QuizStatus;
 import javafx.application.Platform;
 import quiz.client.anticheat.ProcessBlacklistScanner.DetectedProcess;
 import quiz.client.anticheat.ProcessScannerService;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -48,6 +52,11 @@ public final class StudentController extends ScreenController {
     @FXML private Button btnRefresh;
     @FXML private HBox actionToolbar;
 
+    // KPI Summary Labels
+    @FXML private Label lblTotalAssigned;
+    @FXML private Label lblReadyExams;
+    @FXML private Label lblCompletedExams;
+
     // Quiz Info Details Panel (FR-S04)
     @FXML private VBox quizInfoPanel;
     @FXML private Label infoTitle;
@@ -63,6 +72,7 @@ public final class StudentController extends ScreenController {
 
     private final ObservableList<QuizInfoDto> quizList = FXCollections.observableArrayList();
     private final Set<Long> completedQuizIds = new HashSet<>();
+    private final Map<Long, ResultDto> completedResultsByQuizId = new HashMap<>();
     private boolean historyLoaded;
 
     private final ProcessScannerService preExamScanner;
@@ -80,21 +90,21 @@ public final class StudentController extends ScreenController {
 
     @FXML
     private void initialize() {
+        if (studentNotice != null) {
+            studentNotice.setCursor(javafx.scene.Cursor.HAND);
+            studentNotice.setTooltip(new Tooltip("Nhấp để tắt thông báo"));
+            studentNotice.setOnMouseClicked(e -> {
+                studentNotice.setVisible(false);
+                studentNotice.setManaged(false);
+            });
+        }
         configureTable();
         assignedQuizTable.getSelectionModel().selectedItemProperty()
             .addListener((obs, oldVal, selected) -> {
                 if (selected != null) {
                     showQuizInfo(selected);
-                    assignedQuizTable.setVisible(false);
-                    assignedQuizTable.setManaged(false);
-                    actionToolbar.setVisible(false);
-                    actionToolbar.setManaged(false);
                 } else {
                     hideQuizInfo();
-                    assignedQuizTable.setVisible(true);
-                    assignedQuizTable.setManaged(true);
-                    actionToolbar.setVisible(true);
-                    actionToolbar.setManaged(true);
                 }
             });
         quizInfoPanel.setVisible(false);
@@ -108,50 +118,124 @@ public final class StudentController extends ScreenController {
     @Override
     protected void onMount() {
         loadAssignedQuizzes();
+        Timeline autoSync = new Timeline(new KeyFrame(Duration.seconds(3), e -> syncSilently()));
+        autoSync.setCycleCount(Animation.INDEFINITE);
+        autoSync.play();
+        own(autoSync::stop);
+    }
+
+    private void loadHistoryAndClasses() {
         fx.observe(api.listMyHistory(), this::isActive,
             results -> {
                 completedQuizIds.clear();
-                results.stream().map(ResultDto::quizId).forEach(completedQuizIds::add);
+                completedResultsByQuizId.clear();
+                for (ResultDto r : results) {
+                    completedQuizIds.add(r.quizId());
+                    completedResultsByQuizId.put(r.quizId(), r);
+                }
                 historyLoaded = true;
                 assignedQuizTable.refresh();
+                updateStudentKpis();
                 QuizInfoDto selected = assignedQuizTable.getSelectionModel().getSelectedItem();
                 if (selected != null) showQuizInfo(selected);
             },
             err -> {
                 historyLoaded = true;
+                updateStudentKpis();
                 QuizInfoDto selected = assignedQuizTable.getSelectionModel().getSelectedItem();
                 if (selected != null) showQuizInfo(selected);
             },
             () -> { historyLoaded = true; });
         fx.observe(api.listMyClasses(), this::isActive,
-            classes -> studentClassLabel.setText("Lớp: " + (classes.isEmpty() ? "chưa được xếp lớp" : String.join(", ", classes.stream().map(ClassDto::name).toList()))),
+            classes -> studentClassLabel.setText("Lớp học: " + (classes.isEmpty() ? "Chưa được xếp lớp" : String.join(", ", classes.stream().map(ClassDto::name).toList()))),
             err -> studentClassLabel.setText("Không tải được thông tin lớp học"),
             () -> {});
     }
 
+    private void updateStudentKpis() {
+        int total = quizList.size();
+        long completed = quizList.stream().filter(q -> completedQuizIds.contains(q.id())).count();
+        long ready = quizList.stream().filter(q -> q.status() == QuizStatus.OPEN && !completedQuizIds.contains(q.id())).count();
+        if (lblTotalAssigned != null) lblTotalAssigned.setText(String.valueOf(total));
+        if (lblReadyExams != null) lblReadyExams.setText(String.valueOf(ready));
+        if (lblCompletedExams != null) lblCompletedExams.setText(String.valueOf(completed));
+    }
+
+    private void syncSilently() {
+        if (!isActive() || studentProgress.isVisible()) return;
+        loadHistoryAndClasses();
+        fx.observe(api.listAssignedQuizzes(), this::isActive,
+            this::updateQuizItemsPreservingSelection,
+            err -> {},
+            () -> {}
+        );
+    }
+
+    private void updateQuizItemsPreservingSelection(List<QuizInfoDto> quizzes) {
+        QuizInfoDto currentSelected = assignedQuizTable.getSelectionModel().getSelectedItem();
+        Long selectedId = currentSelected != null ? currentSelected.id() : null;
+        quizList.setAll(quizzes);
+        updateStudentKpis();
+        if (selectedId != null) {
+            quizzes.stream()
+                .filter(q -> q.id() == selectedId)
+                .findFirst()
+                .ifPresent(updated -> {
+                    assignedQuizTable.getSelectionModel().select(updated);
+                    showQuizInfo(updated);
+                });
+        }
+    }
+
     private void configureTable() {
         TableColumn<QuizInfoDto, String> colTitle = new TableColumn<>("Tiêu đề bài kiểm tra");
-        colTitle.setPrefWidth(260);
+        colTitle.setPrefWidth(250);
         colTitle.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().title()));
+        colTitle.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    setText(item);
+                    setTooltip(new Tooltip(item));
+                }
+            }
+        });
 
         TableColumn<QuizInfoDto, String> colCategory = new TableColumn<>("Chủ đề");
-        colCategory.setPrefWidth(130);
+        colCategory.setPrefWidth(120);
         colCategory.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().category() == null ? "—" : q.getValue().category()));
+        colCategory.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    setText(item);
+                    setTooltip(new Tooltip(item));
+                }
+            }
+        });
 
         TableColumn<QuizInfoDto, String> colDuration = new TableColumn<>("Thời lượng");
-        colDuration.setPrefWidth(100);
+        colDuration.setPrefWidth(95);
         colDuration.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().durationMinutes() + " phút"));
 
-        TableColumn<QuizInfoDto, String> colQuestions = new TableColumn<>("Số câu hỏi");
-        colQuestions.setPrefWidth(90);
+        TableColumn<QuizInfoDto, String> colQuestions = new TableColumn<>("Số câu");
+        colQuestions.setPrefWidth(80);
         colQuestions.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().questionCount() + " câu"));
 
         TableColumn<QuizInfoDto, String> colPass = new TableColumn<>("Điểm đạt");
-        colPass.setPrefWidth(85);
+        colPass.setPrefWidth(80);
         colPass.setCellValueFactory(q -> new SimpleStringProperty(String.format("%.0f%%", q.getValue().passScore())));
 
         TableColumn<QuizInfoDto, String> colStatus = new TableColumn<>("Trạng thái");
-        colStatus.setPrefWidth(120);
+        colStatus.setPrefWidth(125);
         colStatus.setCellValueFactory(q -> new SimpleStringProperty(q.getValue().status().name()));
         colStatus.setCellFactory(col -> new TableCell<>() {
             @Override
@@ -165,7 +249,7 @@ public final class StudentController extends ScreenController {
                     badge.getStyleClass().add("badge");
                     QuizInfoDto quiz = getTableView().getItems().get(getIndex());
                     if ("OPEN".equals(item) && completedQuizIds.contains(quiz.id())) {
-                        badge.setText("ĐÃ THI");
+                        badge.setText("ĐÃ HOÀN THÀNH");
                         badge.getStyleClass().add("badge-completed");
                     } else if ("OPEN".equals(item)) {
                         badge.setText("SẴN SÀNG THI");
@@ -174,7 +258,7 @@ public final class StudentController extends ScreenController {
                         badge.setText("ĐÃ KẾT THÚC");
                         badge.getStyleClass().add("badge-closed");
                     } else {
-                        badge.setText("BẢN NHÁP");
+                        badge.setText("CHƯA MỞ");
                         badge.getStyleClass().add("badge-draft");
                     }
                     setGraphic(badge);
@@ -183,18 +267,89 @@ public final class StudentController extends ScreenController {
             }
         });
 
-        assignedQuizTable.getColumns().setAll(List.of(colTitle, colCategory, colDuration, colQuestions, colPass, colStatus));
+        TableColumn<QuizInfoDto, Void> colAction = new TableColumn<>("Thao tác");
+        colAction.setPrefWidth(130);
+        colAction.setCellFactory(col -> new TableCell<>() {
+            private final Button btn = new Button();
+            private final HBox box = new HBox(btn);
+            {
+                box.setAlignment(Pos.CENTER_LEFT);
+                btn.setOnAction(e -> {
+                    QuizInfoDto row = getTableRow() != null ? getTableRow().getItem() : null;
+                    if (row == null) return;
+                    assignedQuizTable.getSelectionModel().select(row);
+                    if (row.status() == QuizStatus.OPEN && !completedQuizIds.contains(row.id()) && historyLoaded) {
+                        onStartExamClick();
+                    } else if (completedQuizIds.contains(row.id())) {
+                        openReviewForQuiz(row.id());
+                    }
+                });
+            }
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                QuizInfoDto row = (!empty && getTableRow() != null) ? getTableRow().getItem() : null;
+                if (row == null) {
+                    setGraphic(null);
+                } else {
+                    btn.getStyleClass().removeAll("primary-button", "secondary-button", "accent-outline-button", "btn-small");
+                    btn.setPrefWidth(95);
+                    btn.setMinWidth(95);
+                    btn.setMaxWidth(95);
+                    boolean canStart = row.status() == QuizStatus.OPEN && !completedQuizIds.contains(row.id());
+                    if (canStart) {
+                        btn.setText("Vào thi");
+                        btn.getStyleClass().addAll("primary-button", "btn-small");
+                    } else if (completedQuizIds.contains(row.id())) {
+                        btn.setText("Kết quả");
+                        btn.getStyleClass().addAll("accent-outline-button", "btn-small");
+                    } else {
+                        btn.setText("Chi tiết");
+                        btn.getStyleClass().addAll("secondary-button", "btn-small");
+                    }
+                    setGraphic(box);
+                }
+            }
+        });
+
+        assignedQuizTable.getColumns().setAll(List.of(colTitle, colCategory, colDuration, colQuestions, colPass, colStatus, colAction));
+        for (TableColumn<?, ?> col : assignedQuizTable.getColumns()) {
+            col.setSortable(false);
+        }
+        assignedQuizTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         assignedQuizTable.setItems(quizList);
         assignedQuizTable.setPlaceholder(new Label("Hiện tại bạn chưa có bài kiểm tra nào được giao."));
+    }
+
+    private void openReviewForQuiz(long quizId) {
+        ResultDto res = completedResultsByQuizId.get(quizId);
+        if (res != null) {
+            navigator.showReview(res);
+        } else {
+            fx.observe(api.listMyHistory(), this::isActive,
+                results -> {
+                    for (ResultDto r : results) {
+                        completedResultsByQuizId.put(r.quizId(), r);
+                        if (r.quizId() == quizId) {
+                            navigator.showReview(r);
+                            return;
+                        }
+                    }
+                },
+                err -> showNotice("Không thể tải kết quả bài thi: " + err.getMessage(), true),
+                () -> {}
+            );
+        }
     }
 
     @FXML
     private void loadAssignedQuizzes() {
         studentProgress.setVisible(true);
         btnRefresh.setDisable(true);
+        loadHistoryAndClasses();
         fx.observe(api.listAssignedQuizzes(), this::isActive,
             quizzes -> {
-                quizList.setAll(quizzes);
+                updateQuizItemsPreservingSelection(quizzes);
                 studentProgress.setVisible(false);
                 btnRefresh.setDisable(false);
             },
@@ -217,15 +372,45 @@ public final class StudentController extends ScreenController {
         infoPassScore.setText(String.format("%.0f%%", sel.passScore()));
         infoQuestionCount.setText(sel.questionCount() + " câu hỏi");
         boolean alreadySubmitted = completedQuizIds.contains(sel.id());
-        infoStatus.setText(alreadySubmitted ? "Đã thi" : sel.status() == QuizStatus.OPEN ? "Đang mở thi" : (sel.status() == QuizStatus.CLOSED ? "Đã đóng" : "Chưa mở"));
-        btnStartExam.setDisable(!historyLoaded || sel.status() != QuizStatus.OPEN || alreadySubmitted);
+
+        infoStatus.getStyleClass().removeAll("badge-open", "badge-completed", "badge-closed", "badge-draft");
         if (alreadySubmitted) {
-            showNotice("Bạn đã hoàn thành bài kiểm tra này trước đó nên không thể làm lại.", true);
-        } else if (!historyLoaded) {
-            showNotice("Đang kiểm tra lịch sử làm bài…", false);
-        } else if (studentNotice.getText() != null && studentNotice.getText().startsWith("Bạn đã hoàn thành bài kiểm tra này")) {
-            studentNotice.setVisible(false);
-            studentNotice.setManaged(false);
+            infoStatus.setText("ĐÃ HOÀN THÀNH");
+            infoStatus.getStyleClass().add("badge-completed");
+        } else if (sel.status() == QuizStatus.OPEN) {
+            infoStatus.setText("ĐANG MỞ THI");
+            infoStatus.getStyleClass().add("badge-open");
+        } else if (sel.status() == QuizStatus.CLOSED) {
+            infoStatus.setText("ĐÃ ĐÓNG");
+            infoStatus.getStyleClass().add("badge-closed");
+        } else {
+            infoStatus.setText("CHƯA MỞ");
+            infoStatus.getStyleClass().add("badge-draft");
+        }
+
+        if (alreadySubmitted) {
+            btnStartExam.setText("📝 Xem review đáp án");
+            btnStartExam.getStyleClass().removeAll("primary-button");
+            if (!btnStartExam.getStyleClass().contains("accent-outline-button")) {
+                btnStartExam.getStyleClass().add("accent-outline-button");
+            }
+            btnStartExam.setDisable(!historyLoaded);
+            btnStartExam.setOnAction(e -> openReviewForQuiz(sel.id()));
+            showNotice("Bạn đã hoàn thành bài kiểm tra này. Bấm 'Xem review đáp án' để xem lại bài làm và kết quả.", false);
+        } else {
+            btnStartExam.setText("🚀 Bắt đầu làm bài");
+            btnStartExam.getStyleClass().removeAll("accent-outline-button");
+            if (!btnStartExam.getStyleClass().contains("primary-button")) {
+                btnStartExam.getStyleClass().add("primary-button");
+            }
+            btnStartExam.setDisable(!historyLoaded || sel.status() != QuizStatus.OPEN);
+            btnStartExam.setOnAction(e -> onStartExamClick());
+            if (!historyLoaded) {
+                showNotice("Đang kiểm tra lịch sử làm bài…", false);
+            } else if (studentNotice.getText() != null && studentNotice.getText().startsWith("Bạn đã hoàn thành bài kiểm tra này")) {
+                studentNotice.setVisible(false);
+                studentNotice.setManaged(false);
+            }
         }
         String description = sel.description() == null ? "" : sel.description().strip();
         boolean autoGeneratedDescription = description.toLowerCase(java.util.Locale.ROOT).startsWith("tạo tự động");
@@ -262,11 +447,16 @@ public final class StudentController extends ScreenController {
         String pin = null;
         if (selected.pinRequired()) {
             TextInputDialog dialog = new TextInputDialog();
-            dialog.setTitle("Tham gia bài kiểm tra"); dialog.setHeaderText("Nhập mã PIN");
+            dialog.setTitle("Tham gia bài kiểm tra");
+            dialog.setHeaderText("Đề thi yêu cầu mã PIN phòng thi do giáo viên cung cấp");
             dialog.setContentText("Mã PIN:");
             var entered = dialog.showAndWait();
             if (entered.isEmpty()) return;
             pin = entered.get().strip();
+            if (pin.isEmpty()) {
+                showNotice("Vui lòng nhập mã PIN phòng thi để vào làm bài.", true);
+                return;
+            }
         }
         final String code = pin;
         btnStartExam.setDisable(true);
@@ -341,19 +531,17 @@ public final class StudentController extends ScreenController {
         dialogPane.setMinWidth(520);
         dialogPane.setPrefWidth(540);
 
-        // Khóa thứ tự hiển thị nút cố định theo đúng danh sách khai báo: [Tự động đóng] [Kiểm tra lại] [Hủy bỏ]
         ButtonBar bar = findButtonBar(dialogPane);
         if (bar != null) {
             bar.setButtonOrder(ButtonBar.BUTTON_ORDER_NONE);
         }
 
-        // Tắt uniform size và đặt kích thước rộng rãi để tuyệt đối không bị co chữ thành "Tự động đó..."
         Button autoCloseBtn = (Button) dialogPane.lookupButton(btnAutoClose);
         if (autoCloseBtn != null) {
             ButtonBar.setButtonUniformSize(autoCloseBtn, false);
             autoCloseBtn.setMinWidth(140);
             autoCloseBtn.setPrefWidth(140);
-            autoCloseBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand; -fx-padding: 6 12; -fx-min-width: 140px; -fx-pref-width: 140px;");
+            autoCloseBtn.setStyle("-fx-background-color: #4f46e5; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand; -fx-padding: 6 12; -fx-min-width: 140px; -fx-pref-width: 140px;");
         }
         Button recheckBtn = (Button) dialogPane.lookupButton(btnRecheck);
         if (recheckBtn != null) {
@@ -415,7 +603,22 @@ public final class StudentController extends ScreenController {
         fx.observe(api.startAttempt(quizId, code), this::isActive,
             navigator::showExam,
             err -> {
-                showNotice("Không thể bắt đầu bài thi: " + err.getMessage(), true);
+                Throwable cause = FxAsync.unwrap(err);
+                String message;
+                if (cause instanceof ApiException apiErr) {
+                    message = switch (apiErr.errorCode()) {
+                        case FORBIDDEN -> (code != null && !code.isBlank())
+                            ? "Mã PIN phòng thi không chính xác! Vui lòng kiểm tra lại mã PIN do giáo viên cung cấp."
+                            : "Bài kiểm tra này yêu cầu mã PIN phòng thi. Vui lòng nhập mã PIN để vào thi.";
+                        case CONFLICT -> "Bài kiểm tra hiện chưa được mở hoặc bạn đã nộp bài thi này rồi.";
+                        case NOT_FOUND -> "Đề thi không còn tồn tại trên hệ thống.";
+                        case VALIDATION_ERROR -> "Mã PIN không đúng định dạng. Vui lòng kiểm tra lại.";
+                        default -> "Không thể vào thi (" + apiErr.errorCode() + "). Vui lòng thử lại hoặc liên hệ giáo viên.";
+                    };
+                } else {
+                    message = "Không thể kết nối máy chủ để vào thi: " + (cause != null ? cause.getMessage() : "Lỗi không xác định");
+                }
+                showNotice(message, true);
                 btnStartExam.setDisable(false);
             },
             () -> btnStartExam.setDisable(false));
