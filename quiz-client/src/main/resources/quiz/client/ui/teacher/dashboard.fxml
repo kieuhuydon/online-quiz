@@ -45,15 +45,13 @@
                         <!-- Contextual Action Bar (Clean single-row SaaS toolbar with comfortable button sizing) -->
                         <HBox alignment="CENTER_LEFT" spacing="10" styleClass="toolbar-card">
                             <Label text="Thao tác đề đang chọn:" styleClass="muted" style="-fx-font-weight: bold;"/>
-                            <Button fx:id="btnViewDetail" text="✏️ Chi tiết &amp; Sửa đề" onAction="#onViewDetailClick" styleClass="secondary-button"/>
-                            <Button fx:id="btnSelectQuestions" text="📑 Chọn câu hỏi" onAction="#onSelectQuestionsClick" visible="false" managed="false"/>
-                            <Button fx:id="btnAssignQuiz" text="🏫 Giao cho lớp" onAction="#onAssignQuizClick" styleClass="secondary-button"/>
+                            <Button fx:id="btnViewDetail" text="Chi tiết và Sửa đề" onAction="#onViewDetailClick" styleClass="secondary-button" HBox.hgrow="ALWAYS" maxWidth="Infinity" style="-fx-padding: 10 14; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+                            <Button fx:id="btnAssignQuiz" text="Giao cho lớp" onAction="#onAssignQuizClick" styleClass="secondary-button" HBox.hgrow="ALWAYS" maxWidth="Infinity" style="-fx-padding: 10 14; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+                            <Button fx:id="btnOpenQuiz" text="Mở đề (Sinh PIN)" onAction="#onOpenQuizClick" styleClass="success-button" HBox.hgrow="ALWAYS" maxWidth="Infinity" style="-fx-padding: 10 14; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+                            <Button text="Giám sát phòng thi" onAction="#onMonitorClick" styleClass="accent-outline-button" HBox.hgrow="ALWAYS" maxWidth="Infinity" style="-fx-padding: 10 14; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+                            <Button fx:id="btnCloseQuiz" text="Đóng đề thi" onAction="#onCloseQuizClick" styleClass="danger-button" HBox.hgrow="ALWAYS" maxWidth="Infinity" style="-fx-padding: 10 14; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+                            <Button fx:id="btnSelectQuestions" text="Chọn câu hỏi" onAction="#onSelectQuestionsClick" visible="false" managed="false"/>
                             <Button fx:id="btnEditQuiz" text="Sửa Đề" onAction="#onEditQuizClick" visible="false" managed="false"/>
-                            <Region HBox.hgrow="ALWAYS"/>
-                            <Separator orientation="VERTICAL"/>
-                            <Button fx:id="btnOpenQuiz" text="🔑 Mở đề (Sinh PIN)" onAction="#onOpenQuizClick" styleClass="success-button"/>
-                            <Button text="📡 Giám sát phòng thi" onAction="#onMonitorClick" styleClass="accent-outline-button"/>
-                            <Button fx:id="btnCloseQuiz" text="🔒 Đóng đề thi" onAction="#onCloseQuizClick" styleClass="danger-button"/>
                         </HBox>
 
                         <!-- Quizzes Table -->

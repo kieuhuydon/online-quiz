@@ -498,10 +498,13 @@ public final class TeacherController extends ScreenController {
     private void configureQuizTable() {
         TableColumn<QuizDto, String> colId = new TableColumn<>("ID");
         colId.setPrefWidth(55);
+        colId.setSortable(false);
         colId.setCellValueFactory(d -> new SimpleStringProperty(String.valueOf(d.getValue().id())));
 
         TableColumn<QuizDto, String> colTitle = new TableColumn<>("Tiêu đề bài kiểm tra");
-        colTitle.setPrefWidth(220);
+        colTitle.setPrefWidth(380);
+        colTitle.setMinWidth(280);
+        colTitle.setSortable(false);
         colTitle.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().title()));
         colTitle.setCellFactory(col -> new TableCell<>() {
             @Override
@@ -512,13 +515,15 @@ public final class TeacherController extends ScreenController {
                     setTooltip(null);
                 } else {
                     setText(item);
+                    setWrapText(true);
                     setTooltip(new Tooltip(item));
                 }
             }
         });
 
         TableColumn<QuizDto, String> colCategory = new TableColumn<>("Chủ đề");
-        colCategory.setPrefWidth(120);
+        colCategory.setPrefWidth(140);
+        colCategory.setSortable(false);
         colCategory.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().category() == null ? "—" : d.getValue().category()));
         colCategory.setCellFactory(col -> new TableCell<>() {
             @Override
@@ -535,15 +540,18 @@ public final class TeacherController extends ScreenController {
         });
 
         TableColumn<QuizDto, String> colDuration = new TableColumn<>("Thời lượng");
-        colDuration.setPrefWidth(90);
+        colDuration.setPrefWidth(100);
+        colDuration.setSortable(false);
         colDuration.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().durationMinutes() + " phút"));
 
         TableColumn<QuizDto, String> colPass = new TableColumn<>("Điểm đạt");
-        colPass.setPrefWidth(75);
+        colPass.setPrefWidth(90);
+        colPass.setSortable(false);
         colPass.setCellValueFactory(d -> new SimpleStringProperty(String.format("%.0f%%", d.getValue().passScore())));
 
         TableColumn<QuizDto, String> colStatus = new TableColumn<>("Trạng thái");
-        colStatus.setPrefWidth(110);
+        colStatus.setPrefWidth(120);
+        colStatus.setSortable(false);
         colStatus.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().status().name()));
         colStatus.setCellFactory(col -> new TableCell<>() {
             @Override
@@ -572,7 +580,8 @@ public final class TeacherController extends ScreenController {
         });
 
         TableColumn<QuizDto, String> colPin = new TableColumn<>("Mã PIN");
-        colPin.setPrefWidth(90);
+        colPin.setPrefWidth(100);
+        colPin.setSortable(false);
         colPin.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().pin() == null ? "—" : d.getValue().pin()));
         colPin.setCellFactory(col -> new TableCell<>() {
             @Override
@@ -591,80 +600,14 @@ public final class TeacherController extends ScreenController {
         });
 
         TableColumn<QuizDto, String> colCreated = new TableColumn<>("Ngày tạo");
-        colCreated.setPrefWidth(125);
+        colCreated.setPrefWidth(140);
+        colCreated.setSortable(false);
         colCreated.setCellValueFactory(d -> new SimpleStringProperty(DATE_FORMAT.format(d.getValue().createdAt())));
 
-        TableColumn<QuizDto, Void> colQuickActions = new TableColumn<>("Thao tác nhanh");
-        colQuickActions.setPrefWidth(320);
-        colQuickActions.setCellFactory(col -> new TableCell<>() {
-            private final Button btnDetail = new Button("✏️ Chi tiết / Sửa");
-            private final Button btnAssign = new Button("🏫 Giao lớp");
-            private final Button btnStateAction = new Button();
-            private final HBox box = new HBox(8, btnDetail, btnAssign, btnStateAction);
-            {
-                btnDetail.getStyleClass().addAll("secondary-button", "btn-small");
-                btnDetail.setTooltip(new Tooltip("Xem chi tiết và chỉnh sửa câu hỏi / cấu hình đề thi"));
-                btnAssign.getStyleClass().addAll("secondary-button", "btn-small");
-                btnAssign.setTooltip(new Tooltip("Giao đề thi cho các lớp học"));
-                box.setAlignment(Pos.CENTER_LEFT);
-
-                btnDetail.setOnAction(e -> {
-                    QuizDto row = getTableRow() != null ? getTableRow().getItem() : null;
-                    if (row != null) {
-                        quizTable.getSelectionModel().select(row);
-                        openReviewAndEdit(row.id(), row.title(), row.status());
-                    }
-                });
-                btnAssign.setOnAction(e -> {
-                    QuizDto row = getTableRow() != null ? getTableRow().getItem() : null;
-                    if (row != null) {
-                        quizTable.getSelectionModel().select(row);
-                        onAssignQuizClick();
-                    }
-                });
-                btnStateAction.setOnAction(e -> {
-                    QuizDto row = getTableRow() != null ? getTableRow().getItem() : null;
-                    if (row == null) return;
-                    quizTable.getSelectionModel().select(row);
-                    if (row.status() == QuizStatus.DRAFT) {
-                        onOpenQuizClick();
-                    } else if (row.status() == QuizStatus.OPEN) {
-                        onMonitorClick();
-                    }
-                });
-            }
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                QuizDto row = (!empty && getTableRow() != null) ? getTableRow().getItem() : null;
-                if (row == null) {
-                    setGraphic(null);
-                } else {
-                    btnStateAction.getStyleClass().removeAll("success-button", "accent-outline-button", "secondary-button", "btn-small");
-                    if (row.status() == QuizStatus.DRAFT) {
-                        btnStateAction.setText("🔑 Mở đề");
-                        btnStateAction.setTooltip(new Tooltip("Mở đề thi và sinh mã PIN cho học sinh"));
-                        btnStateAction.getStyleClass().addAll("success-button", "btn-small");
-                        btnStateAction.setVisible(true);
-                        btnStateAction.setManaged(true);
-                    } else if (row.status() == QuizStatus.OPEN) {
-                        btnStateAction.setText("📡 Giám sát");
-                        btnStateAction.setTooltip(new Tooltip("Mở phòng giám sát thi theo thời gian thực"));
-                        btnStateAction.getStyleClass().addAll("accent-outline-button", "btn-small");
-                        btnStateAction.setVisible(true);
-                        btnStateAction.setManaged(true);
-                    } else {
-                        btnStateAction.setVisible(false);
-                        btnStateAction.setManaged(false);
-                    }
-                    setGraphic(box);
-                }
-            }
-        });
-
-        quizTable.getColumns().setAll(List.of(colId, colTitle, colCategory, colDuration, colPass, colStatus, colPin, colCreated, colQuickActions));
+        quizTable.getColumns().setAll(List.of(colId, colTitle, colCategory, colDuration, colPass, colStatus, colPin, colCreated));
         quizTable.setItems(quizList);
         quizTable.setPlaceholder(new Label("Chưa có đề kiểm tra nào. Bấm '+ Tạo Đề Thủ Công' hoặc '⚡ Tạo Đề Tự Động' ở góc trên để bắt đầu."));
+        disableTableSorting(quizTable);
     }
 
     private void updateQuizButtons(QuizDto selected) {
@@ -711,6 +654,8 @@ public final class TeacherController extends ScreenController {
     @FXML
     private void onAutoGenerateQuizClick() {
         hideAllQuizPanels();
+        quizOverview.setVisible(false);
+        quizOverview.setManaged(false);
         txtAutoQuizTitle.setText("Đề Kiểm Tra Tự Động - " + java.time.LocalDate.now());
         txtAutoQuizCategory.setText("Tiếng Anh");
         txtAutoQuizDuration.setText("30");
@@ -1078,6 +1023,8 @@ public final class TeacherController extends ScreenController {
     @FXML
     private void onNewQuizClick() {
         hideAllQuizPanels();
+        quizOverview.setVisible(false);
+        quizOverview.setManaged(false);
         isEditingQuiz = false;
         editingQuizId = 0;
         formTitle.setText("Tạo Đề Kiểm Tra Mới (Thủ công)");
@@ -1094,7 +1041,7 @@ public final class TeacherController extends ScreenController {
         formError.setVisible(false);
         quizFormPanel.setVisible(true);
         quizFormPanel.setManaged(true);
-        scrollToBottom();
+        scrollToTop();
         javafx.application.Platform.runLater(() -> {
             javafx.application.Platform.runLater(() -> {
                 if (txtQuizTitle != null) txtQuizTitle.requestFocus();
@@ -1322,6 +1269,7 @@ public final class TeacherController extends ScreenController {
         detailQuestionTable.getColumns().setAll(List.of(colStt, colType, colDiff, colTopic, colContent, colOptions, colActions));
         detailQuestionTable.setItems(detailQuestionRows);
         detailQuestionTable.setPlaceholder(new Label("Đề kiểm tra này chưa có câu hỏi nào. Bấm '+ Thêm Câu Hỏi Từ Ngân Hàng' bên trên."));
+        disableTableSorting(detailQuestionTable);
     }
 
     private void configurePickerTable() {
@@ -1396,6 +1344,7 @@ public final class TeacherController extends ScreenController {
 
         pickerTable.getColumns().setAll(List.of(colId, colType, colDiff, colTopic, colContent, colCorrect));
         pickerTable.setItems(pickerQuestionRows);
+        disableTableSorting(pickerTable);
         pickerTable.getSelectionModel().selectedItemProperty().addListener((obs, o, n) ->
             btnConfirmPicker.setDisable(n == null)
         );
@@ -1751,6 +1700,7 @@ public final class TeacherController extends ScreenController {
 
         assignClassTable.getColumns().setAll(List.of(colCheck, colId, colName, colDesc, colTeacher, colStatus));
         assignClassTable.setItems(assignClassRows);
+        disableTableSorting(assignClassTable);
     }
 
     @FXML
@@ -1896,6 +1846,7 @@ public final class TeacherController extends ScreenController {
         classResultsTable.getColumns().setAll(List.of(student, score, correct, passed, reason, submitted, log));
         classResultsTable.setItems(classResultsList);
         classResultsTable.setPlaceholder(new Label("Chọn lớp và bài kiểm tra để xem kết quả."));
+        disableTableSorting(classResultsTable);
         ViolationTableStyle.install(classResultsTable,item->item.submitReason()==SubmitReason.ANTICHEAT
             ? quiz.common.enums.MonitoringStatus.CHEATING : quiz.common.enums.MonitoringStatus.SUBMITTED);
     }
@@ -2044,6 +1995,7 @@ public final class TeacherController extends ScreenController {
 
         logTable.getColumns().setAll(List.of(colTime, colType, colDetail, colCount, colTaken));
         logTable.setPlaceholder(new Label("Đang tải nhật ký vi phạm..."));
+        disableTableSorting(logTable);
 
         VBox content = new VBox(10, logTable);
         dialog.getDialogPane().setContent(content);
@@ -2156,6 +2108,7 @@ public final class TeacherController extends ScreenController {
         questionTable.getColumns().setAll(List.of(colCheck, colId, colType, colContent, colTopic, colDiff));
         questionTable.setEditable(true);
         questionTable.setItems(questionRows);
+        disableTableSorting(questionTable);
         questionTable.getSelectionModel().selectedItemProperty().addListener((obs, oldRow, row) ->
             questionSelectionPreview.setText(row == null ? "" : formatQuestionPreview(row.getQuestion())));
     }
@@ -2386,6 +2339,13 @@ private <S> TableCell<S, String> wrappingTextCell() {
     // UI UTILITIES
     // =========================================================================
 
+    private static void disableTableSorting(TableView<?> table) {
+        if (table == null) return;
+        for (TableColumn<?, ?> col : table.getColumns()) {
+            col.setSortable(false);
+        }
+    }
+
     private void hideAllQuizPanels() {
         quizOverview.setVisible(true);
         quizOverview.setManaged(true);
@@ -2507,6 +2467,7 @@ private <S> TableCell<S, String> wrappingTextCell() {
         classTable.getColumns().setAll(List.of(colId, colName, colDesc));
         classTable.setItems(classList);
         classTable.setPlaceholder(new Label("Chưa có lớp học nào."));
+        disableTableSorting(classTable);
     }
 
     private void configureMemberTable() {
@@ -2529,6 +2490,7 @@ private <S> TableCell<S, String> wrappingTextCell() {
         memberTable.getColumns().setAll(List.of(colId, colUsername, colName, colEnrolled));
         memberTable.setItems(memberList);
         memberTable.setPlaceholder(new Label("Chọn một lớp để xem danh sách học viên."));
+        disableTableSorting(memberTable);
     }
 
     @FXML

@@ -284,15 +284,18 @@ public final class StudentController extends ScreenController {
                     setGraphic(null);
                 } else {
                     btn.getStyleClass().removeAll("primary-button", "secondary-button", "accent-outline-button", "btn-small");
+                    btn.setPrefWidth(95);
+                    btn.setMinWidth(95);
+                    btn.setMaxWidth(95);
                     boolean canStart = row.status() == QuizStatus.OPEN && !completedQuizIds.contains(row.id());
                     if (canStart) {
-                        btn.setText("🚀 Vào thi");
+                        btn.setText("Vào thi");
                         btn.getStyleClass().addAll("primary-button", "btn-small");
                     } else if (completedQuizIds.contains(row.id())) {
-                        btn.setText("📝 Xem review");
+                        btn.setText("Kết quả");
                         btn.getStyleClass().addAll("accent-outline-button", "btn-small");
                     } else {
-                        btn.setText("Xem chi tiết");
+                        btn.setText("Chi tiết");
                         btn.getStyleClass().addAll("secondary-button", "btn-small");
                     }
                     setGraphic(box);
@@ -301,6 +304,10 @@ public final class StudentController extends ScreenController {
         });
 
         assignedQuizTable.getColumns().setAll(List.of(colTitle, colCategory, colDuration, colQuestions, colPass, colStatus, colAction));
+        for (TableColumn<?, ?> col : assignedQuizTable.getColumns()) {
+            col.setSortable(false);
+        }
+        assignedQuizTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         assignedQuizTable.setItems(quizList);
         assignedQuizTable.setPlaceholder(new Label("Hiện tại bạn chưa có bài kiểm tra nào được giao."));
     }

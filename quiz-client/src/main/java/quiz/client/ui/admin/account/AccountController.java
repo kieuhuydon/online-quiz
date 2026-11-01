@@ -82,6 +82,7 @@ public final class AccountController extends ScreenController {
 
     private void addColumn(String title, double width, Function<AccountDto, String> text) {
         TableColumn<AccountDto, String> column = new TableColumn<>(title);
+        column.setSortable(false);
         column.setPrefWidth(width);
         column.setCellValueFactory(cell -> new ReadOnlyStringWrapper(text.apply(cell.getValue())));
         column.setCellFactory(ignored -> new TableCell<>() {

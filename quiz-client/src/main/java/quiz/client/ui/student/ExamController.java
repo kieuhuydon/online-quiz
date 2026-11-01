@@ -52,11 +52,9 @@ public final class ExamController extends ScreenController {
     private final FxAsync fx;
     private final AttemptStateDto attempt;
 
-    @FXML private Label title, timer, questionPosition, saveStatus;
-    @FXML private TextArea questionText;
-    @FXML private RadioButton optionA, optionB, optionC, optionD;
-    @FXML private ToggleGroup options;
-    @FXML private VBox answerPane;
+    @FXML private Label title, timer, saveStatus, pageIndicator;
+    @FXML private ScrollPane questionsScrollPane;
+    @FXML private VBox questionsContainer;
     @FXML private TilePane reviewGrid;
     @FXML private Button previous, next, submit;
 
@@ -67,6 +65,10 @@ public final class ExamController extends ScreenController {
     @FXML private Label warningHeader, warningDetail;
     @FXML private HBox remediationBox;
     @FXML private Button btnKillProcesses, btnGracePeriod, btnDismissWarning;
+
+    private static final int PAGE_SIZE = 10;
+    private int currentPage = 0;
+    private final Map<Integer, VBox> questionCards = new HashMap<>();
 
     private final Map<Long, String> answers = new HashMap<>();
     private Timeline countdown;
@@ -367,7 +369,7 @@ public final class ExamController extends ScreenController {
         }
         log.warn("Kích hoạt cưỡng chế nộp bài (Force Submit): {}", violationReason);
         monitoring.close();
-        optionA.setDisable(true);optionB.setDisable(true);optionC.setDisable(true);optionD.setDisable(true);
+        if (questionsContainer != null) questionsContainer.setDisable(true);
         previous.setDisable(true);next.setDisable(true);reviewGrid.setDisable(true);
 
         // 1. Dọn dẹp tài nguyên giám sát ngay lập tức
@@ -437,98 +439,196 @@ public final class ExamController extends ScreenController {
     }
 
     // ==========================================
-    // CÁC HÀM ĐIỀU HƯỚNG & LÀM BÀI THI
+    // CÁC HÀM ĐIỀU HƯỚNG & LÀM BÀI THI (10 CÂU MỖI TRANG)
     // ==========================================
 
     private StudentQuestionDto current() {
-        return attempt.questions().get(index);
+        if (attempt.questions().isEmpty()) return null;
+        int safeIndex = Math.min(Math.max(0, index), attempt.questions().size() - 1);
+        return attempt.questions().get(safeIndex);
     }
 
     private void render() {
         if (attempt.questions().isEmpty()) {
-            questionText.setText("Bài kiểm tra không có câu hỏi.");
+            if (questionsContainer != null) {
+                questionsContainer.getChildren().clear();
+                Label emptyLbl = new Label("Bài kiểm tra không có câu hỏi.");
+                emptyLbl.setStyle("-fx-font-size: 15px; -fx-text-fill: #64748b;");
+                questionsContainer.getChildren().add(emptyLbl);
+            }
+            if (pageIndicator != null) pageIndicator.setText("Trang 0 / 0");
+            if (previous != null) previous.setDisable(true);
+            if (next != null) next.setDisable(true);
             return;
         }
-        StudentQuestionDto q = current();
-        questionPosition.setText("Câu " + (index + 1) + " / " + attempt.questions().size());
-        questionText.setText(q.content());
-        optionA.setText("A. " + q.optionA());
-        optionB.setText("B. " + q.optionB());
-        optionC.setText("C. " + q.optionC());
-        optionD.setText("D. " + q.optionD());
-        renderAnswerInput(q);
-        previous.setDisable(index == 0);
-        next.setDisable(index >= attempt.questions().size() - 1);
+
+        int total = attempt.questions().size();
+        int totalPages = Math.max(1, (int) Math.ceil((double) total / PAGE_SIZE));
+        if (currentPage >= totalPages) currentPage = totalPages - 1;
+        if (currentPage < 0) currentPage = 0;
+
+        int startIdx = currentPage * PAGE_SIZE;
+        int endIdx = Math.min(startIdx + PAGE_SIZE, total);
+
+        if (pageIndicator != null) {
+            pageIndicator.setText("Trang " + (currentPage + 1) + " / " + totalPages + " (Câu " + (startIdx + 1) + " - " + endIdx + ")");
+        }
+        if (previous != null) previous.setDisable(currentPage == 0);
+        if (next != null) next.setDisable(currentPage >= totalPages - 1);
+
+        if (questionsContainer != null) {
+            questionsContainer.getChildren().clear();
+            questionCards.clear();
+
+            for (int i = startIdx; i < endIdx; i++) {
+                StudentQuestionDto q = attempt.questions().get(i);
+                VBox card = buildQuestionCard(i, q, total);
+                questionCards.put(i, card);
+                questionsContainer.getChildren().add(card);
+            }
+        }
+
         refreshReview();
     }
 
-    private void renderAnswerInput(StudentQuestionDto q) {
-        answerPane.getChildren().clear();
-        options.selectToggle(null);
+    private VBox buildQuestionCard(int qIndex, StudentQuestionDto q, int total) {
+        VBox card = new VBox(10);
+        card.setId("question-card-" + qIndex);
+        card.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 1.5px; -fx-border-radius: 8px; -fx-background-radius: 8px; -fx-padding: 14px 18px;");
+
+        Label lblPos = new Label("Câu " + (qIndex + 1) + " / " + total);
+        lblPos.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #4338ca;");
+
+        Label lblContent = new Label(q.content());
+        lblContent.setWrapText(true);
+        lblContent.setMaxWidth(Double.MAX_VALUE);
+        lblContent.setStyle("-fx-font-size: 14.5px; -fx-font-weight: 600; -fx-text-fill: #1e293b; -fx-line-spacing: 3px;");
+
+        VBox answerBox = new VBox(8);
+        answerBox.setStyle("-fx-padding: 4 0 0 0;");
+        renderAnswerInput(q, answerBox);
+
+        card.getChildren().addAll(lblPos, lblContent, answerBox);
+        return card;
+    }
+
+    private void renderAnswerInput(StudentQuestionDto q, VBox answerBox) {
         String saved = answers.get(q.id());
         if (q.questionType() == QuestionType.MULTIPLE_CHOICE || q.questionType() == QuestionType.TRUE_FALSE) {
+            ToggleGroup tg = new ToggleGroup();
             if (q.questionType() == QuestionType.TRUE_FALSE) {
-                optionA.setText("Đúng"); optionB.setText("Sai");
-                optionA.setUserData("TRUE"); optionB.setUserData("FALSE");
-                optionC.setVisible(false); optionC.setManaged(false); optionD.setVisible(false); optionD.setManaged(false);
+                RadioButton rTrue = new RadioButton("Đúng");
+                rTrue.setUserData("TRUE");
+                rTrue.setToggleGroup(tg);
+                rTrue.setWrapText(true);
+                rTrue.setMaxWidth(Double.MAX_VALUE);
+
+                RadioButton rFalse = new RadioButton("Sai");
+                rFalse.setUserData("FALSE");
+                rFalse.setToggleGroup(tg);
+                rFalse.setWrapText(true);
+                rFalse.setMaxWidth(Double.MAX_VALUE);
+
+                if ("TRUE".equalsIgnoreCase(saved)) tg.selectToggle(rTrue);
+                else if ("FALSE".equalsIgnoreCase(saved)) tg.selectToggle(rFalse);
+
+                answerBox.getChildren().addAll(rTrue, rFalse);
             } else {
-                optionA.setText("A. " + q.optionA()); optionB.setText("B. " + q.optionB());
-                optionC.setText("C. " + q.optionC()); optionD.setText("D. " + q.optionD());
-                optionA.setUserData("A"); optionB.setUserData("B"); optionC.setUserData("C"); optionD.setUserData("D");
-                optionC.setVisible(true); optionC.setManaged(true); optionD.setVisible(true); optionD.setManaged(true);
+                List<RadioButton> radios = new ArrayList<>();
+                if (q.optionA() != null && !q.optionA().isBlank()) {
+                    RadioButton r = new RadioButton("A. " + q.optionA());
+                    r.setUserData("A");
+                    radios.add(r);
+                }
+                if (q.optionB() != null && !q.optionB().isBlank()) {
+                    RadioButton r = new RadioButton("B. " + q.optionB());
+                    r.setUserData("B");
+                    radios.add(r);
+                }
+                if (q.optionC() != null && !q.optionC().isBlank()) {
+                    RadioButton r = new RadioButton("C. " + q.optionC());
+                    r.setUserData("C");
+                    radios.add(r);
+                }
+                if (q.optionD() != null && !q.optionD().isBlank()) {
+                    RadioButton r = new RadioButton("D. " + q.optionD());
+                    r.setUserData("D");
+                    radios.add(r);
+                }
+                for (RadioButton r : radios) {
+                    r.setToggleGroup(tg);
+                    r.setWrapText(true);
+                    r.setMaxWidth(Double.MAX_VALUE);
+                    if (r.getUserData().equals(saved)) {
+                        tg.selectToggle(r);
+                    }
+                    answerBox.getChildren().add(r);
+                }
             }
-            answerPane.getChildren().setAll(optionA, optionB, optionC, optionD);
-            if (saved != null) for (Toggle t : options.getToggles()) if (saved.equals(t.getUserData())) options.selectToggle(t);
+            tg.selectedToggleProperty().addListener((obs, oldT, newT) -> {
+                if (newT != null && isActive() && !isSubmitting.get()) {
+                    saveAnswer(q.id(), String.valueOf(newT.getUserData()));
+                }
+            });
         } else {
             String[] values = saved == null ? new String[0] : saved.split("\\|", -1);
             int count = q.questionType() == QuestionType.FILL_BLANK ? Math.max(1, q.blankCount()) : 1;
-            for (int i = 0; i < count; i++) {
-                TextField field = new TextField(i < values.length ? values[i].strip() : "");
-                field.setPromptText(q.questionType() == QuestionType.FILL_BLANK ? "Từ cho ô trống " + (i + 1) : "Nhập câu trả lời ngắn");
-                field.textProperty().addListener((o, old, value) -> saveTextAnswer(q.id()));
-                answerPane.getChildren().add(field);
+            List<TextField> fields = new ArrayList<>();
+            for (int k = 0; k < count; k++) {
+                TextField field = new TextField(k < values.length ? values[k].strip() : "");
+                field.setPromptText(q.questionType() == QuestionType.FILL_BLANK ? "Từ cho ô trống " + (k + 1) : "Nhập câu trả lời ngắn");
+                field.setStyle("-fx-font-size: 13.5px; -fx-padding: 7 10;");
+                fields.add(field);
+                answerBox.getChildren().add(field);
+            }
+            for (TextField f : fields) {
+                f.textProperty().addListener((o, old, value) -> {
+                    if (!isActive() || isSubmitting.get()) return;
+                    String combined = fields.stream().map(TextField::getText).reduce((a, b) -> a + " | " + b).orElse("");
+                    saveAnswer(q.id(), combined);
+                });
             }
         }
-    }
-
-    private void saveTextAnswer(long questionId) {
-        if (!isActive() || isSubmitting.get()) return;
-        String value = answerPane.getChildren().stream().filter(TextField.class::isInstance).map(TextField.class::cast)
-            .map(TextField::getText).reduce((a, b) -> a + " | " + b).orElse("");
-        saveAnswer(questionId, value);
     }
 
     private void saveAnswer(long questionId, String answer) {
         answers.put(questionId, answer);
-        saveStatus.setText("Đang lưu câu trả lời...");
+        if (saveStatus != null) saveStatus.setText("Đang lưu câu trả lời...");
         fx.observe(api.saveAnswer(attempt.attemptId(), questionId, answer), this::isActive,
-            ignored -> { saveStatus.setText(""); refreshReview(); },
-            e -> saveStatus.setText("Không lưu được đáp án: " + e.getMessage()), () -> {});
+            ignored -> { if (saveStatus != null) saveStatus.setText(""); refreshReview(); },
+            e -> { if (saveStatus != null) saveStatus.setText("Không lưu được đáp án: " + e.getMessage()); }, () -> {});
     }
 
     @FXML
     private void selectAnswer() {
-        if (!isActive() || isSubmitting.get() || attempt.questions().isEmpty()) return;
-        Toggle sel = options.getSelectedToggle();
-        if (sel == null) return;
-        long questionId = current().id();
-        saveAnswer(questionId, String.valueOf(sel.getUserData()));
+        // Handled directly via toggleGroup listener in each question card
     }
 
     @FXML
     private void previous() {
-        if (index > 0) {
-            index--;
+        if (currentPage > 0) {
+            currentPage--;
             render();
+            scrollToTopQuestions();
         }
     }
 
     @FXML
     private void next() {
-        if (index < attempt.questions().size() - 1) {
-            index++;
+        int totalPages = Math.max(1, (int) Math.ceil((double) attempt.questions().size() / PAGE_SIZE));
+        if (currentPage < totalPages - 1) {
+            currentPage++;
             render();
+            scrollToTopQuestions();
         }
+    }
+
+    private void scrollToTopQuestions() {
+        javafx.application.Platform.runLater(() -> {
+            if (questionsScrollPane != null) {
+                questionsScrollPane.setVvalue(0.0);
+            }
+        });
     }
 
     private void updateTimer() {
@@ -543,7 +643,11 @@ public final class ExamController extends ScreenController {
     }
 
     private void refreshReview() {
+        if (reviewGrid == null) return;
         reviewGrid.getChildren().clear();
+        int startIdx = currentPage * PAGE_SIZE;
+        int endIdx = Math.min(startIdx + PAGE_SIZE, attempt.questions().size());
+
         for (int i = 0; i < attempt.questions().size(); i++) {
             StudentQuestionDto q = attempt.questions().get(i);
             Button b = new Button(String.valueOf(i + 1));
@@ -551,20 +655,46 @@ public final class ExamController extends ScreenController {
             b.setPrefSize(48, 42);
             b.setMaxSize(48, 42);
             b.getStyleClass().add("question-index-button");
-            if (i == index) {
-                b.getStyleClass().add("question-index-current");
-            } else if (answers.containsKey(q.id())) {
+
+            boolean isCurrentPage = (i >= startIdx && i < endIdx);
+            boolean isAnswered = answers.containsKey(q.id()) && !answers.get(q.id()).isBlank();
+
+            if (isAnswered) {
                 b.getStyleClass().add("question-index-answered");
             } else {
                 b.getStyleClass().add("question-index-unanswered");
             }
+            if (isCurrentPage) {
+                b.getStyleClass().add("question-index-current");
+            }
+
             int targetIndex = i;
-            b.setOnAction(e -> {
-                index = targetIndex;
-                render();
-            });
+            b.setOnAction(e -> jumpToQuestion(targetIndex));
             reviewGrid.getChildren().add(b);
         }
+    }
+
+    private void jumpToQuestion(int targetIndex) {
+        index = targetIndex;
+        int targetPage = targetIndex / PAGE_SIZE;
+        if (targetPage != currentPage) {
+            currentPage = targetPage;
+            render();
+        } else {
+            refreshReview();
+        }
+
+        javafx.application.Platform.runLater(() -> {
+            VBox card = questionCards.get(targetIndex);
+            if (card != null && questionsScrollPane != null) {
+                double cardY = card.getBoundsInParent().getMinY();
+                double containerHeight = questionsContainer.getBoundsInLocal().getHeight();
+                if (containerHeight > 0) {
+                    questionsScrollPane.setVvalue(Math.max(0.0, Math.min(1.0, cardY / containerHeight)));
+                }
+                card.setStyle("-fx-background-color: #f0fdf4; -fx-border-color: #4f46e5; -fx-border-width: 2px; -fx-border-radius: 8px; -fx-background-radius: 8px; -fx-padding: 14px 18px;");
+            }
+        });
     }
 
     @FXML

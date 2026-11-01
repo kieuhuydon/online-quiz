@@ -70,7 +70,7 @@ public final class TeacherMonitorController implements AutoCloseable {
         ViolationTableStyle.install(table,ExamSession::status);
     }
     private void column(String name,double width,Function<ExamSession,String> value) {
-        TableColumn<ExamSession,String> c=new TableColumn<>(name);c.setPrefWidth(width);
+        TableColumn<ExamSession,String> c=new TableColumn<>(name);c.setPrefWidth(width);c.setSortable(false);
         c.setCellValueFactory(v->new SimpleStringProperty(value.apply(v.getValue())));table.getColumns().add(c);
     }
     private void refresh() {

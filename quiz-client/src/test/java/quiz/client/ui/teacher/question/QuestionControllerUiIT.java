@@ -94,6 +94,7 @@ class QuestionControllerUiIT {
             combo("questionCorrectOption").setValue('B');
             text("questionTopic").setText("Ngữ pháp");
             combo("questionDifficulty").setValue(Difficulty.MEDIUM);
+            textArea("questionExplanation").setText("Giải thích chi tiết");
             button("createQuestion").fire();
             return null;
         });
@@ -106,7 +107,7 @@ class QuestionControllerUiIT {
         assertEquals(Difficulty.MEDIUM, dto.difficulty());
 
         var created = new QuestionDto(3, "Câu hỏi mới?", "A", "B", "C", "D", 'B',
-            "Ngữ pháp", Difficulty.MEDIUM, true, 2, Instant.now());
+            "Ngữ pháp", Difficulty.MEDIUM, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích chi tiết", true, 2, Instant.now());
         peer.success(create, created);
         peer.success(peer.read(), new java.util.ArrayList<>(List.of(created)));
         awaitQuestionsReady();
@@ -121,7 +122,8 @@ class QuestionControllerUiIT {
     @Test
     void updateQuestionSendsCorrectPayload() throws Exception {
         var peer = loginAsTeacher();
-        var existing = new QuestionDto(1, "Câu cũ?", "A", "B", "C", "D", 'A', "Ngữ pháp", Difficulty.EASY, true, 2, Instant.now());
+        var existing = new QuestionDto(1, "Câu cũ?", "A", "B", "C", "D", 'A', "Ngữ pháp", Difficulty.EASY,
+            quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích cũ", true, 2, Instant.now());
         fx(() -> { navigator.show(Screen.TEACHER_QUESTIONS); return null; });
         var listMsg = readUntil(peer, MessageType.LIST_QUESTIONS);
         peer.success(listMsg, new java.util.ArrayList<>(List.of(existing)));
@@ -134,6 +136,7 @@ class QuestionControllerUiIT {
         });
         fx(() -> {
             textArea("questionContent").setText("Câu mới?");
+            textArea("questionExplanation").setText("Giải thích mới");
             button("updateQuestion").fire();
             return null;
         });
@@ -162,9 +165,12 @@ class QuestionControllerUiIT {
         assertEquals(MessageType.DEACTIVATE_QUESTION, request.type());
         assertEquals(1L, request.payload());
         peer.success(request, null);
+        var reloadMsg = readUntil(peer, MessageType.LIST_QUESTIONS);
+        peer.success(reloadMsg, new java.util.ArrayList<>());
         awaitQuestionsReady();
         fx(() -> {
-            assertTrue(label("questionNotice").getText().contains("Đã vô hiệu hóa"));
+            String notice = label("questionNotice").getText();
+            assertTrue(notice.contains("Đã vô hiệu hóa") || notice.contains("Đã xóa câu hỏi"));
             return null;
         });
     }

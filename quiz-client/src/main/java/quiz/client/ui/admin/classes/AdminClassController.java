@@ -36,6 +36,7 @@ public final class AdminClassController extends ScreenController {
     @FXML private Button createClass, addMember, removeMember, refresh;
     @FXML private Button deleteClass, confirmDelete, cancelDelete;
     @FXML private VBox deleteConfirmation;
+    @FXML private TitledPane createPane;
     @FXML private Label deleteConfirmationText;
     private ClassDto deletionTarget;
     @FXML private Button selectAllStudents, clearStudents;
@@ -72,13 +73,26 @@ public final class AdminClassController extends ScreenController {
         column(students, "Trạng thái", row -> enrollmentNotes.getOrDefault(row.id(), ""));
         students.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         students.setPlaceholder(new Label("Chọn lớp để tải học viên có thể thêm."));
+        classes.setOnScroll(javafx.event.Event::consume);
+        members.setOnScroll(javafx.event.Event::consume);
+        students.setOnScroll(javafx.event.Event::consume);
         classes.getSelectionModel().selectedItemProperty().addListener((o, before, selected) -> loadMembers());
         members.getSelectionModel().selectedItemProperty().addListener((o, before, selected) -> controls());
         controls();
     }
 
+    @FXML private void toggleCreatePane() {
+        if (createPane != null) {
+            createPane.setExpanded(!createPane.isExpanded());
+            if (createPane.isExpanded() && className != null) {
+                className.requestFocus();
+            }
+        }
+    }
+
     private static <T> void column(TableView<T> table, String title, Function<T, String> text) {
         TableColumn<T, String> column = new TableColumn<>(title);
+        column.setSortable(false);
         column.setCellValueFactory(row -> new ReadOnlyStringWrapper(text.apply(row.getValue())));
         table.getColumns().add(column);
     }

@@ -169,6 +169,7 @@ public final class QuestionController extends ScreenController {
     private void addColumn(String title, double width, Function<QuestionDto, String> text) {
         TableColumn<QuestionDto, String> column = new TableColumn<>(title);
         column.setPrefWidth(width);
+        column.setSortable(false);
         column.setCellValueFactory(cell -> new ReadOnlyStringWrapper(text.apply(cell.getValue())));
         column.setCellFactory(ignored -> new TableCell<>() {
             @Override

@@ -50,6 +50,7 @@ public final class HistoryController extends ScreenController {
     private void addColumn(String title, Function<ResultDto, String> value, int width) {
         TableColumn<ResultDto, String> column = new TableColumn<>(title);
         column.setPrefWidth(width);
+        column.setSortable(false);
         column.setCellValueFactory(cell -> new SimpleStringProperty(value.apply(cell.getValue())));
         table.getColumns().add(column);
     }
@@ -57,6 +58,7 @@ public final class HistoryController extends ScreenController {
     private void addStatusColumn() {
         TableColumn<ResultDto, String> column = new TableColumn<>("Kết quả");
         column.setPrefWidth(115);
+        column.setSortable(false);
         column.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().passed() ? "ĐẠT" : "CHƯA ĐẠT"));
         column.setCellFactory(col -> new TableCell<>() {
             @Override
@@ -79,6 +81,7 @@ public final class HistoryController extends ScreenController {
     private void addReviewAction() {
         TableColumn<ResultDto, Void> column = new TableColumn<>("Chi tiết");
         column.setPrefWidth(135);
+        column.setSortable(false);
         column.setCellFactory(ignored -> new TableCell<>() {
             private final Button button = new Button("🔍 Xem đáp án");
             {
