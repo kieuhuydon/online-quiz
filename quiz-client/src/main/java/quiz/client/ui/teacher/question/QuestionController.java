@@ -771,26 +771,99 @@ public final class QuestionController extends ScreenController {
         updateControls();
     }
 
+        private String validateFormInputs(String content, String optA, String optB, String optC, String optD,
+                                      QuestionType type, String topic, Difficulty difficulty, String explanation) {
+        if (content == null || content.strip().isBlank()) {
+            return "Vui lòng nhập nội dung câu hỏi.";
+        }
+        String c = content.strip();
+        if (c.codePointCount(0, c.length()) > 1000) {
+            return "Nội dung câu hỏi quá dài (tối đa 1000 ký tự).";
+        }
+        if (type == QuestionType.FILL_BLANK) {
+            if (!c.contains("___")) {
+                return "Câu hỏi điền vào chỗ trống phải có đúng 3 ký tự gạch dưới (___) tại vị trí khuyết.";
+            }
+            boolean hasInvalidUnderscore = java.util.regex.Pattern.compile("(?<!_)_(?!_)|(?<!_)__(?!_)|_{4,}").matcher(c).find();
+            if (hasInvalidUnderscore) {
+                return "Vị trí chỗ trống chỉ chấp nhận đúng 3 ký tự '_' liên tiếp (___). Vui lòng không dùng 1, 2 hay nhiều hơn 3 dấu gạch dưới.";
+            }
+            if (c.split("___", -1).length - 1 != 1) {
+                return "Câu hỏi điền khuyết hiện chỉ hỗ trợ đúng 1 vị trí chỗ trống '___'.";
+            }
+            if (optA == null || optA.strip().isBlank()) {
+                return "Vui lòng nhập đáp án cần điền cho chỗ trống.";
+            }
+        } else if (type == QuestionType.SHORT_ANSWER) {
+            if (optA == null || optA.strip().isBlank()) {
+                return "Vui lòng nhập câu trả lời mẫu / chuẩn xác.";
+            }
+        } else if (type == QuestionType.MULTIPLE_CHOICE) {
+            if (optA == null || optA.strip().isBlank()
+                || optB == null || optB.strip().isBlank()
+                || optC == null || optC.strip().isBlank()
+                || optD == null || optD.strip().isBlank()) {
+                return "Trắc nghiệm yêu cầu điền đầy đủ cả 4 phương án A, B, C, D.";
+            }
+        }
+
+        if (topic == null || topic.strip().isBlank()) {
+            return "Vui lòng nhập chủ đề câu hỏi (ví dụ: Ngữ pháp, Từ vựng...).";
+        }
+        if (difficulty == null) {
+            return "Vui lòng chọn độ khó cho câu hỏi.";
+        }
+        if (explanation == null || explanation.strip().isBlank()) {
+            return "Vui lòng nhập giải thích chi tiết cho đáp án (bắt buộc).";
+        }
+        return null;
+    }
+
+    private void beginFormWrite(String message) {
+        writing = true;
+        updateControls();
+        show(formError, "", false);
+        show(questionNotice, message, false);
+    }
+
     @FXML
     private void create() {
         if (!isActive() || writing) {
             return;
         }
+        QuestionType selectedType = resolveQuestionType(questionType != null ? questionType.getValue() : null);
+        String explanationText = questionExplanation != null ? questionExplanation.getText() : null;
+
+        String validationError = validateFormInputs(
+            questionContent != null ? questionContent.getText() : null,
+            questionOptionA != null ? questionOptionA.getText() : null,
+            questionOptionB != null ? questionOptionB.getText() : null,
+            questionOptionC != null ? questionOptionC.getText() : null,
+            questionOptionD != null ? questionOptionD.getText() : null,
+            selectedType,
+            questionTopic != null ? questionTopic.getText() : null,
+            questionDifficulty != null ? questionDifficulty.getValue() : null,
+            explanationText
+        );
+        if (validationError != null) {
+            show(formError, "⚠️ " + validationError, true);
+            return;
+        }
+
         CreateQuestionDto input;
         try {
-            QuestionType selectedType = resolveQuestionType(questionType != null ? questionType.getValue() : null);
-            String explanationText = questionExplanation != null ? questionExplanation.getText() : null;
             input = ClientValidation.question(new CreateQuestionDto(
                 questionContent.getText(), questionOptionA.getText(), questionOptionB.getText(),
                 questionOptionC.getText(), questionOptionD.getText(),
-                questionCorrectOption.getValue() != null ? questionCorrectOption.getValue() : 'A', questionTopic.getText(), questionDifficulty.getValue(),
+                questionCorrectOption.getValue() != null ? questionCorrectOption.getValue() : 'A',
+                questionTopic.getText(), questionDifficulty.getValue(),
                 selectedType, explanationText));
         } catch (ApiException invalid) {
-            show(formError, "Kiểm tra thông tin: Vui lòng điền đủ câu hỏi, đáp án, giải thích (bắt buộc). Với chỗ trống chỉ dùng đúng 3 ký tự '_' (___).", true);
+            show(formError, "⚠️ Thông tin chưa hợp lệ. Vui lòng kiểm tra lại câu hỏi và đáp án.", true);
             return;
         }
         show(formError, "", false);
-        beginWrite("Đang tạo câu hỏi…");
+        beginFormWrite("Đang tạo câu hỏi…");
         fx.observe(api.createQuestion(input), () -> isActive(),
             this::questionCreated, this::showWriteFailure, this::finishWrite);
     }
@@ -800,21 +873,39 @@ public final class QuestionController extends ScreenController {
         if (!isActive() || writing || editTarget == null) {
             return;
         }
+        QuestionType updType = resolveQuestionType(questionType != null ? questionType.getValue() : null);
+        String updExplanation = questionExplanation != null ? questionExplanation.getText() : null;
+
+        String validationError = validateFormInputs(
+            questionContent != null ? questionContent.getText() : null,
+            questionOptionA != null ? questionOptionA.getText() : null,
+            questionOptionB != null ? questionOptionB.getText() : null,
+            questionOptionC != null ? questionOptionC.getText() : null,
+            questionOptionD != null ? questionOptionD.getText() : null,
+            updType,
+            questionTopic != null ? questionTopic.getText() : null,
+            questionDifficulty != null ? questionDifficulty.getValue() : null,
+            updExplanation
+        );
+        if (validationError != null) {
+            show(formError, "⚠️ " + validationError, true);
+            return;
+        }
+
         UpdateQuestionDto input;
         try {
-            QuestionType updType = resolveQuestionType(questionType != null ? questionType.getValue() : null);
-            String updExplanation = questionExplanation != null ? questionExplanation.getText() : null;
             input = ClientValidation.updateQuestion(new UpdateQuestionDto(
                 editTarget.id(), questionContent.getText(), questionOptionA.getText(),
                 questionOptionB.getText(), questionOptionC.getText(), questionOptionD.getText(),
-                questionCorrectOption.getValue() != null ? questionCorrectOption.getValue() : 'A', questionTopic.getText(), questionDifficulty.getValue(),
+                questionCorrectOption.getValue() != null ? questionCorrectOption.getValue() : 'A',
+                questionTopic.getText(), questionDifficulty.getValue(),
                 updType, updExplanation));
         } catch (ApiException invalid) {
-            show(formError, "Kiểm tra thông tin: Vui lòng điền đủ câu hỏi, đáp án, giải thích (bắt buộc). Với chỗ trống chỉ dùng đúng 3 ký tự '_' (___).", true);
+            show(formError, "⚠️ Thông tin cập nhật chưa hợp lệ. Vui lòng kiểm tra lại các trường.", true);
             return;
         }
         show(formError, "", false);
-        beginWrite("Đang cập nhật câu hỏi…");
+        beginFormWrite("Đang cập nhật câu hỏi…");
         fx.observe(api.updateQuestion(input), () -> isActive(),
             this::questionUpdated, this::showWriteFailure, this::finishWrite);
     }
@@ -833,34 +924,34 @@ public final class QuestionController extends ScreenController {
     }
 
     private void questionCreated(QuestionDto created) {
-        clearForm();
         writing = false;
+        clearForm();
+        questionForm.setVisible(false);
+        questionForm.setManaged(false);
+        if (prevQuestion != null) { prevQuestion.setVisible(false); prevQuestion.setManaged(false); }
+        if (nextQuestion != null) { nextQuestion.setVisible(false); nextQuestion.setManaged(false); }
         show(questionNotice, "Đã tạo câu hỏi “" + truncate(created.content(), 60) + "”.", false);
-        show(formError, "Đã tạo câu hỏi mới.", false);
+        show(formError, "", false);
         reload();
     }
 
     private void questionUpdated(QuestionDto updated) {
         writing = false;
-        // beginWrite() đã gọi cancelEdit() → đóng form; mở lại form chỉnh sửa
         editTarget = updated;
-        questionForm.setVisible(true);
-        questionForm.setManaged(true);
-        if (prevQuestion != null) { prevQuestion.setVisible(true); prevQuestion.setManaged(true); }
-        if (nextQuestion != null) { nextQuestion.setVisible(true); nextQuestion.setManaged(true); }
         fillForm(updated);
-        reload();
         show(questionNotice, "Đã cập nhật câu hỏi “" + truncate(updated.content(), 60) + "”.", false);
-        show(formError, "Đã cập nhật câu hỏi.", false);
+        show(formError, "", false);
+        reload();
     }
 
     private void showWriteFailure(Throwable failure) {
+        writing = false;
+        updateControls();
         String message = QuestionMessages.message(failure);
         show(questionNotice, message, true);
-        show(formError, message, true);
+        show(formError, "⚠️ " + message, true);
         if (failure instanceof ApiException business
             && business.errorCode() == ErrorCode.NOT_FOUND) {
-            writing = false;
             reload();
         }
     }

@@ -36,13 +36,6 @@ public record CreateQuestionDto(
              topic, difficulty, questionType, explanation, null);
     }
 
-    public CreateQuestionDto(String content, String optionA, String optionB, String optionC,
-                             String optionD, char correctOption, String topic, Difficulty difficulty,
-                             QuestionType questionType, String explanation) {
-        this(content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty,
-            questionType, explanation, null);
-    }
-
     public CreateQuestionDto(String content, String optionA, String optionB,
                              String optionC, String optionD, char correctOption,
                              String topic, Difficulty difficulty, QuestionType questionType) {

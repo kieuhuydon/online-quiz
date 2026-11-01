@@ -14,12 +14,12 @@ final class QuestionMessages {
         if (cause instanceof ApiException business) {
             return switch (business.errorCode()) {
                 case CONFLICT -> "Dữ liệu đã tồn tại hoặc câu hỏi không thể sửa tại trạng thái hiện tại.";
-                case VALIDATION_ERROR -> "Thông tin câu hỏi không hợp lệ. Kiểm tra lại các trường.";
+                case VALIDATION_ERROR -> "Thông tin câu hỏi không hợp lệ. Vui lòng kiểm tra lại các trường theo hướng dẫn.";
                 case FORBIDDEN -> "Bạn không có quyền quản lý câu hỏi.";
                 case UNAUTHENTICATED -> "Phiên làm việc đã kết thúc. Vui lòng đăng nhập lại.";
                 case NOT_FOUND -> "Câu hỏi không còn tồn tại. Đang tải lại danh sách.";
                 case SERVER_BUSY -> "Máy chủ đang bận. Hãy thử lại sau.";
-                case DATABASE_ERROR -> "Không thể xử lý dữ liệu. Hãy thử lại sau.";
+                case DATABASE_ERROR -> "Lỗi lưu trữ cơ sở dữ liệu. Vui lòng kiểm tra lại hoặc liên hệ quản trị viên.";
                 default -> "Không thể hoàn tất yêu cầu. Hãy tải lại danh sách để kiểm tra.";
             };
         }

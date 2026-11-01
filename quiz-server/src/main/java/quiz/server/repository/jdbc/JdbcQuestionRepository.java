@@ -114,6 +114,8 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             s.execute(addColumn);
             s.execute(addExplanation);
             s.execute(addAnswerKey);
+            try { s.execute("ALTER TABLE questions ALTER COLUMN correct_option DROP NOT NULL"); } catch (SQLException ignored) {}
+            try { s.execute("ALTER TABLE questions DROP CONSTRAINT IF EXISTS questions_correct_option_check"); } catch (SQLException ignored) {}
         } catch (SQLException ignored) {
             // Có thể xảy ra nếu user kết nối không phải superuser/owner; repository sẽ tự động dùng fallback mode.
         }

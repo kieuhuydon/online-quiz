@@ -52,6 +52,9 @@
                 <Label text="Các trường có dấu * là bắt buộc" styleClass="muted"/>
             </HBox>
 
+            <Label fx:id="formError" styleClass="notice,error-notice" visible="false" managed="false" maxWidth="Infinity" wrapText="true"
+                   style="-fx-background-color: #fef2f2; -fx-text-fill: #991b1b; -fx-border-color: #f87171; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8 12; -fx-font-size: 13px; -fx-font-weight: 500;"/>
+
             <HBox spacing="16" alignment="CENTER_LEFT">
                 <VBox spacing="4" prefWidth="240">
                     <Label text="Dạng câu hỏi *" styleClass="field-label"/>
@@ -107,8 +110,6 @@
                 <Label text="Giải thích đáp án *" styleClass="field-label"/>
                 <TextArea fx:id="questionExplanation" promptText="Nhập giải thích chi tiết vì sao đáp án này đúng, kiến thức ngữ pháp cần lưu ý..." wrapText="true" prefRowCount="2"/>
             </VBox>
-
-            <Label fx:id="formError" styleClass="notice,error-notice" visible="false" managed="false"/>
 
             <HBox spacing="10" alignment="CENTER_RIGHT">
                 <Button fx:id="cancelEdit" text="Thoát" onAction="#cancelEdit" styleClass="secondary-button"/>

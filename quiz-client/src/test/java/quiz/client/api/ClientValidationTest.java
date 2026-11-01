@@ -67,13 +67,14 @@ class ClientValidationTest {
         assertEquals("", mcq.answerKey());
     }
 
-    @Test void fillBlankRequiresOneGapAndOneWordAnswer() {
+    @Test void fillBlankRequiresOneGapAndAllowsMultiWordAnswer() {
         assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
             "She ___ and he ___ every day.", "works", "-", "-", "-", 'A', "English", Difficulty.EASY,
             quiz.common.enums.QuestionType.FILL_BLANK, "Use the present simple.")));
-        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+        var multiWord = ClientValidation.question(new CreateQuestionDto(
             "They ___ dinner.", "are having", "-", "-", "-", 'A', "English", Difficulty.EASY,
-            quiz.common.enums.QuestionType.FILL_BLANK, "Use the present continuous.")));
+            quiz.common.enums.QuestionType.FILL_BLANK, "Use the present continuous."));
+        assertEquals("are having", multiWord.answerKey());
     }
 
     @Test void questionValidationNormalizesAndLimits() {
@@ -132,3 +133,4 @@ class ClientValidationTest {
         return new CreateAccountDto("user", password, "User", email, role);
     }
 }
+
