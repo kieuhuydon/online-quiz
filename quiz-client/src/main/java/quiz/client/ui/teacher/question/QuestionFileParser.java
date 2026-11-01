@@ -10,15 +10,18 @@ import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
+import quiz.client.api.ApiException;
 import quiz.client.api.ClientValidation;
 import quiz.common.dto.CreateQuestionDto;
 import quiz.common.enums.Difficulty;
+import quiz.common.enums.QuestionType;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -199,26 +202,42 @@ public final class QuestionFileParser {
 
     private QuestionFileParser() {}
 
+    /** Một lỗi phân tích kèm theo số dòng và trường phát sinh. */
+    public record ParseError(int lineNumber, String field, String message) {}
+
+    /** Kết quả phân tích có cấu trúc: câu hỏi hợp lệ + lỗi/cảnh báo theo dòng. */
+    public record ParseResult(List<CreateQuestionDto> valid, List<ParseError> errors) {}
+
     /**
-     * Phân tích tệp bất kỳ (.docx, .pdf, .txt, .csv) thành danh sách CreateQuestionDto.
+     * Phân tích tệp bất kỳ (.docx, .pdf, .txt, .csv) thành kết quả có cấu trúc,
+     * bao gồm cả các lỗi theo số dòng để hiển thị cho người dùng trước khi nhập.
      */
-    public static List<CreateQuestionDto> parse(File file) throws Exception {
+    public static ParseResult parseWithResult(File file) throws Exception {
         if (file == null || !file.exists()) {
             throw new IllegalArgumentException("Tệp không tồn tại.");
         }
         String fileName = file.getName().toLowerCase(Locale.ROOT);
+        List<CreateQuestionDto> valid = new ArrayList<>();
+        List<ParseError> errors = new ArrayList<>();
         if (fileName.endsWith(".docx")) {
-            return parseDocx(file);
+            valid = parseDocx(file);
         } else if (fileName.endsWith(".pdf")) {
-            return parsePdf(file);
+            valid = parsePdf(file);
         } else if (fileName.endsWith(".csv")) {
-            return parseCsv(file);
+            return parseCsvWithResult(file);
         } else {
-            // Mặc định xử lý dạng văn bản (txt và các tệp text khác)
-            return parsePlainText(file);
+            valid = parsePlainText(file);
         }
+        return new ParseResult(valid, errors);
     }
 
+    /**
+     * Phân tích tệp bất kỳ (.docx, .pdf, .txt, .csv) thành danh sách CreateQuestionDto.
+     * Giữ lại để tương thích; các lỗi phân tích sẽ bị bỏ qua (dùng parseWithResult để xem lỗi).
+     */
+    public static List<CreateQuestionDto> parse(File file) throws Exception {
+        return parseWithResult(file).valid();
+    }
     // ==========================================
     // 1. Phân tích tệp DOCX (Word)
     // ==========================================
@@ -307,59 +326,268 @@ public final class QuestionFileParser {
     }
 
     // ==========================================
-    // 4. Phân tích tệp CSV
+    // 4. Phân tích tệp CSV (header-driven, báo lỗi theo dòng)
     // ==========================================
+    private static ParseResult parseCsvWithResult(File file) throws Exception {
+        List<CreateQuestionDto> valid = new ArrayList<>();
+        List<ParseError> errors = new ArrayList<>();
+        String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+        // Bỏ BOM UTF-8 (Excel thường ghi BOM làm hỏng nhận diện header)
+        if (content.startsWith("\uFEFF")) {
+            content = content.substring(1);
+        }
+        List<String[]> rawRows = parseCsvLines(content, detectDelimiter(content));
+        // Bỏ dòng trống và dòng comment trước khi xác định header
+        List<String[]> rows = new ArrayList<>();
+        int firstDataLine = 0;
+        for (int i = 0; i < rawRows.size(); i++) {
+            String[] parts = rawRows.get(i);
+            if (isBlankRow(parts)) {
+                continue;
+            }
+            String first = parts.length > 0 ? cleanCsvField(parts[0]).trim() : "";
+            if (first.startsWith("#") || first.startsWith("//")) {
+                continue;
+            }
+            rows.add(parts);
+            if (rows.size() == 1) {
+                firstDataLine = i + 1; // số thứ tự dòng thực tế trong file
+            }
+        }
+        if (rows.isEmpty()) {
+            return new ParseResult(valid, errors);
+        }
+        String[] header = rows.get(0);
+        boolean hasHeader = isHeaderRow(header);
+        int startIdx = hasHeader ? 1 : 0;
+        Map<String, Integer> colIndex = new LinkedHashMap<>();
+        if (hasHeader) {
+            for (int i = 0; i < header.length; i++) {
+                colIndex.put(normalizeHeader(cleanCsvField(header[i])), i);
+            }
+        }
+        for (int r = startIdx; r < rows.size(); r++) {
+            String[] parts = rows.get(r);
+            try {
+                CreateQuestionDto dto = buildCsvQuestion(parts, colIndex, hasHeader, firstDataLine + r);
+                if (dto != null) {
+                    valid.add(dto);
+                }
+            } catch (CsvParseFail ex) {
+                errors.add(new ParseError(ex.lineNumber(), ex.field(), ex.getMessage()));
+            }
+        }
+        return new ParseResult(valid, errors);
+    }
+
     private static List<CreateQuestionDto> parseCsv(File file) throws Exception {
-        List<CreateQuestionDto> results = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith("#")) continue;
+        return parseCsvWithResult(file).valid();
+    }
 
-                String[] parts = CSV_SPLIT.split(line);
-                if (parts.length >= 6) {
-                    String content = cleanCsvField(parts[0]);
-                    if (content.equalsIgnoreCase("content") || content.equalsIgnoreCase("nội dung")
-                        || content.equalsIgnoreCase("câu hỏi") || content.equalsIgnoreCase("question")) {
-                        continue; // Bỏ qua dòng tiêu đề CSV
-                    }
-                    String a = cleanCsvField(parts[1]);
-                    String b = cleanCsvField(parts[2]);
-                    String c = cleanCsvField(parts[3]);
-                    String d = cleanCsvField(parts[4]);
-                    String correctStr = cleanCsvField(parts[5]).toUpperCase(Locale.ROOT);
-                    char correct = !correctStr.isEmpty() ? correctStr.charAt(0) : 'A';
-                    if (correct < 'A' || correct > 'D') correct = 'A';
-
-                    content = normalizeBlanks(content);
-
-                    String topic = parts.length > 6 ? cleanCsvField(parts[6]) : null;
-                    if (topic == null || topic.isBlank() || topic.equalsIgnoreCase("Tổng hợp")) {
-                        topic = detectEnglishTopic(content + " " + a + " " + b + " " + c + " " + d);
-                    }
-
-                    Difficulty diff = Difficulty.MEDIUM;
-                    if (parts.length > 7) {
-                        try {
-                            diff = Difficulty.valueOf(cleanCsvField(parts[7]).toUpperCase(Locale.ROOT));
-                        } catch (Exception ignored) {}
+    /** Phân tích chuỗi CSV thành các hàng, xử lý đúng dấu ngoặc kép ("", field nhiều dòng). */
+    private static List<String[]> parseCsvLines(String content, char delimiter) {
+        List<String[]> rows = new ArrayList<>();
+        List<String> current = new ArrayList<>();
+        StringBuilder field = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < content.length(); i++) {
+            char ch = content.charAt(i);
+            if (inQuotes) {
+                if (ch == '"') {
+                    if (i + 1 < content.length() && content.charAt(i + 1) == '"') {
+                        field.append('"');
+                        i++;
                     } else {
-                        diff = detectDifficulty(content, a, b, c, d);
+                        inQuotes = false;
                     }
-
-                    try {
-                        quiz.common.enums.QuestionType csvType = detectQuestionType(content, a, b, c, d);
-                        String explanation = parts.length > 8 ? cleanCsvField(parts[8]) : null;
-                        if (explanation == null || explanation.isBlank()) {
-                            explanation = "Giải thích chi tiết cho câu hỏi.";
-                        }
-                        results.add(ClientValidation.question(new CreateQuestionDto(content, a, b, c, d, correct, topic, diff, csvType, explanation)));
-                    } catch (Exception ignored) {}
+                } else {
+                    field.append(ch);
+                }
+            } else {
+                if (ch == '"') {
+                    inQuotes = true;
+                } else if (ch == delimiter) {
+                    current.add(field.toString());
+                    field.setLength(0);
+                } else if (ch == '\r') {
+                    // bỏ qua (xử lý ở \n)
+                } else if (ch == '\n') {
+                    current.add(field.toString());
+                    field.setLength(0);
+                    rows.add(current.toArray(new String[0]));
+                    current = new ArrayList<>();
+                } else {
+                    field.append(ch);
                 }
             }
         }
-        return results;
+        if (field.length() > 0 || !current.isEmpty()) {
+            current.add(field.toString());
+            rows.add(current.toArray(new String[0]));
+        }
+        return rows;
+    }
+
+    private static char detectDelimiter(String content) {
+        int newline = content.indexOf('\n');
+        String first = newline < 0 ? content : content.substring(0, newline);
+        long semi = first.chars().filter(ch -> ch == ';').count();
+        long comma = first.chars().filter(ch -> ch == ',').count();
+        long tab = first.chars().filter(ch -> ch == '\t').count();
+        if (tab > 0 && tab >= semi && tab >= comma) return '\t';
+        return semi > comma ? ';' : ',';
+    }
+
+    private static boolean isHeaderRow(String[] header) {
+        for (String h : header) {
+            String n = normalizeHeader(h);
+            if (n.equals("content") || n.equals("nội dung") || n.equals("câu hỏi")
+                || n.equals("question") || n.equals("type") || n.equals("loại")
+                || n.equals("dạng") || n.equals("correct") || n.equals("đáp án đúng")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String normalizeHeader(String h) {
+        if (h == null) return "";
+        String s = h.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+        return switch (s) {
+            case "nội dung", "câu hỏi", "question" -> "content";
+            case "đáp án a", "option a", "a" -> "optiona";
+            case "đáp án b", "option b", "b" -> "optionb";
+            case "đáp án c", "option c", "c" -> "optionc";
+            case "đáp án d", "option d", "d" -> "optiond";
+            case "đáp án đúng", "correct", "answer", "key", "đáp án" -> "correct";
+            case "chủ đề", "topic", "bài học", "chuyên đề", "lesson" -> "topic";
+            case "độ khó", "difficulty", "mức độ" -> "difficulty";
+            case "giải thích", "lời giải", "hướng dẫn", "explanation", "explain" -> "explanation";
+            case "loại", "dạng", "question type", "type" -> "type";
+            default -> s;
+        };
+    }
+
+    private static boolean isBlankRow(String[] parts) {
+        for (String p : parts) {
+            if (p != null && !p.isBlank()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Xây dựng CreateQuestionDto từ một hàng CSV. Ném CsvParseFail nếu hàng đó lỗi
+     * (bị bỏ qua khi nhập, hiển thị lỗi theo dòng trong preview).
+     */
+    private static CreateQuestionDto buildCsvQuestion(String[] parts, Map<String, Integer> colIndex,
+                                                      boolean hasHeader, int lineNumber) throws CsvParseFail {
+        java.util.function.Function<String, String> get = name -> {
+            Integer idx = colIndex.get(name);
+            if (idx == null || idx >= parts.length) {
+                return null;
+            }
+            return cleanCsvField(parts[idx]);
+        };
+        java.util.function.IntFunction<String> pos = i -> i < parts.length ? cleanCsvField(parts[i]) : null;
+
+        String content;
+        String correctRaw;
+        if (hasHeader) {
+            content = get.apply("content");
+            correctRaw = get.apply("correct");
+        } else {
+            // Tương thích CSV cũ không header: cột 1 content, 2 A, 3 B, 4 C, 5 D, 6 correct, ...
+            content = pos.apply(0);
+            correctRaw = pos.apply(5);
+        }
+        if (content == null || content.isBlank()) {
+            throw new CsvParseFail(lineNumber, "content", "Thiếu nội dung câu hỏi.");
+        }
+        content = normalizeBlanks(content);
+
+        String typeRaw = hasHeader ? get.apply("type") : null;
+        QuestionType type;
+        if (typeRaw != null && !typeRaw.isBlank()) {
+            QuestionType parsed = parseQuestionType(typeRaw);
+            if (parsed == null) {
+                throw new CsvParseFail(lineNumber, "type", "Loại câu hỏi không hợp lệ: " + typeRaw);
+            }
+            type = parsed;
+        } else {
+            String a = hasHeader ? get.apply("optiona") : pos.apply(1);
+            String b = hasHeader ? get.apply("optionb") : pos.apply(2);
+            String c = hasHeader ? get.apply("optionc") : pos.apply(3);
+            String d = hasHeader ? get.apply("optiond") : pos.apply(4);
+            type = detectQuestionType(content, a, b, c, d);
+        }
+
+        String a = hasHeader ? get.apply("optiona") : pos.apply(1);
+        String b = hasHeader ? get.apply("optionb") : pos.apply(2);
+        String c = hasHeader ? get.apply("optionc") : pos.apply(3);
+        String d = hasHeader ? get.apply("optiond") : pos.apply(4);
+
+        // Chuẩn hóa đáp án đúng; KHÔNG fallback về "A" nếu thiếu/sai.
+        char correct;
+        if (correctRaw == null || correctRaw.isBlank()) {
+            throw new CsvParseFail(lineNumber, "correct", "Thiếu đáp án đúng.");
+        }
+        String cu = correctRaw.trim().toUpperCase(Locale.ROOT);
+        if (type == QuestionType.TRUE_FALSE) {
+            switch (cu) {
+                case "TRUE", "A", "ĐÚNG" -> correct = 'A';
+                case "FALSE", "B", "SAI" -> correct = 'B';
+                default -> throw new CsvParseFail(lineNumber, "correct", "Đáp án đúng phải là True/False/Đúng/Sai/A/B.");
+            }
+        } else {
+            if (cu.length() != 1 || cu.charAt(0) < 'A' || cu.charAt(0) > 'D') {
+                throw new CsvParseFail(lineNumber, "correct", "Đáp án đúng phải là A, B, C hoặc D.");
+            }
+            correct = cu.charAt(0);
+        }
+
+        // MULTIPLE_CHOICE bắt buộc đủ 4 đáp án.
+        if (type == QuestionType.MULTIPLE_CHOICE) {
+            if (a == null || a.isBlank() || b == null || b.isBlank()
+                || c == null || c.isBlank() || d == null || d.isBlank()) {
+                throw new CsvParseFail(lineNumber, "options", "Trắc nghiệm phải đủ 4 đáp án A, B, C, D.");
+            }
+        }
+
+        String topic = hasHeader ? get.apply("topic") : (parts.length > 6 ? pos.apply(6) : null);
+        if (topic == null || topic.isBlank() || topic.equalsIgnoreCase("Tổng hợp")) {
+            topic = detectEnglishTopic(content + " " + (a == null ? "" : a) + " " + (b == null ? "" : b)
+                + " " + (c == null ? "" : c) + " " + (d == null ? "" : d));
+        }
+
+        Difficulty diff;
+        String diffRaw = hasHeader ? get.apply("difficulty") : (parts.length > 7 ? pos.apply(7) : null);
+        if (diffRaw != null && !diffRaw.isBlank()) {
+            Difficulty parsed = parseDifficulty(diffRaw);
+            if (parsed == null) {
+                throw new CsvParseFail(lineNumber, "difficulty", "Độ khó không hợp lệ: " + diffRaw);
+            }
+            diff = parsed;
+        } else {
+            diff = detectDifficulty(content, a == null ? "" : a, b == null ? "" : b,
+                c == null ? "" : c, d == null ? "" : d);
+        }
+
+        // KHÔNG bịa giải thích nếu thiếu; báo lỗi theo dòng để người dùng sửa trước khi nhập.
+        String explanation = hasHeader ? get.apply("explanation") : (parts.length > 8 ? pos.apply(8) : null);
+        if (explanation == null || explanation.isBlank()) {
+            throw new CsvParseFail(lineNumber, "explanation", "Thiếu giải thích.");
+        }
+
+        try {
+            return ClientValidation.question(
+                new CreateQuestionDto(content,
+                    a == null ? "" : a, b == null ? "" : b, c == null ? "" : c, d == null ? "" : d,
+                    correct, topic, diff, type, explanation, ""));
+        } catch (ApiException ex) {
+            throw new CsvParseFail(lineNumber, "content", ex.getMessage() == null ? "Dữ liệu không hợp lệ." : ex.getMessage());
+        }
     }
 
     private static String cleanCsvField(String field) {
@@ -826,6 +1054,18 @@ public final class QuestionFileParser {
         private static String cleanOptionText(String opt) {
         if (opt == null) return "";
         return opt.trim().replaceAll("^[\\.\\:\\-\\)]\\s*", "");
+    }
+
+    private static final class CsvParseFail extends RuntimeException {
+        private final int lineNumber;
+        private final String field;
+        CsvParseFail(int lineNumber, String field, String message) {
+            super(message);
+            this.lineNumber = lineNumber;
+            this.field = field;
+        }
+        int lineNumber() { return lineNumber; }
+        String field() { return field; }
     }
 
     private static class QuestionBlock {

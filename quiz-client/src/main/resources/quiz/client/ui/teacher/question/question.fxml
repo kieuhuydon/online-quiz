@@ -23,6 +23,7 @@
                 <ProgressIndicator fx:id="questionProgress" prefWidth="26" prefHeight="26" maxWidth="26" maxHeight="26" visible="false" managed="false"/>
                 <Button fx:id="refreshQuestions" text="🔄 Tải lại" onAction="#reload" styleClass="secondary-button"/>
                 <Button fx:id="importQuestions" text="📥 Nhập từ file" onAction="#importQuestions" styleClass="secondary-button"/>
+                <Button fx:id="downloadSampleCsv" text="📄 Tải mẫu CSV" onAction="#downloadSampleCsv" styleClass="secondary-button"/>
                 <Button fx:id="newQuestion" text="➕ Thêm mới" onAction="#newQuestion" styleClass="primary-button"/>
                 <Button fx:id="deleteSelectedQuestions" text="🗑️ Xóa đã chọn" onAction="#deleteSelectedQuestions" styleClass="danger-button" visible="false" managed="false"/>
             </HBox>

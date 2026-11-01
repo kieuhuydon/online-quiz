@@ -25,6 +25,15 @@ public record CreateQuestionDto(
         if (questionType == null) {
             questionType = QuestionType.MULTIPLE_CHOICE;
         }
+        answerKey = answerKey == null ? "" : answerKey.strip();
+    }
+
+    public CreateQuestionDto(String content, String optionA, String optionB,
+                             String optionC, String optionD, char correctOption,
+                             String topic, Difficulty difficulty, QuestionType questionType,
+                             String explanation) {
+        this(content, optionA, optionB, optionC, optionD, correctOption,
+             topic, difficulty, questionType, explanation, null);
     }
 
     public CreateQuestionDto(String content, String optionA, String optionB, String optionC,
@@ -38,13 +47,13 @@ public record CreateQuestionDto(
                              String optionC, String optionD, char correctOption,
                              String topic, Difficulty difficulty, QuestionType questionType) {
         this(content, optionA, optionB, optionC, optionD, correctOption,
-             topic, difficulty, questionType, null);
+             topic, difficulty, questionType, null, null);
     }
 
     public CreateQuestionDto(String content, String optionA, String optionB,
                              String optionC, String optionD, char correctOption,
                              String topic, Difficulty difficulty) {
         this(content, optionA, optionB, optionC, optionD, correctOption,
-             topic, difficulty, QuestionType.MULTIPLE_CHOICE, null);
+             topic, difficulty, QuestionType.MULTIPLE_CHOICE, null, null);
     }
 }

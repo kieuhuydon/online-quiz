@@ -238,6 +238,24 @@ public final class QuestionService {
         }
     }
 
+    /**
+     * Resolves the stored answer key. Fill-in-the-blank / short-answer questions are graded
+     * against option A (the expected answer text); true/false and multiple choice are graded
+     * against the correct option letter (A/B/C/D). An explicitly supplied answerKey always wins.
+     */
+    private static String resolveAnswerKey(String optionA, String answerKey, char correctOption,
+                                           QuestionType type) {
+        String key = answerKey == null ? "" : answerKey.strip();
+        if (!key.isBlank()) {
+            return key;
+        }
+        if (type == QuestionType.FILL_BLANK || type == QuestionType.SHORT_ANSWER) {
+            return optionA == null ? "" : optionA.strip();
+        }
+        char c = Character.toUpperCase(correctOption);
+        return (c >= 'A' && c <= 'D') ? String.valueOf(c) : "A";
+    }
+
     private static char normalizeCorrectOption(char correctOption) {
         char upper = Character.toUpperCase(correctOption);
         if (upper != 'A' && upper != 'B' && upper != 'C' && upper != 'D') {
