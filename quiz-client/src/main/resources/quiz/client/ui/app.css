@@ -838,28 +838,32 @@
     -fx-font-size: 13px;
     -fx-background-radius: 8;
     -fx-border-radius: 8;
-}
-
-.question-index-current {
-    -fx-background-color: #4f46e5;
-    -fx-text-fill: #ffffff;
-    -fx-border-color: #3730a3;
-    -fx-border-radius: 8;
-    -fx-border-width: 2;
+    -fx-cursor: hand;
 }
 
 .question-index-answered {
-    -fx-background-color: #dbeafe;
-    -fx-text-fill: #1d4ed8;
-    -fx-border-color: #93c5fd;
+    -fx-background-color: #dcfce7;
+    -fx-text-fill: #15803d;
+    -fx-border-color: #86efac;
     -fx-border-radius: 8;
+    -fx-font-weight: bold;
+}
+
+.question-index-answered:hover {
+    -fx-background-color: #bbf7d0;
+    -fx-border-color: #4ade80;
 }
 
 .question-index-unanswered {
     -fx-background-color: #f8fafc;
-    -fx-text-fill: #475569;
+    -fx-text-fill: #64748b;
     -fx-border-color: #cbd5e1;
     -fx-border-radius: 8;
+}
+
+.question-index-unanswered:hover {
+    -fx-background-color: #f1f5f9;
+    -fx-border-color: #94a3b8;
 }
 
 .preview-badge {

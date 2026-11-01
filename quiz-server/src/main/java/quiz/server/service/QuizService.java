@@ -241,6 +241,10 @@ public final class QuizService {
             if (existing.size() != questionIds.size()) {
                 throw new ValidationException("Một hoặc nhiều câu hỏi không tồn tại trong ngân hàng câu hỏi");
             }
+            boolean hasInactive = existing.stream().anyMatch(q -> !q.active());
+            if (hasInactive) {
+                throw new ValidationException("Không thể thêm câu hỏi đã bị vô hiệu hóa vào đề kiểm tra");
+            }
         }
         quizzes.setQuestions(quizId, questionIds != null ? questionIds : List.of());
     }

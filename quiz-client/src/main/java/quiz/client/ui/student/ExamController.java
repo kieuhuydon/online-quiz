@@ -70,15 +70,12 @@ public final class ExamController extends ScreenController {
     private static final int PAGE_SIZE = 10;
     private int currentPage = 0;
     private final Map<Integer, VBox> questionCards = new HashMap<>();
-    private boolean programmaticScroll;
-    private final PauseTransition programmaticScrollReset = new PauseTransition(Duration.millis(250));
 
     private final Map<Long, String> answers = new HashMap<>();
     private Timeline countdown;
     private final quiz.client.anticheat.StudentAntiCheatService monitoring = new quiz.client.anticheat.StudentAntiCheatService();
     private double deductedScore;
     private long seconds;
-    private int index;
 
     // Chốt chặn trùng lặp nộp bài (NFR-03): dùng chung cho Manual Submit, Auto Submit Timer, và Force Submit
     private final AtomicBoolean isSubmitting = new AtomicBoolean(false);
@@ -141,12 +138,6 @@ public final class ExamController extends ScreenController {
     @FXML
     private void initialize() {
         title.setText(attempt.quizTitle());
-        questionsScrollPane.vvalueProperty().addListener((obs, oldValue, newValue) -> {
-            if (programmaticScroll) return;
-            Platform.runLater(() -> {
-                if (!programmaticScroll) syncCurrentQuestionFromViewport();
-            });
-        });
         render();
         refreshReview();
     }
@@ -451,12 +442,6 @@ public final class ExamController extends ScreenController {
     // CÁC HÀM ĐIỀU HƯỚNG & LÀM BÀI THI (10 CÂU MỖI TRANG)
     // ==========================================
 
-    private StudentQuestionDto current() {
-        if (attempt.questions().isEmpty()) return null;
-        int safeIndex = Math.min(Math.max(0, index), attempt.questions().size() - 1);
-        return attempt.questions().get(safeIndex);
-    }
-
     private void render() {
         if (attempt.questions().isEmpty()) {
             if (questionsContainer != null) {
@@ -504,7 +489,6 @@ public final class ExamController extends ScreenController {
         VBox card = new VBox(10);
         card.setId("question-card-" + qIndex);
         card.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 1.5px; -fx-border-radius: 8px; -fx-background-radius: 8px; -fx-padding: 14px 18px;");
-        card.setOnMousePressed(event -> setCurrentQuestion(qIndex));
 
         Label lblPos = new Label("Câu " + (qIndex + 1) + " / " + total);
         lblPos.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #4338ca;");
@@ -578,10 +562,20 @@ public final class ExamController extends ScreenController {
         } else {
             String[] values = saved == null ? new String[0] : saved.split("\\|", -1);
             int count = 1;
+
+            // Hướng dẫn sinh viên điền đáp án đối với câu hỏi điền khuyết / trả lời ngắn có nhiều ô trống
+            Label guideLabel = new Label("💡 Hướng dẫn điền đáp án: Với câu hỏi có nhiều ô trống, hãy điền các đáp án cách nhau bằng dấu '|' (Ví dụ: đáp án 1 | đáp án 2)");
+            guideLabel.setWrapText(true);
+            guideLabel.setMaxWidth(Double.MAX_VALUE);
+            guideLabel.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #4338ca; -fx-background-color: #eef2ff; -fx-padding: 6 10; -fx-background-radius: 6; -fx-border-color: #c7d2fe; -fx-border-radius: 6;");
+            answerBox.getChildren().add(guideLabel);
+
             List<TextField> fields = new ArrayList<>();
             for (int k = 0; k < count; k++) {
                 TextField field = new TextField(k < values.length ? values[k].strip() : "");
-                field.setPromptText(q.questionType() == QuestionType.FILL_BLANK ? "Nhập đáp án cần điền" : "Nhập câu trả lời ngắn");
+                field.setPromptText(q.questionType() == QuestionType.FILL_BLANK
+                    ? "Nhập đáp án cần điền (Ví dụ: đáp án 1 | đáp án 2)"
+                    : "Nhập câu trả lời ngắn (Ví dụ: đáp án 1 | đáp án 2)");
                 field.setStyle("-fx-font-size: 13.5px; -fx-padding: 7 10;");
                 fields.add(field);
                 answerBox.getChildren().add(field);
@@ -602,12 +596,6 @@ public final class ExamController extends ScreenController {
 
     private void saveAnswer(long questionId, String answer) {
         answers.put(questionId, answer);
-        for (int i = 0; i < attempt.questions().size(); i++) {
-            if (attempt.questions().get(i).id() == questionId) {
-                index = i;
-                break;
-            }
-        }
         refreshReview();
         if (saveStatus != null) saveStatus.setText("Đang lưu câu trả lời...");
         fx.observe(api.saveAnswer(attempt.attemptId(), questionId, answer), this::isActive,
@@ -624,7 +612,6 @@ public final class ExamController extends ScreenController {
     private void previous() {
         if (currentPage > 0) {
             currentPage--;
-            index = currentPage * PAGE_SIZE;
             render();
             scrollToTopQuestions();
         }
@@ -635,7 +622,6 @@ public final class ExamController extends ScreenController {
         int totalPages = Math.max(1, (int) Math.ceil((double) attempt.questions().size() / PAGE_SIZE));
         if (currentPage < totalPages - 1) {
             currentPage++;
-            index = currentPage * PAGE_SIZE;
             render();
             scrollToTopQuestions();
         }
@@ -644,7 +630,7 @@ public final class ExamController extends ScreenController {
     private void scrollToTopQuestions() {
         javafx.application.Platform.runLater(() -> {
             if (questionsScrollPane != null) {
-                setProgrammaticScrollValue(questionsScrollPane.getVmin());
+                questionsScrollPane.setVvalue(0.0);
             }
         });
     }
@@ -671,11 +657,8 @@ public final class ExamController extends ScreenController {
             b.setMaxSize(48, 42);
             b.getStyleClass().add("question-index-button");
 
-            boolean isCurrent = i == index;
             boolean isAnswered = answers.containsKey(q.id()) && !answers.get(q.id()).isBlank();
-
-            b.getStyleClass().add(isCurrent ? "question-index-current"
-                : isAnswered ? "question-index-answered" : "question-index-unanswered");
+            b.getStyleClass().add(isAnswered ? "question-index-answered" : "question-index-unanswered");
 
             int targetIndex = i;
             b.setOnAction(e -> jumpToQuestion(targetIndex));
@@ -684,74 +667,51 @@ public final class ExamController extends ScreenController {
     }
 
     private void jumpToQuestion(int targetIndex) {
-        index = targetIndex;
+        if (targetIndex < 0 || targetIndex >= attempt.questions().size()) return;
         int targetPage = targetIndex / PAGE_SIZE;
         if (targetPage != currentPage) {
             currentPage = targetPage;
             render();
-        } else {
-            refreshReview();
         }
         scrollToQuestion(targetIndex);
     }
 
     private void scrollToQuestion(int targetIndex) {
         Platform.runLater(() -> {
-            VBox card = questionCards.get(targetIndex);
-            if (card == null || questionsScrollPane == null || questionsContainer == null) return;
-            questionsScrollPane.applyCss();
-            questionsScrollPane.layout();
-            questionsContainer.applyCss();
-            questionsContainer.layout();
-            double contentHeight = questionsContainer.getLayoutBounds().getHeight();
-            double viewportHeight = questionsScrollPane.getViewportBounds().getHeight();
-            double scrollableHeight = contentHeight - viewportHeight;
-            if (scrollableHeight <= 0) {
-                setProgrammaticScrollValue(questionsScrollPane.getVmin());
-                return;
-            }
-            double cardTop = card.getBoundsInParent().getMinY();
-            double fraction = Math.max(0.0, Math.min(1.0, cardTop / scrollableHeight));
-            double targetValue = questionsScrollPane.getVmin()
-                + fraction * (questionsScrollPane.getVmax() - questionsScrollPane.getVmin());
-            setProgrammaticScrollValue(targetValue);
-            setCurrentQuestion(targetIndex);
+            Platform.runLater(() -> {
+                VBox card = questionCards.get(targetIndex);
+                if (card == null || questionsScrollPane == null || questionsContainer == null) return;
+
+                questionsContainer.applyCss();
+                questionsContainer.layout();
+                questionsScrollPane.applyCss();
+                questionsScrollPane.layout();
+
+                double contentHeight = questionsContainer.getBoundsInLocal().getHeight();
+                double viewportHeight = questionsScrollPane.getViewportBounds().getHeight();
+                if (viewportHeight <= 0) {
+                    viewportHeight = questionsScrollPane.getHeight();
+                }
+                double scrollableHeight = contentHeight - viewportHeight;
+                if (scrollableHeight > 0) {
+                    double cardTop = card.getBoundsInParent().getMinY();
+                    double targetY = Math.max(0.0, cardTop - 12);
+                    double fraction = Math.max(0.0, Math.min(1.0, targetY / scrollableHeight));
+                    questionsScrollPane.setVvalue(fraction);
+                } else {
+                    questionsScrollPane.setVvalue(0.0);
+                }
+                highlightQuestionCard(card);
+            });
         });
     }
 
-    private void setProgrammaticScrollValue(double value) {
-        programmaticScroll = true;
-        programmaticScrollReset.stop();
-        programmaticScrollReset.setOnFinished(event -> programmaticScroll = false);
-        questionsScrollPane.setVvalue(value);
-        programmaticScrollReset.playFromStart();
-    }
-
-    private void setCurrentQuestion(int targetIndex) {
-        if (targetIndex < 0 || targetIndex >= attempt.questions().size()) return;
-        if (index != targetIndex) {
-            index = targetIndex;
-            refreshReview();
-        }
-    }
-
-    private void syncCurrentQuestionFromViewport() {
-        if (questionsScrollPane == null || questionsContainer == null || questionCards.isEmpty()) return;
-        javafx.geometry.Bounds viewport = questionsScrollPane.localToScene(questionsScrollPane.getViewportBounds());
-        double targetY = viewport.getMinY() + 60;
-        int visibleIndex = -1;
-        double closestDistance = Double.MAX_VALUE;
-        for (Map.Entry<Integer, VBox> entry : questionCards.entrySet()) {
-            VBox card = entry.getValue();
-            javafx.geometry.Bounds bounds = card.localToScene(card.getBoundsInLocal());
-            if (bounds.getMaxY() <= viewport.getMinY() || bounds.getMinY() >= viewport.getMaxY()) continue;
-            double distance = Math.abs(bounds.getMinY() + bounds.getHeight() / 2 - targetY);
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                visibleIndex = entry.getKey();
-            }
-        }
-        if (visibleIndex >= 0) setCurrentQuestion(visibleIndex);
+    private void highlightQuestionCard(VBox card) {
+        String originalStyle = "-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 1.5px; -fx-border-radius: 8px; -fx-background-radius: 8px; -fx-padding: 14px 18px;";
+        card.setStyle("-fx-background-color: #eef2ff; -fx-border-color: #4f46e5; -fx-border-width: 2px; -fx-border-radius: 8px; -fx-background-radius: 8px; -fx-padding: 14px 18px; -fx-effect: dropshadow(three-pass-box, rgba(79, 70, 229, 0.25), 10, 0, 0, 2);");
+        PauseTransition highlightTimer = new PauseTransition(Duration.millis(1500));
+        highlightTimer.setOnFinished(e -> card.setStyle(originalStyle));
+        highlightTimer.play();
     }
 
     @FXML

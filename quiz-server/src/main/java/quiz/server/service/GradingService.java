@@ -37,16 +37,26 @@ public final class GradingService {
                 || normalized.equalsIgnoreCase(expected);
         }
         String expected = q.answerKey().isBlank() ? q.optionA() : q.answerKey();
+        String normSelected = normalizeWithPipes(selected);
+        String normExpected = normalizeWithPipes(expected);
+        if (normSelected.equalsIgnoreCase(normExpected)) {
+            return true;
+        }
         if (q.questionType() == quiz.common.enums.QuestionType.FILL_BLANK) {
             for (String acceptedWord : expected.split("\\s*\\|\\s*", -1)) {
-                if (normalized.equalsIgnoreCase(acceptedWord.strip())) return true;
+                if (normSelected.equalsIgnoreCase(acceptedWord.strip())) return true;
             }
             return false;
         }
         for (String alternative : expected.split("\\s*\\|\\s*", -1)) {
-            if (normalized.equalsIgnoreCase(alternative.strip())) return true;
+            if (normSelected.equalsIgnoreCase(alternative.strip())) return true;
         }
         return false;
+    }
+
+    private static String normalizeWithPipes(String s) {
+        if (s == null) return "";
+        return s.strip().replaceAll("\\s+", " ").replaceAll("\\s*\\|\\s*", " | ");
     }
 
     public String correctAnswerText(Question q) {

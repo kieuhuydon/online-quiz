@@ -421,7 +421,7 @@ project/
 ### Step 1: Clone or Extract the Project
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/kieuhuydon/online-quiz.git
 cd project
 ```
 

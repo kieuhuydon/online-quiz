@@ -1,5 +1,5 @@
 # ====================================================================
-# Online Quiz Server Configuration
+# Online Quiz Server Configuration (Template)
 # ====================================================================
 
 # Network & Thread Pool
@@ -15,10 +15,10 @@ server.shutdown.timeout.ms=10000
 # Database Connection (HikariCP)
 db.url=jdbc:postgresql://localhost:5432/quizdb
 db.user=postgres
-# Supply DB_PASSWORD or an untracked external *-local.properties file.
-db.password=194194
+db.password=your_db_password_here
 db.pool.max.size=10
 db.pool.min.idle=2
 db.pool.idle.timeout.ms=300000
 db.pool.connection.timeout.ms=20000
 quiz.allow_demo_seed=on
+

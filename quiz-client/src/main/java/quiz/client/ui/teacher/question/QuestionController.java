@@ -1306,9 +1306,9 @@ public final class QuestionController extends ScreenController {
             String hint = isTrueFalse
                 ? "💡 Dạng Đúng / Sai: Chọn đáp án đúng bên dưới."
                 : isFillBlank
-                ? "💡 Dạng Điền vào chỗ trống: Sử dụng đúng 3 ký tự '_' (___) tại một vị trí trong câu hỏi. Đáp án có thể gồm nhiều từ."
+                ? "💡 Dạng Điền vào chỗ trống: Sử dụng ký tự '___' tại vị trí khuyết. Với câu có nhiều ô trống, nhập các đáp án cách nhau bằng dấu '|' (Ví dụ: đáp án 1 | đáp án 2)."
                 : isShortAnswer
-                ? "💡 Dạng Trả lời ngắn: Nhập nội dung câu hỏi và nhập câu trả lời mẫu / chuẩn xác vào ô bên dưới."
+                ? "💡 Dạng Trả lời ngắn: Nhập câu trả lời mẫu. Nếu có nhiều đáp án chấp nhận hoặc nhiều ô trống, phân cách bằng dấu '|' (Ví dụ: đáp án 1 | đáp án 2)."
                 : "💡 Dạng Trắc nghiệm (4 lựa chọn): Điền đầy đủ 4 phương án A, B, C, D và chọn phương án đúng.";
             questionTypeHint.setText(hint);
         }
@@ -1413,16 +1413,16 @@ public final class QuestionController extends ScreenController {
         if (labelOptionA != null) {
             labelOptionA.setText(
                 isTrueFalse ? "Phương án A (Đúng) *" :
-                isFillBlank ? "Đáp án cần điền *" :
-                isShortAnswer ? "Câu trả lời đúng / mẫu *" :
+                isFillBlank ? "Đáp án cần điền * (Nếu nhiều ô trống, dùng: đáp án 1 | đáp án 2)" :
+                isShortAnswer ? "Câu trả lời đúng / mẫu * (Nếu nhiều ô trống, dùng: đáp án 1 | đáp án 2)" :
                 "Đáp án A *"
             );
         }
         if (questionOptionA != null) {
             questionOptionA.setPromptText(
                 isTrueFalse ? "Đúng" :
-                isFillBlank ? "Nhập đáp án, có thể gồm nhiều từ" :
-                isShortAnswer ? "Nhập câu trả lời ngắn chuẩn xác..." :
+                isFillBlank ? "Ví dụ: đáp án 1 | đáp án 2 (hoặc 1 đáp án nhiều từ)" :
+                isShortAnswer ? "Ví dụ: đáp án 1 | đáp án 2" :
                 "Nội dung đáp án A"
             );
         }

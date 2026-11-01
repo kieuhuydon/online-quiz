@@ -11,10 +11,16 @@ out/
 .DS_Store
 Thumbs.db
 
-# Cấu hình chứa mật khẩu thật (không commit)
+# Cấu hình chứa thông tin nhạy cảm và mật khẩu (không commit)
+quiz-client/src/main/resources/client.properties
+quiz-server/src/main/resources/server.properties
 *-local.properties
 *.log
 *.properties
+!.mvn/wrapper/maven-wrapper.properties
+!*.example
+!*.template
+
 docs/*
 !docs/WORK_PLAN.md
 !docs/TEACHER_MONITORING.md

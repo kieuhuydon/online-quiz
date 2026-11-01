@@ -915,8 +915,9 @@ public final class TeacherController extends ScreenController {
                 return;
             }
 
-            // 1. Lọc theo các loại câu hỏi giáo viên đã tích chọn
+            // 1. Lọc theo các loại câu hỏi giáo viên đã tích chọn (chỉ lấy câu hỏi đang hoạt động, không bị xóa)
             List<QuestionDto> typeFiltered = allQuestions.stream()
+                .filter(QuestionDto::active)
                 .filter(q -> selectedTypes.contains(q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE))
                 .toList();
 
@@ -1421,9 +1422,9 @@ public final class TeacherController extends ScreenController {
         }
 
         setQuizLoading(true);
-        // Load bank questions và chi tiết đề thi đồng thời
+        // Load bank questions và chi tiết đề thi đồng thời (chỉ lấy các câu hỏi đang active)
         api.listQuestions().thenCombine(api.getQuiz(quizId), (bank, detail) -> {
-            allBankQuestions = bank;
+            allBankQuestions = bank.stream().filter(QuestionDto::active).toList();
             return detail;
         }).whenComplete((detail, err) -> fx.run(() -> {
             setQuizLoading(false);
@@ -1485,14 +1486,26 @@ public final class TeacherController extends ScreenController {
         lblPickerTitle.setText("➕ Chọn câu hỏi từ Ngân hàng câu hỏi để THÊM vào đề thi:");
         btnConfirmPicker.setText("Thêm Câu Hỏi Này Vào Đề");
         btnConfirmPicker.setDisable(true);
+        if (txtPickerSearch != null) txtPickerSearch.clear();
+        if (cmbPickerDifficulty != null) cmbPickerDifficulty.setValue(null);
+        if (cmbPickerQuestionType != null) cmbPickerQuestionType.setValue(null);
         if (detailMainWorkspace != null) {
             detailMainWorkspace.setVisible(false);
             detailMainWorkspace.setManaged(false);
         }
         questionPickerPanel.setVisible(true);
         questionPickerPanel.setManaged(true);
-        filterPickerQuestions();
         scrollToTop();
+
+        // Tải danh sách ngân hàng câu hỏi mới nhất từ server để luôn có câu hỏi vừa tạo
+        setQuizLoading(true);
+        api.listQuestions().whenComplete((bank, err) -> fx.run(() -> {
+            setQuizLoading(false);
+            if (err == null && bank != null) {
+                allBankQuestions = bank.stream().filter(QuestionDto::active).toList();
+            }
+            filterPickerQuestions();
+        }));
     }
 
     private void openQuestionPickerForReplace(DetailQuestionRow row) {
@@ -1502,6 +1515,7 @@ public final class TeacherController extends ScreenController {
         lblPickerTitle.setText("🔄 Chọn câu hỏi từ Ngân hàng câu hỏi để THAY THẾ cho câu #" + (detailQuestionRows.indexOf(row) + 1) + " (Độ khó: " + row.getQuestion().difficulty() + "):");
         btnConfirmPicker.setText("Xác Nhận Thay Thế Câu Này");
         btnConfirmPicker.setDisable(true);
+        if (txtPickerSearch != null) txtPickerSearch.clear();
         cmbPickerDifficulty.setValue(row.getQuestion().difficulty());
         if (cmbPickerQuestionType != null) {
             cmbPickerQuestionType.setValue(row.getQuestion().questionType() != null ? row.getQuestion().questionType() : QuestionType.MULTIPLE_CHOICE);
@@ -1512,8 +1526,17 @@ public final class TeacherController extends ScreenController {
         }
         questionPickerPanel.setVisible(true);
         questionPickerPanel.setManaged(true);
-        filterPickerQuestions();
         scrollToTop();
+
+        // Tải danh sách ngân hàng câu hỏi mới nhất từ server
+        setQuizLoading(true);
+        api.listQuestions().whenComplete((bank, err) -> fx.run(() -> {
+            setQuizLoading(false);
+            if (err == null && bank != null) {
+                allBankQuestions = bank.stream().filter(QuestionDto::active).toList();
+            }
+            filterPickerQuestions();
+        }));
     }
 
     private void removeQuestionFromDetail(DetailQuestionRow row) {
@@ -1538,11 +1561,13 @@ public final class TeacherController extends ScreenController {
             ? txtPickerSearch.getText().trim().toLowerCase() : "";
 
         List<QuestionDto> filtered = allBankQuestions.stream()
+            .filter(QuestionDto::active)
             .filter(q -> !existingIds.contains(q.id()))
             .filter(q -> filterDiff == null || q.difficulty() == filterDiff)
             .filter(q -> filterType == null || (q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE) == filterType)
             .filter(q -> search.isEmpty() || (q.content() != null && q.content().toLowerCase().contains(search))
                 || (q.topic() != null && q.topic().toLowerCase().contains(search)))
+            .sorted((a, b) -> Long.compare(b.id(), a.id()))
             .toList();
 
         pickerQuestionRows.setAll(filtered);
@@ -2194,11 +2219,12 @@ public static String formatQuestionPreview(QuestionDto question) {
             sb.append("B. ").append(optB).append(question.correctOption() == 'B' ? "  ✓ (Đáp án đúng)" : "").append("\n");
             sb.append("\n→ Đáp án đúng: ").append(question.correctOption() == 'A' ? "A (Đúng)" : "B (Sai)");
         }
-        case FILL_BLANK -> {
-            sb.append("→ Đáp án đúng: ").append(getCorrectOptionText(question));
-        }
-        case SHORT_ANSWER -> {
-            sb.append("→ Đáp án đúng: ").append(getCorrectOptionText(question));
+        case FILL_BLANK, SHORT_ANSWER -> {
+            String ans = getCorrectOptionText(question);
+            sb.append("→ Đáp án đúng: ").append(ans);
+            if (ans.contains("|")) {
+                sb.append(" (Các vị trí ô trống phân cách bởi dấu '|')");
+            }
         }
     }
     if (question.explanation() != null && !question.explanation().isBlank()) {
@@ -2257,11 +2283,19 @@ private <S> TableCell<S, String> wrappingTextCell() {
             }
             List<QuestionRow> rows = new ArrayList<>();
             for (QuestionDto q : allQ) {
+                if (!q.active()) continue; // Loại bỏ hoàn toàn các câu hỏi đã bị xóa khỏi ngân hàng câu hỏi
                 boolean checked = existingIds.contains(q.id());
                 QuestionRow row = new QuestionRow(q, checked);
                 row.selectedProperty().addListener((obs, oldVal, newVal) -> updateSelectedQuestionCount());
                 rows.add(row);
             }
+            // Sắp xếp: câu đã chọn lên trước, các câu chưa chọn thì ID giảm dần (câu mới tạo nhất hiển thị trên cùng)
+            rows.sort((a, b) -> {
+                if (a.isSelected() != b.isSelected()) {
+                    return a.isSelected() ? -1 : 1;
+                }
+                return Long.compare(b.getQuestion().id(), a.getQuestion().id());
+            });
             return rows;
         }).whenComplete((rows, err) -> fx.run(() -> {
             setQuizLoading(false);
@@ -2285,6 +2319,7 @@ private <S> TableCell<S, String> wrappingTextCell() {
         List<QuestionRow> filtered = allSelectionQuestions.stream()
             .filter(r -> {
                 QuestionDto q = r.getQuestion();
+                if (!q.active()) return false;
                 if (type != null && (q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE) != type) {
                     return false;
                 }
