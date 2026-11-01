@@ -28,6 +28,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -61,6 +63,7 @@ public final class QuestionController extends ScreenController {
     @FXML private ComboBox<Difficulty> questionDifficulty;
     @FXML private Button refreshQuestions;
     @FXML private Button importQuestions;
+    @FXML private Button downloadSampleCsv;
     @FXML private Button newQuestion;
     @FXML private Button createQuestion;
     @FXML private Button updateQuestion;
@@ -1024,26 +1027,87 @@ public final class QuestionController extends ScreenController {
             return;
         }
 
-        List<CreateQuestionDto> parsed;
+        QuestionFileParser.ParseResult result;
         try {
-            parsed = parseQuestionFile(file);
+            result = QuestionFileParser.parseWithResult(file);
         } catch (Exception ex) {
             show(questionNotice, "Lỗi đọc tệp: " + ex.getMessage(), true);
             return;
         }
 
-        if (parsed.isEmpty()) {
-            show(questionNotice, "Không tìm thấy câu hỏi hợp lệ trong tệp hoặc tệp rỗng.", true);
+        List<CreateQuestionDto> valid = result.valid();
+        List<QuestionFileParser.ParseError> errors = result.errors();
+
+        if (valid.isEmpty() && errors.isEmpty()) {
+            show(questionNotice, "Không tìm thấy câu hỏi nào trong tệp hoặc tệp rỗng.", true);
             return;
         }
 
-        if (!confirm("Xác nhận nhập câu hỏi",
+        if (!errors.isEmpty()) {
+            if (!showImportErrorPreview(file, valid, errors)) {
+                return;
+            }
+        } else if (!confirm("Xác nhận nhập câu hỏi",
             String.format("Tìm thấy %d câu hỏi hợp lệ từ tệp '%s'. Bạn có muốn nhập vào ngân hàng câu hỏi?",
-                parsed.size(), file.getName()))) {
+                valid.size(), file.getName()))) {
             return;
         }
 
-        importBatch(parsed, 0, 0);
+        importBatch(valid, 0, 0);
+    }
+
+    @FXML
+    private void downloadSampleCsv() {
+        if (!isActive()) {
+            return;
+        }
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Lưu file mẫu CSV");
+        fileChooser.setInitialFileName("mau-cau-hoi.csv");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Tệp CSV (*.csv)", "*.csv"));
+        File file = fileChooser.showSaveDialog(questionPanels.getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+        String csv = """
+            Type,Content,OptionA,OptionB,OptionC,OptionD,Correct,Topic,Difficulty,Explanation
+            MULTIPLE_CHOICE,"She ___ to school.",go,goes,went,gone,B,Ngữ pháp,EASY,"Chủ ngữ số ít dùng goes."
+            TRUE_FALSE,"Hà Nội là thủ đô của Việt Nam.",Đúng,Sai,-,-,A,Địa lý,EASY,"Hà Nội là thủ đô."
+            FILL_BLANK,"I have lived here ___ 2010.",since,-,-,-,A,Thì hoàn thành,MEDIUM,"since + mốc thời gian."
+            SHORT_ANSWER,"Past tense of 'go'?",went,-,-,-,A,Động từ bất quy tắc,EASY,"went."
+            """.stripIndent();
+        try {
+            Files.writeString(file.toPath(), csv, StandardCharsets.UTF_8);
+            show(questionNotice, "Đã lưu file mẫu CSV: " + file.getName(), false);
+        } catch (Exception ex) {
+            show(questionNotice, "Lỗi lưu file mẫu: " + ex.getMessage(), true);
+        }
+    }
+
+    /** Hiển thị danh sách lỗi theo dòng và hỏi có nhập các câu hợp lệ hay không. */
+    private boolean showImportErrorPreview(File file, List<CreateQuestionDto> valid,
+                                           List<QuestionFileParser.ParseError> errors) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Xem trước kết quả nhập");
+        dialog.setHeaderText(String.format("Tệp '%s': %d lỗi, %d câu hỏi hợp lệ.",
+            file.getName(), errors.size(), valid.size()));
+        VBox box = new VBox(8);
+        box.setPrefWidth(640);
+        Label summary = new Label(errors.stream()
+            .limit(12)
+            .map(e -> "Dòng " + e.lineNumber() + " [" + e.field() + "]: " + e.message())
+            .collect(java.util.stream.Collectors.joining("\n")));
+        summary.setWrapText(true);
+        summary.setStyle("-fx-text-fill: #dc2626;");
+        ListView<String> list = new ListView<>(FXCollections.observableArrayList(
+            errors.stream().map(e -> "Dòng " + e.lineNumber() + " [" + e.field() + "]: " + e.message()).toList()));
+        list.setPrefHeight(220);
+        box.getChildren().addAll(summary, list);
+        dialog.getDialogPane().setContent(box);
+        ButtonType importValid = new ButtonType("Nhập câu hợp lệ");
+        dialog.getDialogPane().getButtonTypes().addAll(importValid, ButtonType.CANCEL);
+        dialog.setResultConverter(b -> b == importValid ? ButtonType.OK : b);
+        return dialog.showAndWait().filter(b -> b == ButtonType.OK).isPresent();
     }
 
     private void importBatch(List<CreateQuestionDto> list, int index, int successCount) {
