@@ -10,20 +10,20 @@
         <Separator/>
         <fx:define><ToggleGroup fx:id="options"/></fx:define>
         <HBox spacing="16" VBox.vgrow="ALWAYS" alignment="TOP_CENTER">
-            <VBox spacing="16" HBox.hgrow="ALWAYS" styleClass="content-card">
-                <Label fx:id="questionPosition" styleClass="eyebrow"/>
-                <TextArea fx:id="questionText" wrapText="true" editable="false" prefRowCount="3" minHeight="75"
-                          style="-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 8; -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #0f172a;"/>
-                <VBox fx:id="answerPane" spacing="10" VBox.vgrow="ALWAYS">
-                    <RadioButton fx:id="optionA" toggleGroup="$options" onAction="#selectAnswer" wrapText="true" maxWidth="Infinity"/>
-                    <RadioButton fx:id="optionB" toggleGroup="$options" onAction="#selectAnswer" wrapText="true" maxWidth="Infinity"/>
-                    <RadioButton fx:id="optionC" toggleGroup="$options" onAction="#selectAnswer" wrapText="true" maxWidth="Infinity"/>
-                    <RadioButton fx:id="optionD" toggleGroup="$options" onAction="#selectAnswer" wrapText="true" maxWidth="Infinity"/>
-                </VBox>
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <Button fx:id="previous" text="← Trước" onAction="#previous" styleClass="secondary-button"/>
-                    <Button fx:id="next" text="Tiếp theo →" onAction="#next" styleClass="secondary-button"/>
-                    <Label fx:id="saveStatus" styleClass="muted" wrapText="true" HBox.hgrow="ALWAYS"/>
+            <VBox spacing="14" HBox.hgrow="ALWAYS" styleClass="content-card">
+                <ScrollPane fx:id="questionsScrollPane" fitToWidth="true" VBox.vgrow="ALWAYS"
+                            style="-fx-background-color: transparent; -fx-background: transparent; -fx-padding: 0;">
+                    <content>
+                        <VBox fx:id="questionsContainer" spacing="16" style="-fx-padding: 4 8 12 4;"/>
+                    </content>
+                </ScrollPane>
+                <Separator/>
+                <HBox alignment="CENTER_LEFT" spacing="12">
+                    <Button fx:id="previous" text="← 10 câu trước" onAction="#previous" styleClass="secondary-button"/>
+                    <Label fx:id="pageIndicator" text="Trang 1 / 1" styleClass="field-label" style="-fx-font-weight: bold; -fx-padding: 0 4;"/>
+                    <Button fx:id="next" text="10 câu tiếp theo →" onAction="#next" styleClass="secondary-button"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="saveStatus" styleClass="muted" wrapText="true"/>
                 </HBox>
             </VBox>
             <VBox spacing="14" prefWidth="320" minWidth="260" styleClass="content-card">

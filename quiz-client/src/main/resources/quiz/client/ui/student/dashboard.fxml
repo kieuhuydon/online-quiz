@@ -4,73 +4,92 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.StudentController" spacing="18">
-    <padding>
-        <Insets top="16" right="20" bottom="20" left="20"/>
-    </padding>
+<VBox xmlns:fx="http://javafx.com/fxml/1" fx:controller="quiz.client.ui.student.StudentController" spacing="14">
+    <!-- Top Action Toolbar (No redundant page header) -->
+    <HBox alignment="CENTER_LEFT" spacing="12" style="-fx-padding: 0 0 4 0;">
+        <Label fx:id="studentWelcome" visible="false" managed="false"/>
+        <Label fx:id="studentClassLabel" text="Lớp: đang tải…" styleClass="badge" style="-fx-font-size: 13px; -fx-padding: 6 12;"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <ProgressIndicator fx:id="studentProgress" visible="false" prefWidth="22" prefHeight="22"/>
+        <Button fx:id="btnRefresh" text="🔄 Tải lại danh sách" onAction="#loadAssignedQuizzes" styleClass="primary-button"/>
+    </HBox>
 
-    <!-- Header -->
-    <HBox alignment="CENTER_LEFT" spacing="16">
-        <VBox spacing="4" HBox.hgrow="ALWAYS">
-            <Label text="KHÔNG GIAN HỌC VIÊN" styleClass="eyebrow"/>
-            <Label fx:id="studentWelcome" text="Không gian học tập" styleClass="page-heading"/>
-            <Label fx:id="studentClassLabel" text="Lớp: đang tải…" styleClass="muted"/>
+    <!-- KPI Summary Cards -->
+    <HBox spacing="14">
+        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+            <Label text="TỔNG BÀI ĐƯỢC GIAO" styleClass="stat-label"/>
+            <Label fx:id="lblTotalAssigned" text="0" styleClass="stat-value"/>
         </VBox>
-        <ProgressIndicator fx:id="studentProgress" visible="false" prefWidth="24" prefHeight="24"/>
-        <Button fx:id="btnRefresh" text="Tải lại danh sách" onAction="#loadAssignedQuizzes" styleClass="secondary-button"/>
+        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+            <Label text="SẴN SÀNG VÀO THI" styleClass="stat-label"/>
+            <Label fx:id="lblReadyExams" text="0" styleClass="stat-value" style="-fx-text-fill: #059669;"/>
+        </VBox>
+        <VBox styleClass="stat-card" HBox.hgrow="ALWAYS" spacing="4">
+            <Label text="ĐÃ HOÀN THÀNH" styleClass="stat-label"/>
+            <Label fx:id="lblCompletedExams" text="0" styleClass="stat-value" style="-fx-text-fill: #4f46e5;"/>
+        </VBox>
     </HBox>
 
     <Label fx:id="studentNotice" visible="false" managed="false" styleClass="notice" wrapText="true" maxWidth="Infinity"/>
 
-    <!-- Action Toolbar -->
-    <HBox fx:id="actionToolbar" spacing="10" alignment="CENTER_LEFT">
-        <Label text="Chọn một bài thi để xem thông tin chi tiết." styleClass="muted"/>
-        <Button text="Lịch sử làm bài" onAction="#onHistoryClick" styleClass="secondary-button"/>
+    <!-- Action Toolbar / Hint -->
+    <HBox fx:id="actionToolbar" spacing="10" alignment="CENTER_LEFT" styleClass="toolbar-card">
+        <Label text="💡 Chọn một bài kiểm tra trong bảng bên dưới để xem thông tin chi tiết và bắt đầu làm bài." styleClass="muted"/>
         <Region HBox.hgrow="ALWAYS"/>
     </HBox>
 
-    <!-- Table of assigned quizzes (FR-S02) -->
-    <TableView fx:id="assignedQuizTable" prefHeight="320" VBox.vgrow="ALWAYS" styleClass="account-card"/>
+    <!-- Master-Detail Split View: Left Table + Right Inspector Card -->
+    <HBox spacing="16" VBox.vgrow="ALWAYS" alignment="TOP_LEFT">
+        <!-- Table of assigned quizzes (FR-S02) -->
+        <TableView fx:id="assignedQuizTable" prefHeight="400" minHeight="300" HBox.hgrow="ALWAYS" styleClass="account-card"/>
 
-    <!-- Quiz Information Card (FR-S04) -->
-    <VBox fx:id="quizInfoPanel" visible="false" managed="false" styleClass="content-card" spacing="14">
-        <HBox alignment="CENTER_LEFT">
-            <VBox spacing="2" HBox.hgrow="ALWAYS">
-                <Label text="THÔNG TIN CHI TIẾT BÀI KIỂM TRA" styleClass="eyebrow"/>
-                <Label fx:id="infoTitle" text="Tên đề thi" styleClass="card-heading"/>
+        <!-- Quiz Information Inspector Card (FR-S04) -->
+        <VBox fx:id="quizInfoPanel" visible="false" managed="false" prefWidth="360" minWidth="320" maxWidth="380" styleClass="content-card" spacing="14">
+            <HBox alignment="CENTER_LEFT" spacing="8">
+                <VBox spacing="2" HBox.hgrow="ALWAYS">
+                    <Label text="CHI TIẾT BÀI KIỂM TRA" styleClass="eyebrow"/>
+                    <Label fx:id="infoTitle" text="Tên đề thi" styleClass="card-heading" wrapText="true"/>
+                </VBox>
+                <Button fx:id="btnCloseInfo" text="✕" onAction="#onCloseInfoClick" styleClass="secondary-button, btn-small"/>
+            </HBox>
+            <Separator/>
+            <GridPane hgap="12" vgap="10">
+                <columnConstraints>
+                    <ColumnConstraints minWidth="125" prefWidth="130"/>
+                    <ColumnConstraints hgrow="ALWAYS"/>
+                </columnConstraints>
+
+                <Label text="Trạng thái:" styleClass="field-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                <Label fx:id="infoStatus" text="" styleClass="badge, badge-open" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                <Label text="Chủ đề:" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                <Label fx:id="infoCategory" text="" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                <Label text="Thời lượng làm bài:" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                <Label fx:id="infoDuration" text="" style="-fx-font-weight: bold; -fx-text-fill: #4f46e5;" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                <Label text="Số lượng câu hỏi:" styleClass="field-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                <Label fx:id="infoQuestionCount" text="" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                <Label text="Điểm đạt yêu cầu:" styleClass="field-label" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                <Label fx:id="infoPassScore" text="" style="-fx-font-weight: bold;" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+            </GridPane>
+
+            <VBox spacing="4">
+                <Label fx:id="infoDescriptionLabel" text="Ghi chú / Mô tả:" styleClass="field-label"/>
+                <Label fx:id="infoDescription" text="" wrapText="true" styleClass="muted"/>
             </VBox>
-        </HBox>
-        <Separator/>
-        <GridPane hgap="24" vgap="12">
-            <columnConstraints>
-                <ColumnConstraints minWidth="120" prefWidth="140"/>
-                <ColumnConstraints hgrow="ALWAYS"/>
-                <ColumnConstraints minWidth="120" prefWidth="140"/>
-                <ColumnConstraints hgrow="ALWAYS"/>
-            </columnConstraints>
 
-            <Label text="Chủ đề:" styleClass="field-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-            <Label fx:id="infoCategory" text="" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+            <VBox spacing="4" styleClass="sub-card">
+                <Label text="🛡️ Quy chế phòng thi Anti-Cheat" style="-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #334155;"/>
+                <Label text="• Bài thi chạy ở chế độ toàn màn hình (Full Screen).&#10;• Vui lòng đóng các ứng dụng chat, trình duyệt, điều khiển từ xa trước khi bắt đầu." wrapText="true" styleClass="muted" style="-fx-font-size: 11.5px;"/>
+            </VBox>
 
-            <Label text="Thời lượng làm bài:" styleClass="field-label" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
-            <Label fx:id="infoDuration" text="" style="-fx-font-weight: bold;" GridPane.rowIndex="0" GridPane.columnIndex="3"/>
-
-            <Label text="Số lượng câu hỏi:" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-            <Label fx:id="infoQuestionCount" text="" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-
-            <Label text="Điểm đạt yêu cầu:" styleClass="field-label" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
-            <Label fx:id="infoPassScore" text="" GridPane.rowIndex="1" GridPane.columnIndex="3"/>
-
-            <Label text="Trạng thái đề thi:" styleClass="field-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
-            <Label fx:id="infoStatus" text="" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
-
-            <Label fx:id="infoDescriptionLabel" text="Mô tả bài thi:" styleClass="field-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
-            <Label fx:id="infoDescription" text="" wrapText="true" GridPane.rowIndex="3" GridPane.columnIndex="1" GridPane.columnSpan="3"/>
-        </GridPane>
-        <Separator/>
-        <HBox alignment="CENTER_LEFT" spacing="10">
-            <Button fx:id="btnCloseInfo" text="Quay lại" onAction="#onCloseInfoClick" styleClass="secondary-button"/>
-            <Button fx:id="btnStartExam" text="Bắt đầu thi" onAction="#onStartExamClick" styleClass="primary-button"/>
-        </HBox>
-    </VBox>
+            <Separator/>
+            <HBox alignment="CENTER_RIGHT" spacing="10">
+                <Button text="Đóng" onAction="#onCloseInfoClick" styleClass="secondary-button"/>
+                <Button fx:id="btnStartExam" text="🚀 Bắt đầu làm bài" onAction="#onStartExamClick" styleClass="primary-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+            </HBox>
+        </VBox>
+    </HBox>
 </VBox>

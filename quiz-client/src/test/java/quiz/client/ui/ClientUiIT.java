@@ -736,6 +736,35 @@ class ClientUiIT {
         });
     }
 
+    @Test void accountDeletionRequiresConfirmationAndDeletesSelectedAccount() throws Exception {
+        var peer = login(Role.ADMIN);
+        reloadAccounts(peer, List.of(account(2, Role.STUDENT, true)));
+        fx(() -> {
+            accounts().getSelectionModel().select(0);
+            assertFalse(button("deleteAccount").isDisabled());
+            button("deleteAccount").fire();
+            assertTrue(stage.getScene().lookup("#deleteConfirmation").isVisible());
+            assertTrue(label("deleteConfirmationText").getText().contains("user2"));
+            button("cancelDelete").fire();
+            assertFalse(stage.getScene().lookup("#deleteConfirmation").isVisible());
+            button("deleteAccount").fire();
+            button("confirmDelete").fire();
+            return null;
+        });
+        var delReq = peer.read();
+        assertEquals(MessageType.DELETE_ACCOUNT, delReq.type());
+        assertEquals(2L, delReq.payload());
+        peer.success(delReq, null);
+        var reloadReq = peer.read();
+        peer.success(reloadReq, new java.util.ArrayList<AccountDto>());
+        awaitAccountsReady();
+        fx(() -> {
+            assertTrue(label("accountNotice").getText().contains("xóa"));
+            assertEquals(0, accounts().getItems().size());
+            return null;
+        });
+    }
+
     @Test void compactAccountFormScrollsIntoViewAndEnterSubmitsOnce() throws Exception {
         var peer = login(Role.ADMIN);
         fx(() -> { button("createAccount").fire(); stage.setWidth(900); stage.setHeight(620); return null; }); awaitCompactSize();

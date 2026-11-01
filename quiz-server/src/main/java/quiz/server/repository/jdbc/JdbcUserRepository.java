@@ -141,6 +141,20 @@ public final class JdbcUserRepository implements UserRepository {
         return onConnection(connection, () -> updateActive(connection, id, active));
     }
 
+    @Override
+    public boolean deleteById(long id, long adminId) {
+        validateId(id);
+        validateId(adminId);
+        return withConnection(connection -> delete(connection, id, adminId));
+    }
+
+    @Override
+    public boolean deleteById(Connection connection, long id, long adminId) {
+        validateId(id);
+        validateId(adminId);
+        return onConnection(connection, () -> delete(connection, id, adminId));
+    }
+
     private Optional<User> findOne(Connection connection, String sql, StatementBinder binder)
         throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -193,6 +207,56 @@ public final class JdbcUserRepository implements UserRepository {
             statement.setBoolean(1, active);
             statement.setLong(2, id);
             return statement.executeUpdate() > 0;
+        }
+    }
+
+    private boolean delete(Connection connection, long id, long adminId) throws SQLException {
+        try (PreparedStatement checkClass = connection.prepareStatement("SELECT 1 FROM classes WHERE teacher_id = ? LIMIT 1")) {
+            checkClass.setLong(1, id);
+            try (ResultSet rs = checkClass.executeQuery()) {
+                if (rs.next()) {
+                    throw new ConflictException(ErrorCode.CONFLICT, "Không thể xóa giáo viên đang phụ trách lớp học. Vui lòng chuyển hoặc xóa lớp học trước.");
+                }
+            }
+        }
+        try (PreparedStatement s = connection.prepareStatement("UPDATE users SET created_by = NULL WHERE created_by = ?")) {
+            s.setLong(1, id);
+            s.executeUpdate();
+        }
+        try (PreparedStatement s = connection.prepareStatement("UPDATE quiz_assignments SET assigned_by = NULL WHERE assigned_by = ?")) {
+            s.setLong(1, id);
+            s.executeUpdate();
+        }
+        try (PreparedStatement s = connection.prepareStatement("UPDATE questions SET created_by = ? WHERE created_by = ?")) {
+            s.setLong(1, adminId);
+            s.setLong(2, id);
+            s.executeUpdate();
+        }
+        try (PreparedStatement s = connection.prepareStatement("UPDATE quizzes SET created_by = ? WHERE created_by = ?")) {
+            s.setLong(1, adminId);
+            s.setLong(2, id);
+            s.executeUpdate();
+        }
+        try (PreparedStatement s = connection.prepareStatement("DELETE FROM monitoring_penalties WHERE session_id IN (SELECT session_id FROM exam_sessions WHERE student_id = ?)")) {
+            s.setLong(1, id);
+            s.executeUpdate();
+        }
+        try (PreparedStatement s = connection.prepareStatement("DELETE FROM exam_sessions WHERE student_id = ?")) {
+            s.setLong(1, id);
+            s.executeUpdate();
+        }
+        try (PreparedStatement s = connection.prepareStatement("UPDATE monitoring_penalties SET teacher_id = ? WHERE teacher_id = ?")) {
+            s.setLong(1, adminId);
+            s.setLong(2, id);
+            s.executeUpdate();
+        }
+        try (PreparedStatement s = connection.prepareStatement("DELETE FROM attempts WHERE student_id = ?")) {
+            s.setLong(1, id);
+            s.executeUpdate();
+        }
+        try (PreparedStatement s = connection.prepareStatement("DELETE FROM users WHERE id = ?")) {
+            s.setLong(1, id);
+            return s.executeUpdate() > 0;
         }
     }
 

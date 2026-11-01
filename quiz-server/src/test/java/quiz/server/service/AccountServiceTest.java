@@ -46,6 +46,7 @@ class AccountServiceTest {
         when(users.findById(connection, 1)).thenReturn(Optional.of(admin));
         when(users.findById(connection, 2)).thenReturn(Optional.of(ServiceTestUsers.user(2, Role.STUDENT, true)));
         when(users.updateActiveStatus(eq(connection), eq(2L), anyBoolean())).thenReturn(true);
+        when(users.deleteById(eq(connection), eq(2L), eq(1L))).thenReturn(true);
         when(users.save(eq(connection), any(User.class))).thenAnswer(invocation -> {
             User input = invocation.getArgument(1);
             return User.restore(3, input.username(), input.passwordHash(), input.fullName(), input.email(),
@@ -221,6 +222,27 @@ class AccountServiceTest {
         when(users.updateActiveStatus(connection, 2, false)).thenReturn(false);
         assertThrows(NotFoundException.class, () -> accounts.setAccountActive(2, false, 1));
         assertTrue(registry.isValid("token"));
+    }
+
+
+    @Test
+    void deletesAccountAndRevokesSession() throws SQLException {
+        registry.register("token", new UserSession(2, Role.STUDENT, "student"));
+        assertTrue(registry.isValid("token"));
+
+        accounts.deleteAccount(2, 1);
+
+        verify(users).deleteById(connection, 2L, 1L);
+        verify(connection).commit();
+        assertFalse(registry.isValid("token"));
+        assertEquals(0, registry.size());
+    }
+
+    @Test
+    void cannotDeleteSelfOrAdmin() {
+        assertThrows(ForbiddenException.class, () -> accounts.deleteAccount(1, 1));
+        when(users.findById(connection, 3)).thenReturn(Optional.of(ServiceTestUsers.user(3, Role.ADMIN, true)));
+        assertThrows(ForbiddenException.class, () -> accounts.deleteAccount(3, 1));
     }
 
     private CreateAccountDto dto() {

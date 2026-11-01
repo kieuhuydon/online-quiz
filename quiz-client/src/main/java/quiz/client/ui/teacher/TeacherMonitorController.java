@@ -39,7 +39,9 @@ public final class TeacherMonitorController implements AutoCloseable {
         score.setOnAction(e->penalty(PenaltyType.DEDUCT_SCORE));
         stop.setOnAction(e->penalty(PenaltyType.TERMINATE));
         Button history=new Button("Nhật ký / Lịch sử xử phạt");history.setOnAction(e->history());
+        history.setStyle("-fx-background-color: #4f46e5; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 7 14; -fx-cursor: hand;");
         Button reload=new Button("Tải lại");reload.setOnAction(e->refresh());
+        reload.setStyle("-fx-background-color: #f8fafc; -fx-text-fill: #334155; -fx-border-color: #cbd5e1; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 7 14; -fx-cursor: hand;");
         notice.setWrapText(true);
         Label legend=new Label("Vàng: cảnh báo · Đỏ: phát hiện ứng dụng cấm, cần xem bằng chứng. IP do máy sinh viên báo cáo.");
         legend.setWrapText(true);
@@ -68,7 +70,7 @@ public final class TeacherMonitorController implements AutoCloseable {
         ViolationTableStyle.install(table,ExamSession::status);
     }
     private void column(String name,double width,Function<ExamSession,String> value) {
-        TableColumn<ExamSession,String> c=new TableColumn<>(name);c.setPrefWidth(width);
+        TableColumn<ExamSession,String> c=new TableColumn<>(name);c.setPrefWidth(width);c.setSortable(false);
         c.setCellValueFactory(v->new SimpleStringProperty(value.apply(v.getValue())));table.getColumns().add(c);
     }
     private void refresh() {
@@ -86,6 +88,13 @@ public final class TeacherMonitorController implements AutoCloseable {
         ExamSession s=table.getSelectionModel().getSelectedItem();
         boolean disabled=loading||mutating||s==null||s.status()==MonitoringStatus.SUBMITTED||s.status()==MonitoringStatus.TERMINATED;
         score.setDisable(disabled);stop.setDisable(disabled);
+        if (disabled) {
+            score.setStyle("-fx-background-color: #f1f5f9; -fx-text-fill: #94a3b8; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 7 14;");
+            stop.setStyle("-fx-background-color: #f1f5f9; -fx-text-fill: #94a3b8; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 7 14;");
+        } else {
+            score.setStyle("-fx-background-color: #d97706; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 7 14; -fx-cursor: hand;");
+            stop.setStyle("-fx-background-color: #dc2626; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-padding: 7 14; -fx-cursor: hand;");
+        }
     }
     private void penalty(PenaltyType type) {
         ExamSession selected=table.getSelectionModel().getSelectedItem();
@@ -117,31 +126,85 @@ public final class TeacherMonitorController implements AutoCloseable {
     private void history() {
         ExamSession selected=table.getSelectionModel().getSelectedItem();if(selected==null) return;
         Dialog<Void> view=new Dialog<>();view.initOwner(dialog.getDialogPane().getScene().getWindow());
-        view.setTitle("Nhật ký: "+selected.studentName());view.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        TextArea text=new TextArea("Đang tải...");text.setEditable(false);text.setWrapText(true);text.setPrefSize(750,420);
-        view.getDialogPane().setContent(text);
-        var data=api.listAttemptEvents(selected.sessionId()).thenCombine(api.listMonitoringPenalties(selected.sessionId()),(events,penalties)->{
-            StringBuilder b=new StringBuilder("SỰ KIỆN\n");
-            if(events.isEmpty()) b.append("Không có sự kiện vi phạm nào.\n");
-            else events.forEach(e->b.append(DATE.format(e.serverTime())).append(" · ").append(e.eventType()).append(" · ").append(e.detail()).append('\n'));
-            b.append("\nXỬ PHẠT\n");
-            var activePenalties=penalties.stream().filter(p->{
-                try { PenaltyType.valueOf(p.type()); return true; } catch(Exception e) { return false; }
-            }).toList();
-            if(activePenalties.isEmpty()) {
-                b.append("Chưa có xử phạt nào.\n");
+        view.setTitle("Nhật ký & Xử phạt: "+selected.studentName());view.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+
+        VBox container=new VBox(14);
+        container.setPadding(new javafx.geometry.Insets(14));
+        Label loadingLbl=new Label("Đang tải dữ liệu...");
+        loadingLbl.setStyle("-fx-font-size: 14px; -fx-text-fill: #64748b;");
+        container.getChildren().add(loadingLbl);
+
+        ScrollPane scroll=new ScrollPane(container);
+        scroll.setFitToWidth(true);
+        scroll.setPrefSize(750,440);
+        view.getDialogPane().setContent(scroll);
+
+        var data=api.listAttemptEvents(selected.sessionId()).thenCombine(api.listMonitoringPenalties(selected.sessionId()),(events,penalties)->
+            new Object[] { events, penalties }
+        );
+
+        fx.observe(data,()->active()&&view.isShowing(),obj->{
+            @SuppressWarnings("unchecked")
+            List<AntiCheatEventDto> events = (List<AntiCheatEventDto>) obj[0];
+            @SuppressWarnings("unchecked")
+            List<MonitoringPenalty> penalties = (List<MonitoringPenalty>) obj[1];
+
+            container.getChildren().clear();
+
+            // 1. Violations card (Red / Danger theme)
+            VBox eventBox=new VBox(8);
+            eventBox.setStyle("-fx-background-color: #fff1f2; -fx-border-color: #fca5a5; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 14;");
+            Label eventTitle=new Label("🚨 CÁC SỰ KIỆN VI PHẠM ĐƯỢC HỆ THỐNG GHI NHẬN (" + events.size() + ")");
+            eventTitle.setStyle("-fx-font-size: 13.5px; -fx-font-weight: bold; -fx-text-fill: #991b1b;");
+            eventBox.getChildren().add(eventTitle);
+
+            if(events.isEmpty()) {
+                Label emptyLbl=new Label("Không có sự kiện vi phạm nào được ghi nhận.");
+                emptyLbl.setStyle("-fx-text-fill: #059669; -fx-font-weight: bold;");
+                eventBox.getChildren().add(emptyLbl);
             } else {
-                activePenalties.forEach(p->{
-                    PenaltyType t=PenaltyType.valueOf(p.type());
-                    b.append(DATE.format(p.appliedAt())).append(" · GV ").append(p.teacherId()).append(" · ")
-                        .append(action(t));
-                    if(t==PenaltyType.DEDUCT_SCORE) b.append(" (").append(String.format("%.2f",p.amount())).append(" điểm)");
-                    b.append(" · ").append(p.reason()).append('\n');
-                });
+                for(var e : events) {
+                    Label row=new Label("• " + DATE.format(e.serverTime()) + "  [" + e.eventType() + "]  " + e.detail());
+                    row.setWrapText(true);
+                    row.setStyle("-fx-text-fill: #881337; -fx-font-size: 12.5px;");
+                    eventBox.getChildren().add(row);
+                }
             }
-            return b.toString();
-        });
-        fx.observe(data,()->active()&&view.isShowing(),text::setText,e->text.setText(e.getMessage()),()->{});
+
+            // 2. Penalties card (Amber / Warning theme)
+            VBox penaltyBox=new VBox(8);
+            penaltyBox.setStyle("-fx-background-color: #fffbeb; -fx-border-color: #fcd34d; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 14;");
+            var activePenalties=penalties.stream().filter(p->{
+                try { PenaltyType.valueOf(p.type()); return true; } catch(Exception ex) { return false; }
+            }).toList();
+            Label penaltyTitle=new Label("⚖️ LỊCH SỬ XỬ PHẠT TỪ GIÁO VIÊN (" + activePenalties.size() + ")");
+            penaltyTitle.setStyle("-fx-font-size: 13.5px; -fx-font-weight: bold; -fx-text-fill: #92400e;");
+            penaltyBox.getChildren().add(penaltyTitle);
+
+            if(activePenalties.isEmpty()) {
+                Label emptyLbl=new Label("Chưa có quyết định xử phạt nào được áp dụng cho sinh viên này.");
+                emptyLbl.setStyle("-fx-text-fill: #475569;");
+                penaltyBox.getChildren().add(emptyLbl);
+            } else {
+                for(var p : activePenalties) {
+                    PenaltyType t=PenaltyType.valueOf(p.type());
+                    String line="• " + DATE.format(p.appliedAt()) + "  [GV " + p.teacherId() + "]  " + action(t)
+                        + (t==PenaltyType.DEDUCT_SCORE ? " (" + String.format("%.2f",p.amount()) + " điểm)" : "")
+                        + " — Lý do: " + p.reason();
+                    Label row=new Label(line);
+                    row.setWrapText(true);
+                    row.setStyle("-fx-text-fill: #78350f; -fx-font-weight: bold; -fx-font-size: 12.5px;");
+                    penaltyBox.getChildren().add(row);
+                }
+            }
+
+            container.getChildren().addAll(eventBox, penaltyBox);
+        },e->{
+            container.getChildren().clear();
+            Label errLbl=new Label("Lỗi khi tải nhật ký: " + e.getMessage());
+            errLbl.setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
+            container.getChildren().add(errLbl);
+        },()->{});
         view.showAndWait();
     }
     private static String action(PenaltyType t) { return switch(t) {

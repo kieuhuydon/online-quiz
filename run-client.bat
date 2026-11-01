@@ -5,7 +5,7 @@ echo =============================================
 cd /d "%~dp0"
 
 echo Dang bien dich quiz-client...
-call .\mvnw.cmd clean install -Dmaven.test.skip=true -pl quiz-client -am
+call .\mvnw.cmd install -Dmaven.test.skip=true -pl quiz-client -am
 if errorlevel 1 goto build_error
 
 echo Dang khoi dong ung dung Client...

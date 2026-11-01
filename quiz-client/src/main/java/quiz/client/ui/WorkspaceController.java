@@ -19,6 +19,8 @@ public final class WorkspaceController extends ScreenController {
     @FXML private javafx.scene.layout.VBox adminNavigation;
     @FXML private javafx.scene.layout.VBox teacherNavigation;
     @FXML private javafx.scene.control.Button teacherDashboard, teacherQuestions;
+    @FXML private javafx.scene.layout.VBox studentNavigation;
+    @FXML private javafx.scene.control.Button studentDashboard, studentHistory;
 
     public WorkspaceController(SceneNavigator navigator) {
         this.navigator = navigator;
@@ -34,11 +36,26 @@ public final class WorkspaceController extends ScreenController {
         adminClasses.pseudoClassStateChanged(current, route == Screen.ADMIN_CLASSES);
         adminNavigation.setVisible(session.role() == quiz.common.enums.Role.ADMIN);
         adminNavigation.setManaged(session.role() == quiz.common.enums.Role.ADMIN);
+
         boolean isTeacher = session.role() == quiz.common.enums.Role.TEACHER;
         teacherNavigation.setVisible(isTeacher);
         teacherNavigation.setManaged(isTeacher);
         teacherDashboard.pseudoClassStateChanged(current, route == Screen.TEACHER_DASHBOARD);
         teacherQuestions.pseudoClassStateChanged(current, route == Screen.TEACHER_QUESTIONS);
+
+        boolean isStudent = session.role() == quiz.common.enums.Role.STUDENT;
+        if (studentNavigation != null) {
+            studentNavigation.setVisible(isStudent);
+            studentNavigation.setManaged(isStudent);
+        }
+        if (studentDashboard != null) {
+            studentDashboard.pseudoClassStateChanged(current, route == Screen.STUDENT_DASHBOARD);
+        }
+        if (studentHistory != null) {
+            studentHistory.pseudoClassStateChanged(current,
+                route == Screen.STUDENT_HISTORY || route == Screen.STUDENT_RESULT || route == Screen.STUDENT_REVIEW);
+        }
+
         notice.setText(message);
         notice.setVisible(!message.isBlank());
         notice.setManaged(!message.isBlank());
@@ -56,4 +73,6 @@ public final class WorkspaceController extends ScreenController {
     @FXML private void classes() { if (isActive()) navigator.show(Screen.ADMIN_CLASSES); }
     @FXML private void teacherDashboard() { if (isActive()) navigator.show(Screen.TEACHER_DASHBOARD); }
     @FXML private void teacherQuestions() { if (isActive()) navigator.show(Screen.TEACHER_QUESTIONS); }
+    @FXML private void studentDashboard() { if (isActive()) navigator.show(Screen.STUDENT_DASHBOARD); }
+    @FXML private void studentHistory() { if (isActive()) navigator.show(Screen.STUDENT_HISTORY); }
 }

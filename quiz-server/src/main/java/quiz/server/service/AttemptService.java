@@ -76,6 +76,7 @@ public final class AttemptService {
         });
     }
     public void saveAnswer(long attemptId,long questionId,Character answer,long studentId) {
+        if(answer!=null && "ABCD".indexOf(Character.toUpperCase(answer))<0)throw new ValidationException("Đáp án không hợp lệ");
         saveAnswer(attemptId, questionId, answer == null ? null : answer.toString(), studentId);
     }
     public ResultDto submitAttempt(long attemptId,long studentId,SubmitReason requestedReason) {
@@ -85,7 +86,8 @@ public final class AttemptService {
             Optional<ExamResult> existing=attempts.findResult(attemptId);
             if(existing.isPresent())return existing.get();
             if(a.status()!=AttemptStatus.IN_PROGRESS)throw new ConflictException("Attempt đã được nộp");
-            Instant now=clock.instant(); SubmitReason reason=requestedReason==SubmitReason.ANTICHEAT?SubmitReason.ANTICHEAT:SubmitReason.MANUAL; if(!now.isBefore(a.deadlineAt()))reason=SubmitReason.TIMEOUT;
+            SubmitReason reason=requestedReason==SubmitReason.ANTICHEAT?SubmitReason.ANTICHEAT:SubmitReason.MANUAL;
+            if(!clock.instant().isBefore(a.deadlineAt()))reason=SubmitReason.TIMEOUT;
             return finishLocked(c,a,reason);
         });
         return resultDto(result);
@@ -95,7 +97,7 @@ public final class AttemptService {
         Instant now=clock.instant();
         Quiz quiz=quizzes.findById(a.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));
         User user=users.findById(a.studentId()).orElseThrow(()->new NotFoundException("Tài khoản không tồn tại"));
-        ExamResult raw=grading.grade(a,attempts.getTextAnswers(c,a.id()),questions.findQuestionsByQuizId(a.quizId()),quiz,user.fullName(),reason,now);
+        ExamResult raw=grading.grade(a,loadTextAnswers(c,a.id()),questions.findQuestionsByQuizId(a.quizId()),quiz,user.fullName(),reason,now);
         double deduction=monitoring==null?0:monitoring.find(c,a.id(),now).deductedScore();
         double score=Math.max(0,Math.round((raw.score()-deduction)*100.0)/100.0);
         ExamResult result=new ExamResult(raw.attemptId(),raw.quizId(),raw.studentId(),raw.studentName(),score,
@@ -109,7 +111,8 @@ public final class AttemptService {
     public ResultDto getResult(long id,long studentId){ExamResult r=attempts.findResult(id).orElseThrow(()->new NotFoundException("Kết quả chưa có"));if(r.studentId()!=studentId)throw new ForbiddenException("Bạn không có quyền xem kết quả này");return resultDto(r);}
     public List<ResultDto> listHistory(long studentId){return attempts.findResultsByStudent(studentId).stream().map(this::resultDto).toList();}
     public void finalizeExpiredAttempts(){for(Attempt a:attempts.findExpiredInProgress(clock.instant())){try{submitAttempt(a.id(),a.studentId(),SubmitReason.TIMEOUT);}catch(ConflictException ignored){/* Another request finalized it under the attempt lock. */}}}
-    private AttemptStateDto state(Attempt a){Quiz quiz=quizzes.findById(a.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));List<Question> qs=questions.findQuestionsByQuizId(a.quizId());List<StudentQuestionDto> ds=new ArrayList<>();for(int i=0;i<qs.size();i++){Question q=qs.get(i);int blanks=q.content().split("___",-1).length-1;ds.add(new StudentQuestionDto(q.id(),i+1,q.content(),q.optionA(),q.optionB(),q.optionC(),q.optionD(),q.topic(),q.difficulty(),q.questionType(),blanks));}Map<Long,String> saved=transactions.executeInTransaction(c->attempts.getTextAnswers(c,a.id()));long millis=Duration.between(clock.instant(),a.deadlineAt()).toMillis();long remain=millis<=0?0:(millis+999)/1000;return new AttemptStateDto(a.id(),a.quizId(),quiz.title(),remain,List.copyOf(ds),saved);}
-    private ResultDto resultDto(ExamResult r){String title=quizzes.findById(r.quizId()).map(Quiz::title).orElse("Bài kiểm tra");Attempt a=attempts.findById(r.attemptId()).orElse(null);List<QuestionReviewDto> review=new ArrayList<>();if(a!=null){Map<Long,String> answers=transactions.executeInTransaction(c->attempts.getTextAnswers(c,a.id()));for(Question q:questions.findQuestionsByQuizId(r.quizId())){String submitted=answers.getOrDefault(q.id(),"");String key=q.answerKey().isBlank()?String.valueOf(q.correctOption()):q.answerKey();boolean correct=submitted!=null&&grading.matchesAnswer(q,submitted);review.add(new QuestionReviewDto(q.id(),q.content(),submitted,key,q.explanation(),correct));}}return new ResultDto(r.attemptId(),r.quizId(),title,r.studentName(),r.score(),r.correctCount(),r.totalQuestions(),r.passed(),r.submitReason(),r.submittedAt(),List.copyOf(review));}
+    private Map<Long,String> loadTextAnswers(Connection c,long attemptId){Map<Long,String> out=new HashMap<>(attempts.getTextAnswers(c,attemptId));if(out.isEmpty()){attempts.getAnswers(c,attemptId).forEach((k,v)->{if(v!=null)out.put(k,v.toString());});}return Map.copyOf(out);}
+    private AttemptStateDto state(Attempt a){Quiz quiz=quizzes.findById(a.quizId()).orElseThrow(()->new NotFoundException("Bài kiểm tra không tồn tại"));List<Question> qs=questions.findQuestionsByQuizId(a.quizId());List<StudentQuestionDto> ds=new ArrayList<>();for(int i=0;i<qs.size();i++){Question q=qs.get(i);int blanks=q.content().split("___",-1).length-1;ds.add(new StudentQuestionDto(q.id(),i+1,q.content(),q.optionA(),q.optionB(),q.optionC(),q.optionD(),q.topic(),q.difficulty(),q.questionType(),blanks));}Map<Long,String> saved=transactions.executeInTransaction(c->loadTextAnswers(c,a.id()));long millis=Duration.between(clock.instant(),a.deadlineAt()).toMillis();long remain=millis<=0?0:(millis+999)/1000;return new AttemptStateDto(a.id(),a.quizId(),quiz.title(),remain,List.copyOf(ds),saved);}
+    private ResultDto resultDto(ExamResult r){String title=quizzes.findById(r.quizId()).map(Quiz::title).orElse("Bài kiểm tra");Attempt a=attempts.findById(r.attemptId()).orElse(null);List<QuestionReviewDto> review=new ArrayList<>();if(a!=null){Map<Long,String> answers=transactions.executeInTransaction(c->loadTextAnswers(c,a.id()));for(Question q:questions.findQuestionsByQuizId(r.quizId())){String submitted=answers.getOrDefault(q.id(),"");String key=q.answerKey().isBlank()?String.valueOf(q.correctOption()):q.answerKey();boolean correct=submitted!=null&&grading.matchesAnswer(q,submitted);review.add(new QuestionReviewDto(q.id(),q.content(),submitted,key,q.explanation(),correct));}}return new ResultDto(r.attemptId(),r.quizId(),title,r.studentName(),r.score(),r.correctCount(),r.totalQuestions(),r.passed(),r.submitReason(),r.submittedAt(),List.copyOf(review));}
     private static void authorize(Attempt a,long student){if(a.studentId()!=student)throw new ForbiddenException("Attempt không thuộc về bạn");}
 }
