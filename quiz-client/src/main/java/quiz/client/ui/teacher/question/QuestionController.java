@@ -119,6 +119,14 @@ public final class QuestionController extends ScreenController {
 
     @FXML
     private void initialize() {
+        if (questionNotice != null) {
+            questionNotice.setCursor(javafx.scene.Cursor.HAND);
+            questionNotice.setTooltip(new Tooltip("Nhấp để tắt thông báo"));
+            questionNotice.setOnMouseClicked(e -> {
+                questionNotice.setVisible(false);
+                questionNotice.setManaged(false);
+            });
+        }
         configureTable();
         questionCorrectOption.getItems().setAll('A', 'B', 'C', 'D');
         questionCorrectOption.setValue('A');

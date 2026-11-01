@@ -231,6 +231,14 @@ public final class TeacherController extends ScreenController {
 
     @FXML
     private void initialize() {
+        if (quizNotice != null) {
+            quizNotice.setCursor(javafx.scene.Cursor.HAND);
+            quizNotice.setTooltip(new Tooltip("Nhấp để tắt thông báo"));
+            quizNotice.setOnMouseClicked(e -> {
+                quizNotice.setVisible(false);
+                quizNotice.setManaged(false);
+            });
+        }
         btnRefreshClasses.setTooltip(new Tooltip("Tải lại danh sách lớp và học viên"));
         configureQuizTable();
         configureClassTable();

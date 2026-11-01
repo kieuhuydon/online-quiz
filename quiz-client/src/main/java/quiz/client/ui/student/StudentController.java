@@ -16,6 +16,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import quiz.client.api.QuizApi;
+import quiz.client.api.ApiException;
 import quiz.client.ui.SceneNavigator;
 import quiz.client.ui.ScreenController;
 import quiz.client.util.FxAsync;
@@ -89,6 +90,14 @@ public final class StudentController extends ScreenController {
 
     @FXML
     private void initialize() {
+        if (studentNotice != null) {
+            studentNotice.setCursor(javafx.scene.Cursor.HAND);
+            studentNotice.setTooltip(new Tooltip("Nhấp để tắt thông báo"));
+            studentNotice.setOnMouseClicked(e -> {
+                studentNotice.setVisible(false);
+                studentNotice.setManaged(false);
+            });
+        }
         configureTable();
         assignedQuizTable.getSelectionModel().selectedItemProperty()
             .addListener((obs, oldVal, selected) -> {
@@ -438,11 +447,16 @@ public final class StudentController extends ScreenController {
         String pin = null;
         if (selected.pinRequired()) {
             TextInputDialog dialog = new TextInputDialog();
-            dialog.setTitle("Tham gia bài kiểm tra"); dialog.setHeaderText("Nhập mã PIN phòng thi");
+            dialog.setTitle("Tham gia bài kiểm tra");
+            dialog.setHeaderText("Đề thi yêu cầu mã PIN phòng thi do giáo viên cung cấp");
             dialog.setContentText("Mã PIN:");
             var entered = dialog.showAndWait();
             if (entered.isEmpty()) return;
             pin = entered.get().strip();
+            if (pin.isEmpty()) {
+                showNotice("Vui lòng nhập mã PIN phòng thi để vào làm bài.", true);
+                return;
+            }
         }
         final String code = pin;
         btnStartExam.setDisable(true);
@@ -589,7 +603,22 @@ public final class StudentController extends ScreenController {
         fx.observe(api.startAttempt(quizId, code), this::isActive,
             navigator::showExam,
             err -> {
-                showNotice("Không thể bắt đầu bài thi: " + err.getMessage(), true);
+                Throwable cause = FxAsync.unwrap(err);
+                String message;
+                if (cause instanceof ApiException apiErr) {
+                    message = switch (apiErr.errorCode()) {
+                        case FORBIDDEN -> (code != null && !code.isBlank())
+                            ? "Mã PIN phòng thi không chính xác! Vui lòng kiểm tra lại mã PIN do giáo viên cung cấp."
+                            : "Bài kiểm tra này yêu cầu mã PIN phòng thi. Vui lòng nhập mã PIN để vào thi.";
+                        case CONFLICT -> "Bài kiểm tra hiện chưa được mở hoặc bạn đã nộp bài thi này rồi.";
+                        case NOT_FOUND -> "Đề thi không còn tồn tại trên hệ thống.";
+                        case VALIDATION_ERROR -> "Mã PIN không đúng định dạng. Vui lòng kiểm tra lại.";
+                        default -> "Không thể vào thi (" + apiErr.errorCode() + "). Vui lòng thử lại hoặc liên hệ giáo viên.";
+                    };
+                } else {
+                    message = "Không thể kết nối máy chủ để vào thi: " + (cause != null ? cause.getMessage() : "Lỗi không xác định");
+                }
+                showNotice(message, true);
                 btnStartExam.setDisable(false);
             },
             () -> btnStartExam.setDisable(false));

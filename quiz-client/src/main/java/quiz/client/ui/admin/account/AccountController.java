@@ -61,6 +61,14 @@ public final class AccountController extends ScreenController {
 
     @FXML
     private void initialize() {
+        if (accountNotice != null) {
+            accountNotice.setCursor(javafx.scene.Cursor.HAND);
+            accountNotice.setTooltip(new Tooltip("Nhấp để tắt thông báo"));
+            accountNotice.setOnMouseClicked(e -> {
+                accountNotice.setVisible(false);
+                accountNotice.setManaged(false);
+            });
+        }
         configureTable();
         accountTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         updateControls();

@@ -58,6 +58,25 @@ public final class AdminClassController extends ScreenController {
         column(classes, "Giáo viên phụ trách", ClassDto::teacherName);
         column(classes, "Mô tả", row -> row.description() == null ? "" : row.description());
 
+        // Cột STT cho bảng thành viên lớp
+        TableColumn<ClassMemberDto, Void> colStt = new TableColumn<>("STT");
+        colStt.setPrefWidth(52);
+        colStt.setMaxWidth(60);
+        colStt.setSortable(false);
+        colStt.setStyle("-fx-alignment: CENTER;");
+        colStt.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || getIndex() < 0) {
+                    setText(null);
+                } else {
+                    setText(String.valueOf(getIndex() + 1));
+                }
+            }
+        });
+        members.getColumns().add(colStt);
+
         // Cột Checkbox cho bảng thành viên lớp (xóa nhiều thành viên)
         TableColumn<ClassMemberDto, Boolean> memberCheck = new TableColumn<>("Chọn");
         memberCheck.setCellValueFactory(row -> memberSelection(row.getValue().studentId()));
@@ -107,6 +126,15 @@ public final class AdminClassController extends ScreenController {
                 if (isExpanded && className != null) {
                     className.requestFocus();
                 }
+            });
+        }
+
+        if (notice != null) {
+            notice.setCursor(javafx.scene.Cursor.HAND);
+            notice.setTooltip(new Tooltip("Nhấp để tắt thông báo"));
+            notice.setOnMouseClicked(e -> {
+                notice.setVisible(false);
+                notice.setManaged(false);
             });
         }
 

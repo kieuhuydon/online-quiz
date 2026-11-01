@@ -237,9 +237,8 @@
 }
 
 .button:focused {
-    -fx-border-color: #818cf8;
-    -fx-border-width: 1.5;
-    -fx-border-radius: 8;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
 }
 
 .primary-button {
@@ -380,16 +379,32 @@
     -fx-font-size: 13px;
     -fx-padding: 10 14;
     -fx-background-radius: 8;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.sidebar-navigation-button:focused,
+.sidebar-navigation-button:hover:focused,
+.sidebar-navigation-button:current:focused {
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
 }
 
 .sidebar-navigation-button:hover {
     -fx-background-color: #1e293b;
     -fx-text-fill: #ffffff;
+    -fx-border-color: transparent;
 }
 
 .sidebar-navigation-button:current {
     -fx-background-color: #4f46e5;
     -fx-text-fill: #ffffff;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
 }
 
 .topbar {
@@ -613,6 +628,24 @@
 .tab-pane .tab:selected {
     -fx-background-color: #4f46e5;
     -fx-border-color: #4f46e5;
+}
+
+.tab-pane .focus-indicator,
+.tab-pane .tab .focus-indicator,
+.tab .focus-indicator,
+.tab-pane > .tab-header-area > .headers-region > .tab > .focus-indicator {
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.tab-pane .tab,
+.tab-pane .tab:focused,
+.tab-pane .tab:selected,
+.tab-pane .tab:selected:focused {
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
 }
 
 .tab-pane .tab:selected .tab-label {
