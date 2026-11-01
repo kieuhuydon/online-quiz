@@ -27,6 +27,8 @@ import java.util.function.Function;
 public final class AdminClassController extends ScreenController {
     private final QuizApi api;
     private final FxAsync fx;
+    @FXML private VBox classOverviewPanel;
+    @FXML private VBox classCreatePanel;
     @FXML private TableView<ClassDto> classes;
     @FXML private TableView<ClassMemberDto> members;
     @FXML private ComboBox<AccountDto> teacher;
@@ -35,6 +37,8 @@ public final class AdminClassController extends ScreenController {
     @FXML private Label notice, memberTitle, selectedCount;
     @FXML private Button createClass, addMember, removeMember, refresh;
     @FXML private Button deleteClass, confirmDelete, cancelDelete;
+    @FXML private Button btnToggleCreateClass, btnBackToClasses, btnCancelCreate, btnOpenAddStudent;
+    @FXML private Button selectAllMembers, clearMembers;
     @FXML private VBox deleteConfirmation;
     @FXML private TitledPane createPane;
     @FXML private Label deleteConfirmationText;
@@ -44,6 +48,7 @@ public final class AdminClassController extends ScreenController {
     private boolean membersFresh;
     private long memberRevision;
     private final Map<Long, BooleanProperty> picked = new LinkedHashMap<>();
+    private final Map<Long, BooleanProperty> memberPicked = new LinkedHashMap<>();
     private final Map<Long, String> enrollmentNotes = new LinkedHashMap<>();
 
     public AdminClassController(QuizApi api, FxAsync fx) { this.api = api; this.fx = fx; }
@@ -52,17 +57,28 @@ public final class AdminClassController extends ScreenController {
         column(classes, "Tên lớp", ClassDto::name);
         column(classes, "Giáo viên phụ trách", ClassDto::teacherName);
         column(classes, "Mô tả", row -> row.description() == null ? "" : row.description());
+
+        // Cột Checkbox cho bảng thành viên lớp (xóa nhiều thành viên)
+        TableColumn<ClassMemberDto, Boolean> memberCheck = new TableColumn<>("Chọn");
+        memberCheck.setCellValueFactory(row -> memberSelection(row.getValue().studentId()));
+        memberCheck.setCellFactory(CheckBoxTableCell.forTableColumn(memberCheck));
+        memberCheck.setMaxWidth(65); memberCheck.setMinWidth(55); memberCheck.setSortable(false);
+        members.getColumns().add(memberCheck);
+
         column(members, "Tên đăng nhập", ClassMemberDto::studentUsername);
         column(members, "Họ và tên", ClassMemberDto::studentFullName);
         classes.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         members.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         classes.setPlaceholder(new Label("Chưa có lớp học."));
         members.setPlaceholder(new Label("Chọn lớp để xem học viên."));
+
         StringConverter<AccountDto> names = new StringConverter<>() {
             @Override public String toString(AccountDto row) { return row == null ? "" : row.fullName() + " (@" + row.username() + ")"; }
             @Override public AccountDto fromString(String text) { throw new UnsupportedOperationException(); }
         };
         teacher.setConverter(names);
+
+        // Cột Checkbox cho bảng học viên chưa có lớp
         TableColumn<AccountDto, Boolean> check = new TableColumn<>("Chọn");
         check.setCellValueFactory(row -> selection(row.getValue().id()));
         check.setCellFactory(CheckBoxTableCell.forTableColumn(check));
@@ -73,12 +89,40 @@ public final class AdminClassController extends ScreenController {
         column(students, "Trạng thái", row -> enrollmentNotes.getOrDefault(row.id(), ""));
         students.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         students.setPlaceholder(new Label("Chọn lớp để tải học viên có thể thêm."));
+
         classes.setOnScroll(javafx.event.Event::consume);
         members.setOnScroll(javafx.event.Event::consume);
         students.setOnScroll(javafx.event.Event::consume);
+
         classes.getSelectionModel().selectedItemProperty().addListener((o, before, selected) -> loadMembers());
         members.getSelectionModel().selectedItemProperty().addListener((o, before, selected) -> controls());
+
+        // Lắng nghe trạng thái mở/đóng của createPane để chuyển đổi chế độ xem toàn trang
+        if (createPane != null) {
+            createPane.expandedProperty().addListener((o, oldV, isExpanded) -> {
+                if (classOverviewPanel != null) {
+                    classOverviewPanel.setVisible(!isExpanded);
+                    classOverviewPanel.setManaged(!isExpanded);
+                }
+                if (isExpanded && className != null) {
+                    className.requestFocus();
+                }
+            });
+        }
+
         controls();
+    }
+
+    @FXML private void openCreateClass() {
+        if (createPane != null) {
+            createPane.setExpanded(true);
+        }
+    }
+
+    @FXML private void closeCreateClass() {
+        if (createPane != null) {
+            createPane.setExpanded(false);
+        }
     }
 
     @FXML private void toggleCreatePane() {
@@ -103,6 +147,7 @@ public final class AdminClassController extends ScreenController {
         if (!isActive() || busy) return;
         cancelDelete();
         setBusy(true);
+        memberPicked.clear();
         fx.observe(api.listAccounts().thenCombine(api.listClasses(), Data::new), this::isActive, data -> {
             var selected = classes.getSelectionModel().getSelectedItem();
             teacher.getItems().setAll(data.accounts().stream().filter(a -> a.role() == Role.TEACHER && a.active()).toList());
@@ -115,6 +160,7 @@ public final class AdminClassController extends ScreenController {
     private void loadMembers() {
         cancelDelete();
         picked.clear();
+        memberPicked.clear();
         enrollmentNotes.clear();
         refreshMembers();
     }
@@ -124,6 +170,7 @@ public final class AdminClassController extends ScreenController {
         membersFresh = false;
         members.getItems().clear();
         students.getItems().clear();
+        memberPicked.clear();
         ClassDto selected = classes.getSelectionModel().getSelectedItem();
         memberTitle.setText(selected == null ? "Học viên trong lớp" : "Học viên lớp " + selected.name());
         controls();
@@ -146,15 +193,29 @@ public final class AdminClassController extends ScreenController {
         if (!isActive() || busy) return;
         String name = className.getText().strip();
         String desc = description.getText().strip();
-        AccountDto selected = teacher.getValue();
-        if (name.isBlank() || name.length() > 100 || desc.length() > 255 || selected == null) {
+        AccountDto selectedTeacher = teacher.getValue();
+        if (name.isBlank() || name.length() > 100 || desc.length() > 255 || selectedTeacher == null) {
             message("Nhập tên lớp (tối đa 100 ký tự), mô tả (tối đa 255 ký tự) và chọn giáo viên.", true); return;
         }
-        write(api.createClass(new CreateClassDto(name, desc, selected.id())), created -> {
-            message("Đã tạo lớp “" + created.name() + "”.", false);
+
+        List<Long> idsToEnroll = students.getItems().stream()
+            .filter(a -> selection(a.id()).get())
+            .map(AccountDto::id)
+            .toList();
+
+        write(api.createClass(new CreateClassDto(name, desc, selectedTeacher.id())), created -> {
             className.clear(); description.clear();
             classes.getItems().add(created);
             classes.getSelectionModel().select(created);
+            if (!idsToEnroll.isEmpty()) {
+                write(enroll(created.id(), idsToEnroll), result -> {
+                    result.added.forEach(picked::remove);
+                    message("Đã tạo lớp “" + created.name() + "” và thêm " + result.added.size() + " học viên vào lớp.", false);
+                    refreshMembers();
+                });
+            } else {
+                message("Đã tạo lớp “" + created.name() + "”.", false);
+            }
         });
     }
 
@@ -262,12 +323,28 @@ public final class AdminClassController extends ScreenController {
         });
     }
 
+    private BooleanProperty memberSelection(long studentId) {
+        return memberPicked.computeIfAbsent(studentId, ignored -> {
+            BooleanProperty value = new SimpleBooleanProperty();
+            value.addListener((o, before, after) -> controls());
+            return value;
+        });
+    }
+
     @FXML private void selectAll() {
         if (!busy && membersFresh) students.getItems().forEach(a -> selection(a.id()).set(true));
     }
 
     @FXML private void clearSelection() {
         if (!busy) picked.values().forEach(value -> value.set(false));
+    }
+
+    @FXML private void selectAllMembersAction() {
+        if (!busy && membersFresh) members.getItems().forEach(m -> memberSelection(m.studentId()).set(true));
+    }
+
+    @FXML private void clearMembersAction() {
+        if (!busy) memberPicked.values().forEach(value -> value.set(false));
     }
 
     private static final class Enrollment {
@@ -281,8 +358,30 @@ public final class AdminClassController extends ScreenController {
     @FXML private void remove() {
         if (!isActive() || busy) return;
         var selected = classes.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
+
+        // Xóa nhiều thành viên được tích chọn
+        List<Long> checkedStudentIds = members.getItems().stream()
+            .filter(m -> memberPicked.containsKey(m.studentId()) && memberPicked.get(m.studentId()).get())
+            .map(ClassMemberDto::studentId)
+            .toList();
+
+        if (!checkedStudentIds.isEmpty()) {
+            setBusy(true);
+            var futures = checkedStudentIds.stream()
+                .map(id -> api.removeClassMember(selected.id(), id))
+                .toArray(CompletableFuture[]::new);
+            fx.observe(CompletableFuture.allOf(futures), this::isActive, ignored -> {
+                memberPicked.clear();
+                message("Đã xóa " + checkedStudentIds.size() + " học viên khỏi lớp.", false);
+                refreshMembers();
+            }, this::failed, () -> setBusy(false));
+            return;
+        }
+
+        // Nếu không có checkbox nào tích, fallback vào dòng đang được chọn
         var member = members.getSelectionModel().getSelectedItem();
-        if (selected == null || member == null) return;
+        if (member == null) return;
         write(api.removeClassMember(selected.id(), member.studentId()), ignored -> {
             message("Đã xóa học viên khỏi lớp.", false); refreshMembers();
         });
@@ -313,6 +412,7 @@ public final class AdminClassController extends ScreenController {
     }
 
     private void setBusy(boolean value) { busy = value; controls(); }
+
     private void controls() {
         createClass.setDisable(busy); refresh.setDisable(busy); classes.setDisable(busy);
         deleteClass.setDisable(busy || classes.getSelectionModel().getSelectedItem() == null);
@@ -323,7 +423,17 @@ public final class AdminClassController extends ScreenController {
         selectAllStudents.setDisable(busy || !membersFresh || students.getItems().isEmpty());
         clearStudents.setDisable(busy || count == 0);
         addMember.setDisable(busy || !membersFresh || count == 0);
-        removeMember.setDisable(busy || !membersFresh || members.getSelectionModel().getSelectedItem() == null);
+
+        long memberCheckedCount = members.getItems().stream()
+            .filter(m -> memberPicked.containsKey(m.studentId()) && memberPicked.get(m.studentId()).get())
+            .count();
+        if (selectAllMembers != null) {
+            selectAllMembers.setDisable(busy || !membersFresh || members.getItems().isEmpty());
+        }
+        if (clearMembers != null) {
+            clearMembers.setDisable(busy || memberCheckedCount == 0);
+        }
+        removeMember.setDisable(busy || !membersFresh || (members.getSelectionModel().getSelectedItem() == null && memberCheckedCount == 0));
     }
     private record Data(List<AccountDto> accounts, List<ClassDto> classes) { }
     private record MembersData(List<ClassMemberDto> members, List<AccountDto> students) { }

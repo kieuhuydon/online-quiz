@@ -837,3 +837,40 @@
     -fx-font-size: 10.5px;
     -fx-font-weight: bold;
 }
+
+/* =========================================================================
+   CLEAN TITLED PANE (Hides default accordion header bar)
+   ========================================================================= */
+.clean-titled-pane {
+    -fx-padding: 0;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.clean-titled-pane > .title {
+    -fx-padding: 0;
+    -fx-pref-height: 0;
+    -fx-max-height: 0;
+    -fx-min-height: 0;
+    -fx-opacity: 0;
+    visibility: hidden;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.clean-titled-pane > .title > .arrow-button {
+    -fx-padding: 0;
+    -fx-pref-height: 0;
+    -fx-max-height: 0;
+    -fx-opacity: 0;
+    visibility: hidden;
+}
+
+.clean-titled-pane > .content {
+    -fx-padding: 0;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}

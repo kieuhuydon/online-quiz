@@ -157,6 +157,38 @@ public final class AccountController extends ScreenController {
     }
 
     @FXML
+    private void selectAllStudentsAction() {
+        if (writing || loading) return;
+        accountTable.getSelectionModel().clearSelection();
+        for (int i = 0; i < accountTable.getItems().size(); i++) {
+            if (accountTable.getItems().get(i).role() == Role.STUDENT) {
+                accountTable.getSelectionModel().select(i);
+            }
+        }
+        updateControls();
+    }
+
+    @FXML
+    private void selectAllTeachersAction() {
+        if (writing || loading) return;
+        accountTable.getSelectionModel().clearSelection();
+        for (int i = 0; i < accountTable.getItems().size(); i++) {
+            if (accountTable.getItems().get(i).role() == Role.TEACHER) {
+                accountTable.getSelectionModel().select(i);
+            }
+        }
+        updateControls();
+    }
+
+    @FXML
+    private void clearAccountSelectionAction() {
+        if (writing || loading) return;
+        accountTable.getSelectionModel().clearSelection();
+        cancelLock();
+        updateControls();
+    }
+
+    @FXML
     private void create() {
         if (isActive() && !writing) navigator.show(Screen.ADMIN_CREATE_ACCOUNT);
     }
@@ -290,7 +322,12 @@ public final class AccountController extends ScreenController {
         }
 
         boolean anyActive = hasSel && selectedList.stream().anyMatch(AccountDto::active);
-        toggleAccount.setText(hasSel && !anyActive ? "Mở khóa tài khoản" : "Khóa tài khoản");
+        if (selectedList.size() == 1) {
+            AccountDto single = selectedList.get(0);
+            toggleAccount.setText(single.active() ? "Khóa tài khoản" : "Mở khóa tài khoản");
+        } else {
+            toggleAccount.setText(anyActive ? "Khóa tài khoản đã chọn" : "Mở khóa tài khoản đã chọn");
+        }
         toggleAccount.getStyleClass().removeAll("danger-button", "success-button", "secondary-button");
         if (hasSel && !anyActive) {
             toggleAccount.getStyleClass().add("success-button");

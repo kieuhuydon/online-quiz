@@ -11,7 +11,13 @@
             <Button fx:id="refreshAccounts" text="🔄 Tải lại" onAction="#reload" styleClass="secondary-button"/>
             <Button fx:id="createAccount" text="➕ Tạo tài khoản" onAction="#create" styleClass="primary-button"/>
         </HBox>
-        <Label fx:id="listStatus" wrapText="true" styleClass="muted"/>
+        <HBox spacing="8" alignment="CENTER_LEFT">
+            <Button fx:id="btnSelectAllStudentsAccount" text="Chọn tất cả học viên" onAction="#selectAllStudentsAction" styleClass="secondary-button, btn-small"/>
+            <Button fx:id="btnSelectAllTeachersAccount" text="Chọn tất cả giáo viên" onAction="#selectAllTeachersAction" styleClass="secondary-button, btn-small"/>
+            <Button fx:id="btnClearAccountSelection" text="Bỏ chọn" onAction="#clearAccountSelectionAction" styleClass="secondary-button, btn-small"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="listStatus" wrapText="true" styleClass="muted"/>
+        </HBox>
         <TableView fx:id="accountTable" minHeight="200" minWidth="0" VBox.vgrow="ALWAYS"/>
         <HBox fx:id="accountActions" spacing="12" alignment="CENTER_LEFT" visible="false" managed="false">
             <Label fx:id="selectedAccount" wrapText="true" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
