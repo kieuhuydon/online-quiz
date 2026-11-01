@@ -38,10 +38,32 @@
                 </VBox>
                 <Button fx:id="selectAllMembers" text="Chọn tất cả" onAction="#selectAllMembersAction" styleClass="secondary-button, btn-small"/>
                 <Button fx:id="clearMembers" text="Bỏ chọn" onAction="#clearMembersAction" styleClass="secondary-button, btn-small"/>
-                <Button fx:id="btnOpenAddStudent" text="➕ Thêm học viên vào lớp" onAction="#openCreateClass" styleClass="primary-button, btn-small"/>
+                <Button fx:id="btnOpenAddStudent" text="➕ Thêm học viên vào lớp" onAction="#toggleCandidatePanel" styleClass="primary-button, btn-small"/>
                 <Button fx:id="removeMember" text="Xóa khỏi lớp" onAction="#remove" styleClass="danger-button, btn-small"/>
             </HBox>
-            <TableView fx:id="members" minHeight="240" prefHeight="320" VBox.vgrow="ALWAYS"/>
+            <HBox spacing="14" VBox.vgrow="ALWAYS" alignment="TOP_LEFT">
+                <TableView fx:id="members" minHeight="240" prefHeight="320" HBox.hgrow="ALWAYS"/>
+
+                <!-- Bảng các học viên chưa có lớp (hiện lên bên cạnh khi ấn 'Thêm học viên vào lớp') -->
+                <VBox fx:id="candidatePanel" visible="false" managed="false" prefWidth="480" minWidth="380" maxWidth="560" styleClass="account-card" style="-fx-padding: 14;" spacing="10">
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <VBox spacing="2" HBox.hgrow="ALWAYS">
+                            <Label text="THÊM HỌC VIÊN VÀO LỚP" styleClass="eyebrow"/>
+                            <Label text="Học viên chưa có lớp" styleClass="card-heading"/>
+                        </VBox>
+                        <Button fx:id="btnCloseCandidatePanel" text="✕" onAction="#closeCandidatePanel" styleClass="secondary-button, btn-small"/>
+                    </HBox>
+                    <Label text="Chọn học viên chưa có lớp bên dưới để thêm vào lớp hiện tại." styleClass="muted" wrapText="true"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <Button fx:id="selectAllStudents" text="Chọn tất cả" onAction="#selectAll" styleClass="secondary-button, btn-small"/>
+                        <Button fx:id="clearStudents" text="Bỏ chọn" onAction="#clearSelection" styleClass="secondary-button, btn-small"/>
+                        <Label fx:id="selectedCount" text="Đã chọn 0 học viên" styleClass="muted" style="-fx-font-weight: bold;"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="addMember" text="Thêm vào lớp" onAction="#add" styleClass="primary-button, btn-small"/>
+                    </HBox>
+                    <TableView fx:id="students" minHeight="220" prefHeight="260" editable="true" VBox.vgrow="ALWAYS"/>
+                </VBox>
+            </HBox>
         </VBox>
     </VBox>
 
@@ -87,22 +109,7 @@
                 </HBox>
             </VBox>
 
-            <!-- Card 2: Danh sách học viên chưa có lớp để thêm vào lớp mới -->
-            <VBox styleClass="account-card" style="-fx-padding: 16;" spacing="10" VBox.vgrow="ALWAYS">
-                <VBox spacing="2">
-                    <Label text="DANH SÁCH HỌC VIÊN CHƯA CÓ LỚP" styleClass="eyebrow"/>
-                    <Label text="Chọn học viên để ghi danh vào lớp" styleClass="card-heading"/>
-                    <Label text="Học viên chỉ thuộc tối đa 1 lớp. Muốn đổi lớp cần xóa khỏi lớp cũ trước." styleClass="muted" wrapText="true"/>
-                </VBox>
-                <HBox spacing="8" alignment="CENTER_LEFT">
-                    <Button fx:id="selectAllStudents" text="Chọn tất cả" onAction="#selectAll" styleClass="secondary-button, btn-small"/>
-                    <Button fx:id="clearStudents" text="Bỏ chọn" onAction="#clearSelection" styleClass="secondary-button, btn-small"/>
-                    <Label fx:id="selectedCount" text="Đã chọn 0 học viên" styleClass="muted" style="-fx-font-weight: bold;"/>
-                    <Region HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="addMember" text="Thêm vào lớp" onAction="#add" styleClass="primary-button, btn-small"/>
-                </HBox>
-                <TableView fx:id="students" minHeight="240" prefHeight="280" editable="true" VBox.vgrow="ALWAYS"/>
-            </VBox>
+
         </VBox>
     </TitledPane>
 </VBox>

@@ -44,6 +44,8 @@ public final class AdminClassController extends ScreenController {
     @FXML private Label deleteConfirmationText;
     private ClassDto deletionTarget;
     @FXML private Button selectAllStudents, clearStudents;
+    @FXML private VBox candidatePanel;
+    @FXML private Button btnCloseCandidatePanel;
     private boolean busy;
     private boolean membersFresh;
     private long memberRevision;
@@ -147,6 +149,37 @@ public final class AdminClassController extends ScreenController {
         }
     }
 
+    @FXML private void toggleCandidatePanel() {
+        if (candidatePanel != null) {
+            if (candidatePanel.isVisible()) {
+                closeCandidatePanel();
+            } else {
+                openCandidatePanel();
+            }
+        }
+    }
+
+    @FXML private void openCandidatePanel() {
+        ClassDto selected = classes.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            message("Vui lòng chọn một lớp học trong danh sách trước khi thêm học viên.", true);
+            return;
+        }
+        if (candidatePanel != null) {
+            candidatePanel.setVisible(true);
+            candidatePanel.setManaged(true);
+            controls();
+        }
+    }
+
+    @FXML private void closeCandidatePanel() {
+        if (candidatePanel != null) {
+            candidatePanel.setVisible(false);
+            candidatePanel.setManaged(false);
+            controls();
+        }
+    }
+
     @FXML private void closeCreateClass() {
         if (createPane != null) {
             createPane.setExpanded(false);
@@ -235,6 +268,8 @@ public final class AdminClassController extends ScreenController {
             className.clear(); description.clear();
             classes.getItems().add(created);
             classes.getSelectionModel().select(created);
+            closeCreateClass();
+            openCandidatePanel();
             if (!idsToEnroll.isEmpty()) {
                 write(enroll(created.id(), idsToEnroll), result -> {
                     result.added.forEach(picked::remove);
@@ -462,6 +497,15 @@ public final class AdminClassController extends ScreenController {
             clearMembers.setDisable(busy || memberCheckedCount == 0);
         }
         removeMember.setDisable(busy || !membersFresh || (members.getSelectionModel().getSelectedItem() == null && memberCheckedCount == 0));
+        ClassDto selectedClass = classes.getSelectionModel().getSelectedItem();
+        if (btnOpenAddStudent != null) {
+            btnOpenAddStudent.setDisable(busy || selectedClass == null);
+            if (candidatePanel != null && candidatePanel.isVisible()) {
+                btnOpenAddStudent.setText("✕ Đóng thêm học viên");
+            } else {
+                btnOpenAddStudent.setText("➕ Thêm học viên vào lớp");
+            }
+        }
     }
     private record Data(List<AccountDto> accounts, List<ClassDto> classes) { }
     private record MembersData(List<ClassMemberDto> members, List<AccountDto> students) { }
