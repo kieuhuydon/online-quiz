@@ -1,6 +1,7 @@
 package quiz.server.dispatch.handlers;
 
 import quiz.common.dto.ApplyPenaltyDto;
+import quiz.common.dto.ExamSessionRequestDto;
 import quiz.common.enums.Role;
 import quiz.common.protocol.*;
 import quiz.server.dispatch.CommandHandler;
@@ -21,7 +22,10 @@ public final class MonitoringHandler implements CommandHandler {
         UserSession actor=HandlerPayload.authenticated(session);
         return Response.success(r.requestId(),switch(r.type()) {
             case LIST_EXAM_SESSIONS -> new java.util.ArrayList<>(service.list(HandlerPayload.required(r,Long.class),actor));
-            case GET_EXAM_SESSION -> service.studentState(HandlerPayload.required(r,Long.class),actor);
+            case GET_EXAM_SESSION -> {
+                ExamSessionRequestDto d=HandlerPayload.required(r,ExamSessionRequestDto.class);
+                yield service.studentState(d.sessionId(),actor,d.ipAddress());
+            }
             case APPLY_MONITORING_PENALTY -> service.penalize(HandlerPayload.required(r,ApplyPenaltyDto.class),actor);
             case LIST_MONITORING_PENALTIES -> new java.util.ArrayList<>(service.history(HandlerPayload.required(r,Long.class),actor));
             default -> throw new IllegalArgumentException("Unsupported monitoring command");

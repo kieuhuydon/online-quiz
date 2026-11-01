@@ -41,7 +41,7 @@ class QuestionHandlerTest {
 
     @Test
     void createQuestionMapsDomainToDto() {
-        var dto = new CreateQuestionDto("Nội dung?", "A", "B", "C", "D", 'A', "Chủ đề", Difficulty.EASY);
+        var dto = new CreateQuestionDto("Nội dung?", "A", "B", "C", "D", 'A', "Chủ đề", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         Instant ts = Instant.parse("2026-10-10T00:00:00Z");
         QuestionDto created = new QuestionDto(1, "Nội dung?", "A", "B", "C", "D", 'A',
             "Chủ đề", Difficulty.EASY, true, 8, ts);
@@ -90,7 +90,7 @@ class QuestionHandlerTest {
     void updateQuestionMapsDto() {
         Instant ts = Instant.parse("2026-10-10T00:00:00Z");
         Instant ts2 = Instant.parse("2026-10-11T00:00:00Z");
-        var dto = new UpdateQuestionDto(1, "Mới?", "A", "B", "C", "D", 'B', "Chủ đề", Difficulty.HARD);
+        var dto = new UpdateQuestionDto(1, "Mới?", "A", "B", "C", "D", 'B', "Chủ đề", Difficulty.HARD, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         QuestionDto updated = new QuestionDto(1, "Mới?", "A", "B", "C", "D", 'B',
             "Chủ đề", Difficulty.HARD, true, 7, ts);
         when(questions.updateQuestion(dto, 7)).thenReturn(
@@ -127,7 +127,7 @@ class QuestionHandlerTest {
 
     @Test
     void studentIsForbidden() {
-        var dto = new CreateQuestionDto("Câu?", "A", "B", "C", "D", 'A', "T", Difficulty.EASY);
+        var dto = new CreateQuestionDto("Câu?", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích");
         doThrow(new ForbiddenException("Chỉ Giáo viên và Quản trị viên được quản lý câu hỏi"))
             .when(questions).createQuestion(any(), anyLong());
         assertEquals(quiz.common.protocol.ErrorCode.FORBIDDEN, assertThrows(QuizException.class,

@@ -27,6 +27,7 @@ import java.util.Optional;
 public final class JdbcQuestionRepository implements QuestionRepository {
     private static final String COUNT_ACTIVE = "SELECT COUNT(*) FROM questions WHERE active = TRUE";
     private static final String DEACTIVATE = "UPDATE questions SET active = FALSE, updated_at = now() WHERE id = ?";
+    private static final String DEACTIVATE_BATCH = "UPDATE questions SET active = FALSE, updated_at = now() WHERE id = ANY(?)";
     private static final String EXISTS_ID = "SELECT 1 FROM questions WHERE id = ?";
 
     private final DataSource dataSource;
@@ -285,6 +286,15 @@ public final class JdbcQuestionRepository implements QuestionRepository {
     }
 
     @Override
+    public int deactivate(Connection connection, List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        ids.forEach(this::validateId);
+        return onConnection(connection, () -> deactivateQuestions(connection, ids));
+    }
+
+    @Override
     public boolean existsById(long id) {
         validateId(id);
         return withConnection(connection -> exists(connection, EXISTS_ID, id));
@@ -368,6 +378,17 @@ public final class JdbcQuestionRepository implements QuestionRepository {
         try (PreparedStatement statement = connection.prepareStatement(DEACTIVATE)) {
             statement.setLong(1, id);
             return statement.executeUpdate() > 0;
+        } catch (SQLException error) {
+            throw databaseError(error);
+        }
+    }
+
+    private int deactivateQuestions(Connection connection, List<Long> ids) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(DEACTIVATE_BATCH)) {
+            // PostgreSQL array parameter for bigint[]
+            java.sql.Array idArray = connection.createArrayOf("bigint", ids.toArray());
+            statement.setArray(1, idArray);
+            return statement.executeUpdate();
         } catch (SQLException error) {
             throw databaseError(error);
         }

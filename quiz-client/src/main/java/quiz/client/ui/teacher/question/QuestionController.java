@@ -31,7 +31,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import javafx.stage.FileChooser;
 
@@ -66,6 +68,9 @@ public final class QuestionController extends ScreenController {
     @FXML private Button deleteQuestion;
     @FXML private Button cancelEdit;
     @FXML private Button copySelected;
+    @FXML private Button deleteSelectedQuestions;
+    @FXML private Button prevQuestion;
+    @FXML private Button nextQuestion;
     @FXML private Label listStatus;
     @FXML private Label questionNotice;
     @FXML private TextArea selectedQuestion;
@@ -98,6 +103,7 @@ public final class QuestionController extends ScreenController {
     private ToggleGroup trueFalseGroup;
 
     private List<QuestionDto> allQuestions = new ArrayList<>();
+    private final Set<Long> selectedQuestionIds = new HashSet<>();
     private long loadVersion;
     private boolean loading;
     private boolean writing;
@@ -238,6 +244,7 @@ public final class QuestionController extends ScreenController {
     }
 
     private void renderFilteredQuestions() {
+        selectedQuestionIds.clear();
         String search = searchContent != null && searchContent.getText() != null
             ? searchContent.getText().trim().toLowerCase() : "";
         String topicFilter = filterTopic != null && filterTopic.getText() != null
@@ -325,6 +332,10 @@ public final class QuestionController extends ScreenController {
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
 
+        CheckBox selectCheck = new CheckBox();
+        selectCheck.setSelected(selectedQuestionIds.contains(q.id()));
+        selectCheck.setOnAction(e -> toggleSelection(q.id(), selectCheck.isSelected()));
+
         Label indexLabel = new Label("CÂU " + index + "  •  #" + q.id());
         indexLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #1e293b;");
 
@@ -359,13 +370,49 @@ public final class QuestionController extends ScreenController {
         deleteBtn.setDisable(writing);
         deleteBtn.setOnAction(e -> deleteQuestion(q));
 
-        header.getChildren().addAll(indexLabel, typeBadge, topicBadge, diffBadge, spacer, editBtn, copyBtn, deleteBtn);
+        header.getChildren().addAll(selectCheck, indexLabel, typeBadge, topicBadge, diffBadge, spacer, editBtn, copyBtn, deleteBtn);
 
         // Nội dung câu hỏi (hỗ trợ làm nổi bật vị trí điền khuyết ___)
         Node contentNode = createQuestionContentNode(q.content());
 
-        // Các đáp án (2 cột x 2 hàng)
-        Node answersNode = createAnswersDisplayNode(q);
+        // Các đáp án hiển thị thông minh theo loại câu hỏi
+        Node optionsNode;
+        QuestionType qType = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
+        if (qType == QuestionType.TRUE_FALSE) {
+            GridPane optionsGrid = new GridPane();
+            optionsGrid.setHgap(14);
+            optionsGrid.setVgap(10);
+            ColumnConstraints col1 = new ColumnConstraints();
+            col1.setPercentWidth(50);
+            ColumnConstraints col2 = new ColumnConstraints();
+            col2.setPercentWidth(50);
+            optionsGrid.getColumnConstraints().addAll(col1, col2);
+            String optA = (q.optionA() != null && !q.optionA().isBlank()) ? q.optionA() : "Đúng";
+            String optB = (q.optionB() != null && !q.optionB().isBlank()) ? q.optionB() : "Sai";
+            optionsGrid.add(createOptionBox("A", optA, q.correctOption() == 'A'), 0, 0);
+            optionsGrid.add(createOptionBox("B", optB, q.correctOption() == 'B'), 1, 0);
+            optionsNode = optionsGrid;
+        } else if (qType == QuestionType.SHORT_ANSWER) {
+            String ans = TeacherController.getCorrectOptionText(q);
+            optionsNode = createSingleAnswerBox("Đáp án mẫu / chuẩn:", ans);
+        } else if (qType == QuestionType.FILL_BLANK) {
+            String ans = TeacherController.getCorrectOptionText(q);
+            optionsNode = createSingleAnswerBox("Từ / cụm từ cần điền (Đáp án đúng):", ans);
+        } else {
+            GridPane optionsGrid = new GridPane();
+            optionsGrid.setHgap(14);
+            optionsGrid.setVgap(10);
+            ColumnConstraints col1 = new ColumnConstraints();
+            col1.setPercentWidth(50);
+            ColumnConstraints col2 = new ColumnConstraints();
+            col2.setPercentWidth(50);
+            optionsGrid.getColumnConstraints().addAll(col1, col2);
+            optionsGrid.add(createOptionBox("A", q.optionA(), q.correctOption() == 'A'), 0, 0);
+            optionsGrid.add(createOptionBox("B", q.optionB(), q.correctOption() == 'B'), 1, 0);
+            optionsGrid.add(createOptionBox("C", q.optionC(), q.correctOption() == 'C'), 0, 1);
+            optionsGrid.add(createOptionBox("D", q.optionD(), q.correctOption() == 'D'), 1, 1);
+            optionsNode = optionsGrid;
+        }
 
         // Footer thông tin tạo
         HBox footer = new HBox(8);
@@ -373,44 +420,37 @@ public final class QuestionController extends ScreenController {
         dateLabel.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
         footer.getChildren().add(dateLabel);
 
-        if (q.explanation() != null && !q.explanation().isBlank()) {
-            VBox expBox = new VBox(4);
-            expBox.setStyle("-fx-background-color: #fffbeb; -fx-border-color: #fbbf24; -fx-border-width: 1; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 10 14;");
-            Label expTitle = new Label("💡 Giải thích đáp án:");
-            expTitle.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #92400e;");
-            Label expText = new Label(q.explanation());
-            expText.setWrapText(true);
-            expText.setStyle("-fx-font-size: 13px; -fx-text-fill: #451a03;");
-            expBox.getChildren().addAll(expTitle, expText);
-            card.getChildren().addAll(header, contentNode, answersNode, expBox, footer);
-        } else {
-            card.getChildren().addAll(header, contentNode, answersNode, footer);
-        }
+        card.getChildren().addAll(header, contentNode, optionsNode, footer);
         return card;
     }
 
-    private Node createQuestionContentNode(String text) {
+        private Node createQuestionContentNode(String text) {
         if (text == null) text = "";
-        javafx.scene.text.TextFlow flow = new javafx.scene.text.TextFlow();
-        flow.setMaxWidth(Double.MAX_VALUE);
-        flow.setStyle("-fx-line-spacing: 6px;");
+        javafx.scene.layout.VBox container = new javafx.scene.layout.VBox(4);
+        container.setMaxWidth(Double.MAX_VALUE);
 
-        // Tìm các vị trí "___" để làm nổi bật vị trí điền khuyết
-        String[] parts = text.split("___", -1);
-        for (int i = 0; i < parts.length; i++) {
-            if (!parts[i].isEmpty()) {
-                javafx.scene.text.Text t = new javafx.scene.text.Text(parts[i]);
-                t.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-fill: #0f172a;");
-                flow.getChildren().add(t);
+        String[] lines = text.split("\r?\n");
+        for (String line : lines) {
+            javafx.scene.text.TextFlow flow = new javafx.scene.text.TextFlow();
+            flow.setMaxWidth(Double.MAX_VALUE);
+            flow.setStyle("-fx-line-spacing: 6px;");
+
+            String[] parts = line.split("___", -1);
+            for (int i = 0; i < parts.length; i++) {
+                if (!parts[i].isEmpty()) {
+                    javafx.scene.text.Text t = new javafx.scene.text.Text(parts[i]);
+                    t.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-fill: #0f172a;");
+                    flow.getChildren().add(t);
+                }
+                if (i < parts.length - 1) {
+                    Label blankTag = new Label("  _____  ");
+                    blankTag.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #0284c7; -fx-background-color: #e0f2fe; -fx-border-color: #38bdf8; -fx-border-radius: 4; -fx-background-radius: 4; -fx-padding: 1 4;");
+                    flow.getChildren().add(blankTag);
+                }
             }
-            if (i < parts.length - 1) {
-                // Thẻ hiển thị ô điền khuyết nổi bật
-                Label blankTag = new Label("  _____  ");
-                blankTag.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #0284c7; -fx-background-color: #e0f2fe; -fx-border-color: #38bdf8; -fx-border-radius: 4; -fx-background-radius: 4; -fx-padding: 1 4;");
-                flow.getChildren().add(blankTag);
-            }
+            container.getChildren().add(flow);
         }
-        return flow;
+        return container;
     }
 
     private Node createOptionBox(String label, String text, boolean isCorrect) {
@@ -444,134 +484,25 @@ public final class QuestionController extends ScreenController {
         return box;
     }
 
-    
-    private Node createAnswersDisplayNode(QuestionDto q) {
-        QuestionType type = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
-        return switch (type) {
-            case TRUE_FALSE -> createTrueFalseAnswersNode(q);
-            case FILL_BLANK -> createFillBlankAnswersNode(q);
-            case SHORT_ANSWER -> createShortAnswerNode(q);
-            default -> createMultipleChoiceGrid(q);
-        };
-    }
-
-        private Node createTrueFalseAnswersNode(QuestionDto q) {
-        HBox box = new HBox(16);
+    private Node createSingleAnswerBox(String label, String text) {
+        HBox box = new HBox(8);
         box.setAlignment(Pos.CENTER_LEFT);
-        boolean isA = (q.correctOption() == 'A');
-        boolean isB = (q.correctOption() == 'B');
+        box.setStyle("-fx-background-color: #f0fdf4; -fx-border-color: #22c55e; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 8 12;");
 
-        HBox trueBox = new HBox(10);
-        trueBox.setAlignment(Pos.CENTER_LEFT);
-        trueBox.setStyle(isA
-            ? "-fx-background-color: #ecfdf5; -fx-border-color: #10b981; -fx-border-width: 1.5; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 10 18;"
-            : "-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 10 18;");
-        Label trueBadge = new Label("ĐÚNG");
-        trueBadge.setStyle(isA ? "-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #047857;" : "-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #64748b;");
-        trueBox.getChildren().add(trueBadge);
-        if (isA) {
-            Region r = new Region();
-            HBox.setHgrow(r, Priority.ALWAYS);
-            Label check = new Label("✓ Đáp án đúng");
-            check.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #047857; -fx-background-color: #d1fae5; -fx-padding: 3 8; -fx-background-radius: 4;");
-            trueBox.getChildren().addAll(r, check);
-        }
+        Label optLabel = new Label(label);
+        optLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #15803d;");
 
-        HBox falseBox = new HBox(10);
-        falseBox.setAlignment(Pos.CENTER_LEFT);
-        falseBox.setStyle(isB
-            ? "-fx-background-color: #ecfdf5; -fx-border-color: #10b981; -fx-border-width: 1.5; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 10 18;"
-            : "-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 10 18;");
-        Label falseBadge = new Label("SAI");
-        falseBadge.setStyle(isB ? "-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #047857;" : "-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #64748b;");
-        falseBox.getChildren().add(falseBadge);
-        if (isB) {
-            Region r = new Region();
-            HBox.setHgrow(r, Priority.ALWAYS);
-            Label check = new Label("✓ Đáp án đúng");
-            check.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #047857; -fx-background-color: #d1fae5; -fx-padding: 3 8; -fx-background-radius: 4;");
-            falseBox.getChildren().addAll(r, check);
-        }
+        Label optText = new Label(text == null ? "" : text);
+        optText.setWrapText(true);
+        optText.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(optText, Priority.ALWAYS);
+        optText.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #166534;");
 
-        HBox.setHgrow(trueBox, Priority.ALWAYS);
-        HBox.setHgrow(falseBox, Priority.ALWAYS);
-        box.getChildren().addAll(trueBox, falseBox);
+        Label check = new Label("✓ Đáp án đúng");
+        check.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-text-fill: #15803d; -fx-background-color: #dcfce7; -fx-padding: 2 6; -fx-background-radius: 4;");
+
+        box.getChildren().addAll(optLabel, optText, check);
         return box;
-    }
-
-    private Node createFillBlankAnswersNode(QuestionDto q) {
-        VBox container = new VBox(10);
-        container.setStyle("-fx-background-color: #f0fdf4; -fx-border-color: #86efac; -fx-border-width: 1.2; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 12 16;");
-
-        Label title = new Label("📝 Từ cần điền chính xác vào chỗ trống:");
-        title.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #166534;");
-        container.getChildren().add(title);
-
-        FlowPane blanks = new FlowPane();
-        blanks.setHgap(16);
-        blanks.setVgap(8);
-
-        HBox b1 = new HBox(8);
-        b1.setAlignment(Pos.CENTER_LEFT);
-        b1.setStyle("-fx-background-color: white; -fx-border-color: #22c55e; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 6 14;");
-        Label tag1 = new Label("Vị trí 1:");
-        tag1.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #15803d;");
-        Label val1 = new Label(q.optionA() != null && !q.optionA().isBlank() ? q.optionA() : "-");
-        val1.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #0f172a;");
-        b1.getChildren().addAll(tag1, val1);
-        blanks.getChildren().add(b1);
-
-        boolean hasBlank2 = q.optionB() != null && !q.optionB().isBlank() && !"-".equals(q.optionB().trim());
-        if (hasBlank2) {
-            HBox b2 = new HBox(8);
-            b2.setAlignment(Pos.CENTER_LEFT);
-            b2.setStyle("-fx-background-color: white; -fx-border-color: #22c55e; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 6 14;");
-            Label tag2 = new Label("Vị trí 2:");
-            tag2.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #15803d;");
-            Label val2 = new Label(q.optionB());
-            val2.setStyle("-fx-font-weight: bold; -fx-font-size: 14px; -fx-text-fill: #0f172a;");
-            b2.getChildren().addAll(tag2, val2);
-            blanks.getChildren().add(b2);
-        }
-
-        container.getChildren().add(blanks);
-        return container;
-    }
-
-    private Node createShortAnswerNode(QuestionDto q) {
-        VBox container = new VBox(8);
-        container.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-width: 1.2; -fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 12 16;");
-
-        Label title = new Label("✍️ Câu trả lời mẫu / Đáp án chính xác:");
-        title.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #334155;");
-
-        HBox ansBox = new HBox(10);
-        ansBox.setAlignment(Pos.CENTER_LEFT);
-        ansBox.setStyle("-fx-background-color: white; -fx-border-color: #3b82f6; -fx-border-width: 1.5; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 10 16;");
-        Label ansText = new Label(q.optionA() != null ? q.optionA() : "");
-        ansText.setWrapText(true);
-        ansText.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1d4ed8;");
-        ansBox.getChildren().add(ansText);
-
-        container.getChildren().addAll(title, ansBox);
-        return container;
-    }
-
-    private Node createMultipleChoiceGrid(QuestionDto q) {
-        GridPane grid = new GridPane();
-        grid.setHgap(14);
-        grid.setVgap(10);
-        ColumnConstraints col1 = new ColumnConstraints();
-        col1.setPercentWidth(50);
-        ColumnConstraints col2 = new ColumnConstraints();
-        col2.setPercentWidth(50);
-        grid.getColumnConstraints().addAll(col1, col2);
-
-        grid.add(createOptionBox("A", q.optionA(), q.correctOption() == 'A'), 0, 0);
-        grid.add(createOptionBox("B", q.optionB(), q.correctOption() == 'B'), 1, 0);
-        grid.add(createOptionBox("C", q.optionC(), q.correctOption() == 'C'), 0, 1);
-        grid.add(createOptionBox("D", q.optionD(), q.correctOption() == 'D'), 1, 1);
-        return grid;
     }
 
     private Node createEmptyState() {
@@ -629,6 +560,8 @@ public final class QuestionController extends ScreenController {
         questionForm.setVisible(true);
         questionForm.setManaged(true);
         questionContent.requestFocus();
+        if (prevQuestion != null) { prevQuestion.setVisible(true); prevQuestion.setManaged(true); }
+        if (nextQuestion != null) { nextQuestion.setVisible(true); nextQuestion.setManaged(true); }
         updateControls();
     }
 
@@ -643,14 +576,130 @@ public final class QuestionController extends ScreenController {
         beginWrite("Đang xóa câu hỏi…");
         fx.observe(api.deactivateQuestion(q.id()), () -> isActive(),
             ignored -> {
-                show(questionNotice, "Đã vô hiệu hóa (xóa) câu hỏi “" + truncate(q.content(), 60) + "” thành công. Câu hỏi đã được gỡ khỏi danh sách.", false);
-                reload();
+                writing = false;
+                long deletedId = q.id();
+                allQuestions.removeIf(it -> it.id() == deletedId);
+                renderFilteredQuestions();
+                show(questionNotice, "Đã xóa câu hỏi \"" + truncate(q.content(), 60) + "\" thành công.", false);
                 cancelEdit();
+                reload();
             }, this::showWriteFailure, this::finishWrite);
     }
 
     public void deactivateQuestion(QuestionDto q) {
         deleteQuestion(q);
+    }
+
+    private void toggleSelection(long id, boolean selected) {
+        if (selected) {
+            selectedQuestionIds.add(id);
+        } else {
+            selectedQuestionIds.remove(id);
+        }
+        updateControls();
+    }
+
+    @FXML
+    private void deleteSelectedQuestions() {
+        if (!isActive() || writing || selectedQuestionIds.isEmpty()) {
+            return;
+        }
+        List<QuestionDto> toDelete = allQuestions.stream()
+            .filter(q -> selectedQuestionIds.contains(q.id()) && q.active())
+            .toList();
+        if (toDelete.isEmpty()) {
+            return;
+        }
+        if (!confirm("Xác nhận xóa nhiều câu hỏi",
+            "Bạn có chắc chắn muốn xóa " + toDelete.size() + " câu hỏi đã chọn?\nSau khi xóa, các câu hỏi sẽ không còn hiển thị trong ngân hàng.")) {
+            return;
+        }
+        beginWrite("Đang xóa " + toDelete.size() + " câu hỏi…");
+        List<Long> ids = toDelete.stream().map(QuestionDto::id).toList();
+        fx.observe(api.deactivateQuestions(ids), () -> isActive(),
+            count -> {
+                writing = false;
+                selectedQuestionIds.clear();
+                allQuestions.removeIf(it -> ids.contains(it.id()));
+                renderFilteredQuestions();
+                show(questionNotice, "Đã xóa " + count + " câu hỏi thành công.", false);
+                cancelEdit();
+                reload();
+            }, this::showWriteFailure, this::finishWrite);
+    }
+
+    @FXML
+    private void goToPreviousQuestion() {
+        if (!isActive() || writing || editTarget == null) {
+            return;
+        }
+        List<QuestionDto> filtered = getFilteredQuestions();
+        int idx = indexOf(filtered, editTarget.id());
+        if (idx <= 0) {
+            return;
+        }
+        editQuestion(filtered.get(idx - 1));
+    }
+
+    @FXML
+    private void goToNextQuestion() {
+        if (!isActive() || writing || editTarget == null) {
+            return;
+        }
+        List<QuestionDto> filtered = getFilteredQuestions();
+        int idx = indexOf(filtered, editTarget.id());
+        if (idx < 0 || idx >= filtered.size() - 1) {
+            return;
+        }
+        editQuestion(filtered.get(idx + 1));
+    }
+
+    private List<QuestionDto> getFilteredQuestions() {
+        String search = searchContent != null && searchContent.getText() != null
+            ? searchContent.getText().trim().toLowerCase() : "";
+        String topicFilter = filterTopic != null && filterTopic.getText() != null
+            ? filterTopic.getText().trim() : "";
+        Difficulty diffFilter = filterDifficulty != null ? filterDifficulty.getValue() : null;
+        String qtFilter = filterQuestionType != null ? filterQuestionType.getValue() : null;
+
+        return allQuestions.stream()
+            .filter(QuestionDto::active)
+            .filter(q -> {
+                if (!search.isEmpty()) {
+                    if (q.content() == null || !q.content().toLowerCase().contains(search)) {
+                        return false;
+                    }
+                }
+                if (!topicFilter.isEmpty()) {
+                    if (q.topic() == null || (!q.topic().equalsIgnoreCase(topicFilter)
+                        && !q.topic().toLowerCase().contains(topicFilter.toLowerCase()))) {
+                        return false;
+                    }
+                }
+                if (diffFilter != null && q.difficulty() != diffFilter) {
+                    return false;
+                }
+                if (qtFilter != null) {
+                    QuestionType expected = matchFilterQuestionType(qtFilter);
+                    if (expected != null) {
+                        QuestionType actual = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
+                        if (actual != expected) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            })
+            .toList();
+    }
+
+    private int indexOf(List<QuestionDto> list, long id) {
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).id() == id) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public void copyQuestion(QuestionDto q) {
@@ -693,6 +742,8 @@ public final class QuestionController extends ScreenController {
         clearForm();
         questionForm.setVisible(false);
         questionForm.setManaged(false);
+        if (prevQuestion != null) { prevQuestion.setVisible(false); prevQuestion.setManaged(false); }
+        if (nextQuestion != null) { nextQuestion.setVisible(false); nextQuestion.setManaged(false); }
         updateControls();
     }
 
@@ -711,7 +762,7 @@ public final class QuestionController extends ScreenController {
                 questionCorrectOption.getValue() != null ? questionCorrectOption.getValue() : 'A', questionTopic.getText(), questionDifficulty.getValue(),
                 selectedType, explanationText));
         } catch (ApiException invalid) {
-            show(formError, "Kiểm tra thông tin: nội dung tối đa 1000 ký tự, mỗi đáp án tối đa 255 ký tự, chủ đề 1–100 ký tự.", true);
+            show(formError, "Kiểm tra thông tin: Vui lòng điền đủ câu hỏi, đáp án, giải thích (bắt buộc). Với chỗ trống chỉ dùng đúng 3 ký tự '_' (___).", true);
             return;
         }
         show(formError, "", false);
@@ -735,7 +786,7 @@ public final class QuestionController extends ScreenController {
                 questionCorrectOption.getValue() != null ? questionCorrectOption.getValue() : 'A', questionTopic.getText(), questionDifficulty.getValue(),
                 updType, updExplanation));
         } catch (ApiException invalid) {
-            show(formError, "Kiểm tra thông tin: nội dung tối đa 1000 ký tự, mỗi đáp án tối đa 255 ký tự, chủ đề 1–100 ký tự.", true);
+            show(formError, "Kiểm tra thông tin: Vui lòng điền đủ câu hỏi, đáp án, giải thích (bắt buộc). Với chỗ trống chỉ dùng đúng 3 ký tự '_' (___).", true);
             return;
         }
         show(formError, "", false);
@@ -767,10 +818,16 @@ public final class QuestionController extends ScreenController {
 
     private void questionUpdated(QuestionDto updated) {
         writing = false;
+        // beginWrite() đã gọi cancelEdit() → đóng form; mở lại form chỉnh sửa
+        editTarget = updated;
+        questionForm.setVisible(true);
+        questionForm.setManaged(true);
+        if (prevQuestion != null) { prevQuestion.setVisible(true); prevQuestion.setManaged(true); }
+        if (nextQuestion != null) { nextQuestion.setVisible(true); nextQuestion.setManaged(true); }
+        fillForm(updated);
+        reload();
         show(questionNotice, "Đã cập nhật câu hỏi “" + truncate(updated.content(), 60) + "”.", false);
         show(formError, "Đã cập nhật câu hỏi.", false);
-        reload();
-        cancelEdit();
     }
 
     private void showWriteFailure(Throwable failure) {
@@ -819,6 +876,32 @@ public final class QuestionController extends ScreenController {
         boolean canDelete = !writing && listFresh && selected != null && selected.active();
         if (deactivateQuestion != null) deactivateQuestion.setDisable(!canDelete);
         if (deleteQuestion != null) deleteQuestion.setDisable(!canDelete);
+
+        // Nút xóa nhiều câu đã chọn: chỉ hiện khi có ít nhất 1 câu đang được chọn
+        boolean hasSelection = !selectedQuestionIds.isEmpty();
+        if (deleteSelectedQuestions != null) {
+            deleteSelectedQuestions.setVisible(hasSelection);
+            deleteSelectedQuestions.setManaged(hasSelection);
+            deleteSelectedQuestions.setDisable(busy || !hasSelection);
+        }
+
+        // Nút điều hướng Trước/Sau khi đang sửa câu hỏi
+        if (isEditing && editTarget != null) {
+            List<QuestionDto> filtered = getFilteredQuestions();
+            int idx = indexOf(filtered, editTarget.id());
+            boolean hasPrev = idx > 0;
+            boolean hasNext = idx >= 0 && idx < filtered.size() - 1;
+            if (prevQuestion != null) {
+                prevQuestion.setDisable(busy || !hasPrev);
+            }
+            if (nextQuestion != null) {
+                nextQuestion.setDisable(busy || !hasNext);
+            }
+        } else {
+            if (prevQuestion != null) prevQuestion.setDisable(true);
+            if (nextQuestion != null) nextQuestion.setDisable(true);
+        }
+
         refreshQuestions.setDisable(writing);
         questionContent.setDisable(writing);
         questionOptionA.setDisable(writing);
@@ -986,16 +1069,13 @@ public final class QuestionController extends ScreenController {
         if (type == null) return;
         boolean isTrueFalse = type.contains("Sai") || type.contains("Đúng") || type.contains("Dung");
         boolean isShortAnswer = type.contains("ngắn") || type.contains("ngan") || type.contains("Trả lời") || type.contains("Tra loi");
-        boolean isFillBlank2 = (type.contains("chỗ trống") || type.contains("cho trong") || type.contains("Điền") || type.contains("Dien")) && type.contains("2");
-        boolean isFillBlank1 = !isFillBlank2 && (type.contains("chỗ trống") || type.contains("cho trong") || type.contains("Điền") || type.contains("Dien") || type.contains("1"));
+        boolean isFillBlank = type.contains("chỗ trống") || type.contains("cho trong") || type.contains("Điền") || type.contains("Dien");
 
         if (questionTypeHint != null) {
             String hint = isTrueFalse
                 ? "💡 Dạng Đúng / Sai: Chọn đáp án đúng bên dưới."
-                : isFillBlank1
-                ? "💡 Dạng Điền khuyết (1 ô): Sử dụng '___' trong nội dung câu hỏi. Nhập từ cần điền chuẩn xác vào ô bên dưới."
-                : isFillBlank2
-                ? "💡 Dạng Điền khuyết (2 ô): Sử dụng 2 lần '___' trong nội dung câu hỏi. Nhập từ cần điền cho ô 1 và ô 2 tương ứng."
+                : isFillBlank
+                ? "💡 Dạng Điền vào chỗ trống: Sử dụng đúng 3 ký tự '_' (___) cho mỗi chỗ trống trong câu hỏi. Nhập các từ cần điền tương ứng (ngăn cách bằng dấu '|' nếu có nhiều chỗ trống)."
                 : isShortAnswer
                 ? "💡 Dạng Trả lời ngắn: Nhập nội dung câu hỏi và nhập câu trả lời mẫu / chuẩn xác vào ô bên dưới."
                 : "💡 Dạng Trắc nghiệm (4 lựa chọn): Điền đầy đủ 4 phương án A, B, C, D và chọn phương án đúng.";
@@ -1043,8 +1123,9 @@ public final class QuestionController extends ScreenController {
             questionCorrectOption.getItems().setAll('A');
             questionCorrectOption.setValue('A');
                     hideTrueFalseSelector();
-        } else if (isFillBlank1) {
-            // Điền vào chỗ trống 1 ô: Chỉ hiện ô nhập từ cần điền cho ô 1
+        } else if (isFillBlank) {
+            hideTrueFalseSelector();
+            // Điền vào chỗ trống: Chỉ hiện 1 ô nhập từ cần điền (dùng dấu | nếu có nhiều ô trống)
             questionOptionA.setEditable(true);
             if ("Đúng".equals(questionOptionA.getText()) || "Dung".equals(questionOptionA.getText())) {
                 questionOptionA.clear();
@@ -1055,28 +1136,6 @@ public final class QuestionController extends ScreenController {
 
             if (boxOptionA != null) { boxOptionA.setVisible(true); boxOptionA.setManaged(true); }
             if (boxOptionB != null) { boxOptionB.setVisible(false); boxOptionB.setManaged(false); }
-            if (boxOptionC != null) { boxOptionC.setVisible(false); boxOptionC.setManaged(false); }
-            if (boxOptionD != null) { boxOptionD.setVisible(false); boxOptionD.setManaged(false); }
-            if (boxCorrectOption != null) { boxCorrectOption.setVisible(false); boxCorrectOption.setManaged(false); }
-
-            questionCorrectOption.getItems().setAll('A');
-            questionCorrectOption.setValue('A');
-                    hideTrueFalseSelector();
-        } else if (isFillBlank2) {
-            // Điền vào chỗ trống 2 ô: Hiện 2 ô nhập từ cho ô 1 và ô 2
-            questionOptionA.setEditable(true);
-            questionOptionB.setEditable(true);
-            if ("Đúng".equals(questionOptionA.getText()) || "Dung".equals(questionOptionA.getText())) {
-                questionOptionA.clear();
-            }
-            if ("Sai".equals(questionOptionB.getText()) || "-".equals(questionOptionB.getText())) {
-                questionOptionB.clear();
-            }
-            questionOptionC.setText("-");
-            questionOptionD.setText("-");
-
-            if (boxOptionA != null) { boxOptionA.setVisible(true); boxOptionA.setManaged(true); }
-            if (boxOptionB != null) { boxOptionB.setVisible(true); boxOptionB.setManaged(true); }
             if (boxOptionC != null) { boxOptionC.setVisible(false); boxOptionC.setManaged(false); }
             if (boxOptionD != null) { boxOptionD.setVisible(false); boxOptionD.setManaged(false); }
             if (boxCorrectOption != null) { boxCorrectOption.setVisible(false); boxCorrectOption.setManaged(false); }
@@ -1123,7 +1182,7 @@ public final class QuestionController extends ScreenController {
         if (labelOptionA != null) {
             labelOptionA.setText(
                 isTrueFalse ? "Phương án A (Đúng) *" :
-                isFillBlank1 || isFillBlank2 ? "Từ cần điền (Vị trí 1) *" :
+                isFillBlank ? "Từ cần điền chính xác (ngăn cách bằng '|' nếu nhiều chỗ trống) *" :
                 isShortAnswer ? "Câu trả lời đúng / mẫu *" :
                 "Đáp án A *"
             );
@@ -1131,7 +1190,7 @@ public final class QuestionController extends ScreenController {
         if (questionOptionA != null) {
             questionOptionA.setPromptText(
                 isTrueFalse ? "Đúng" :
-                isFillBlank1 || isFillBlank2 ? "Ví dụ: went, was, are, conditional..." :
+                isFillBlank ? "Ví dụ: went hoặc was | were..." :
                 isShortAnswer ? "Nhập câu trả lời ngắn chuẩn xác..." :
                 "Nội dung đáp án A"
             );
@@ -1140,14 +1199,12 @@ public final class QuestionController extends ScreenController {
         if (labelOptionB != null) {
             labelOptionB.setText(
                 isTrueFalse ? "Phương án B (Sai) *" :
-                isFillBlank2 ? "Từ cần điền (Vị trí 2) *" :
                 "Đáp án B *"
             );
         }
         if (questionOptionB != null) {
             questionOptionB.setPromptText(
                 isTrueFalse ? "Sai" :
-                isFillBlank2 ? "Ví dụ: had, would, been..." :
                 "Nội dung đáp án B"
             );
         }
@@ -1289,7 +1346,7 @@ public final class QuestionController extends ScreenController {
         if (type == null) return "Trac nghiem (4 lua chon)";
         return switch (type) {
             case TRUE_FALSE -> "Dung / Sai";
-            case FILL_BLANK -> "Dien vao cho trong (1 o)";
+            case FILL_BLANK -> "Dien vao cho trong";
             case SHORT_ANSWER -> "Tra loi ngan";
             default -> "Trac nghiem (4 lua chon)";
         };

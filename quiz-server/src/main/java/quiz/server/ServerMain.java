@@ -22,7 +22,13 @@ public final class ServerMain {
     private ServerMain() { }
 
     public static ServerConfig loadConfig(String[] args) throws java.io.IOException {
-        if (args.length == 0) return ServerConfig.load();
+        if (args.length == 0) {
+            Path local = Path.of("server-local.properties");
+            if (java.nio.file.Files.isRegularFile(local)) {
+                return ServerConfig.load(local);
+            }
+            return ServerConfig.load();
+        }
         if (args.length != 2 || !"--config".equals(args[0])) {
             throw new IllegalArgumentException("Usage: ServerMain [--config <path>]");
         }
@@ -94,8 +100,7 @@ public final class ServerMain {
             log.info("Quiz server listening on port {}", server.getPort());
             server.awaitTermination();
         } catch (Exception failure) {
-            // Configuration/JDBC messages may contain credentials; only log the exception type.
-            log.error("Server startup/runtime failed exception={}", failure.getClass().getName());
+            log.error("Server startup/runtime failed: {}", failure.getMessage());
             if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
             throw new IllegalStateException("Server failed; check configuration, database schema/access and bind port");
         } finally {

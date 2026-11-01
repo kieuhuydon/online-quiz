@@ -309,7 +309,7 @@ class QuizApiTest {
 
             // 2. Question contracts
             QuestionDto qDto = new QuestionDto(5L, "Q?", "A", "B", "C", "D", 'A', "Topic", quiz.common.enums.Difficulty.EASY, true, 1L, now);
-            var createQ = api.createQuestion(new CreateQuestionDto("Q?", "A", "B", "C", "D", 'A', "Topic", quiz.common.enums.Difficulty.EASY));
+            var createQ = api.createQuestion(new CreateQuestionDto("Q?", "A", "B", "C", "D", 'A', "Topic", quiz.common.enums.Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích"));
             req = peer.read();
             assertEquals(MessageType.CREATE_QUESTION, req.type());
             peer.success(req, qDto);
@@ -327,7 +327,7 @@ class QuizApiTest {
             peer.success(req, new ArrayList<>(List.of(qDto)));
             assertEquals(List.of(qDto), listQ.get(3, TimeUnit.SECONDS));
 
-            var updateQ = api.updateQuestion(new UpdateQuestionDto(5L, "Q?", "A", "B", "C", "D", 'B', "Topic", quiz.common.enums.Difficulty.MEDIUM));
+            var updateQ = api.updateQuestion(new UpdateQuestionDto(5L, "Q?", "A", "B", "C", "D", 'B', "Topic", quiz.common.enums.Difficulty.MEDIUM, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích"));
             req = peer.read();
             assertEquals(MessageType.UPDATE_QUESTION, req.type());
             peer.success(req, qDto);
@@ -423,6 +423,8 @@ class QuizApiTest {
             var startAtt = api.startAttempt(1L, "123456");
             req = peer.read();
             assertEquals(MessageType.START_ATTEMPT, req.type());
+            String startIp=assertInstanceOf(StartAttemptRequestDto.class,req.payload()).ipAddress();
+            assertNotNull(startIp);assertFalse(startIp.isBlank());
             peer.success(req, stateDto);
             assertEquals(stateDto, startAtt.get(3, TimeUnit.SECONDS));
 

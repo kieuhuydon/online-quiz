@@ -380,6 +380,11 @@
     -fx-text-fill: white;
 }
 
+.account-card .table-row-cell:warning:filled:selected .table-cell,
+.account-card .table-row-cell:cheating:filled:selected .table-cell {
+    -fx-text-fill: #111827;
+}
+
 /* --- Badge styles for Quiz and Status --- */
 .badge {
     -fx-padding: 4 10;

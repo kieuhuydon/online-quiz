@@ -1,0 +1,57 @@
+/* Preserve dark foreground (#111827) on light violation rows across all interactive states. */
+.violation-table .table-row-cell:warning {
+    -fx-background-color: #fef08a;
+    -fx-text-background-color: #111827;
+}
+.violation-table .table-row-cell:cheating {
+    -fx-background-color: #fecaca;
+    -fx-text-background-color: #111827;
+}
+
+/* Hover, Selected, Focused: maintain proper contrast background, never white text on light row */
+.violation-table .table-row-cell:warning:hover,
+.violation-table .table-row-cell:warning:selected,
+.violation-table .table-row-cell:warning:focused {
+    -fx-background-color: #fde047;
+}
+.violation-table .table-row-cell:cheating:hover,
+.violation-table .table-row-cell:cheating:selected,
+.violation-table .table-row-cell:cheating:focused {
+    -fx-background-color: #fca5a5;
+}
+
+.violation-table .table-row-cell:warning:selected,
+.violation-table .table-row-cell:cheating:selected {
+    -fx-border-color: #475569;
+    -fx-border-width: 1;
+    -fx-border-insets: 0;
+}
+
+/* Enforce dark text (#111827) on all child cells, labels and pseudo-states */
+.violation-table .table-row-cell:warning .table-cell,
+.violation-table .table-row-cell:cheating .table-cell,
+.violation-table .table-row-cell:warning .label,
+.violation-table .table-row-cell:cheating .label,
+.violation-table .table-row-cell:warning:hover .table-cell,
+.violation-table .table-row-cell:cheating:hover .table-cell,
+.violation-table .table-row-cell:warning:hover .label,
+.violation-table .table-row-cell:cheating:hover .label,
+.violation-table .table-row-cell:warning:focused .table-cell,
+.violation-table .table-row-cell:cheating:focused .table-cell,
+.violation-table .table-row-cell:warning:selected .table-cell,
+.violation-table .table-row-cell:cheating:selected .table-cell,
+.violation-table .table-row-cell:warning:selected:focused .table-cell,
+.violation-table .table-row-cell:cheating:selected:focused .table-cell,
+.violation-table:focused .table-row-cell:warning:selected .table-cell,
+.violation-table:focused .table-row-cell:cheating:selected .table-cell,
+.violation-table .table-row-cell:warning .table-cell:selected,
+.violation-table .table-row-cell:cheating .table-cell:selected,
+.violation-table .table-row-cell:warning:filled:selected .table-cell,
+.violation-table .table-row-cell:cheating:filled:selected .table-cell,
+.account-card.violation-table .table-row-cell:warning:filled:selected .table-cell,
+.account-card.violation-table .table-row-cell:cheating:filled:selected .table-cell,
+.account-card .table-row-cell:warning:filled:selected .table-cell,
+.account-card .table-row-cell:cheating:filled:selected .table-cell {
+    -fx-text-fill: #111827;
+    -fx-text-background-color: #111827;
+}

@@ -77,17 +77,41 @@ class MonitoringIT {
         assertEquals(10-state.deductedScore(),exams.getResult(attempt,student).score());
         assertEquals(MonitoringStatus.SUBMITTED,state.status());
     }
-    @Test void forceStopAndTimeExhaustionPersistFinalResults() {
+    @Test void forceStopPersistsFinalResult() {
         monitoring.penalize(penalty(PenaltyType.TERMINATE,0),actor);
         var state=monitoring.list(quiz,actor).getFirst();
         assertTrue(state.forceStopped());assertEquals(MonitoringStatus.TERMINATED,state.status());
         assertEquals(SubmitReason.ANTICHEAT,exams.getResult(attempt,student).submitReason());
         assertThrows(ConflictException.class,()->exams.saveAnswer(attempt,1,'B',student));
     }
-    @Test void timePenaltyCanFinishExamWithoutStudentConnection() {
-        monitoring.penalize(penalty(PenaltyType.DEDUCT_TIME,3600),actor);
+    @Test void naturalDeadlineStillFinishesExam() throws Exception {
+        try(Connection c=source.getConnection()) {
+            execute(c,"UPDATE attempts SET deadline_at=now()-interval '1 second' WHERE id=?",attempt);
+        }
+        monitoring.studentState(attempt,new UserSession(student,Role.STUDENT,"student"),"192.168.1.23");
         assertEquals(SubmitReason.TIMEOUT,exams.getResult(attempt,student).submitReason());
-        assertEquals(3600,monitoring.list(quiz,actor).getFirst().deductedTimeSeconds());
+        assertEquals(0,monitoring.list(quiz,actor).getFirst().remainingSeconds());
+    }
+    @Test void heartbeatRepairsBlankIpAndReconnectUpdatesItWithoutLosingViolations() throws Exception {
+        try(Connection c=source.getConnection()) {
+            execute(c,"UPDATE exam_sessions SET ip_address=NULL WHERE session_id=?",attempt);
+            dao.recordViolation(c,attempt,AntiCheatEventType.FOCUS_LOST,"Alt+Tab",Instant.now());
+        }
+        var studentActor=new UserSession(student,Role.STUDENT,"student");
+        assertEquals("192.168.1.23",monitoring.studentState(attempt,studentActor," 192.168.1.23 ").ipAddress());
+        monitoring.studentState(attempt,studentActor,"192.168.1.24");
+        monitoring.studentState(attempt,studentActor," ");
+        var state=monitoring.list(quiz,actor).getFirst();
+        assertEquals("192.168.1.24",state.ipAddress());
+        assertEquals(1,state.violationCount());assertEquals(MonitoringStatus.WARNING,state.status());
+        assertEquals(0,state.deductedScore());
+    }
+    @Test void retiredPenaltyHistoryRemainsReadable() throws Exception {
+        try(Connection c=source.getConnection()) {
+            execute(c,"INSERT INTO monitoring_penalties VALUES(?,?,?,'DEDUCT_TIME',300,'Historical',now())",
+                UUID.randomUUID().toString(),attempt,teacher);
+        }
+        assertEquals("DEDUCT_TIME",monitoring.history(attempt,actor).getFirst().type());
     }
     @Test void failureAfterAuditInsertRollsBackPenaltyAndAudit() {
         MonitoringDAO failing=new MonitoringDAO(source) {
