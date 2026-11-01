@@ -50,6 +50,32 @@ class ClientValidationTest {
             "Câu ____ điền khuyết", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.FILL_BLANK, "Giải thích")));
     }
 
+    @Test void textQuestionAnswerIsStoredAsKeyAndNotAsChoices() {
+        var fill = ClientValidation.question(new CreateQuestionDto(
+            "She ___ here.", "works", "-", "-", "-", 'A', "English", Difficulty.EASY,
+            quiz.common.enums.QuestionType.FILL_BLANK, "Present simple"));
+        assertEquals("works", fill.answerKey());
+        assertEquals("", fill.optionA());
+        assertEquals("", fill.optionB());
+        assertEquals('A', fill.correctOption());
+
+        var mcq = ClientValidation.question(new CreateQuestionDto(
+            "Choose one", "one", "two", "three", "four", 'B', "English", Difficulty.EASY,
+            quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Explanation"));
+        assertEquals("one", mcq.optionA());
+        assertEquals("four", mcq.optionD());
+        assertEquals("", mcq.answerKey());
+    }
+
+    @Test void fillBlankRequiresOneGapAndOneWordAnswer() {
+        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+            "She ___ and he ___ every day.", "works", "-", "-", "-", 'A', "English", Difficulty.EASY,
+            quiz.common.enums.QuestionType.FILL_BLANK, "Use the present simple.")));
+        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+            "They ___ dinner.", "are having", "-", "-", "-", 'A', "English", Difficulty.EASY,
+            quiz.common.enums.QuestionType.FILL_BLANK, "Use the present continuous.")));
+    }
+
     @Test void questionValidationNormalizesAndLimits() {
         var q = ClientValidation.question(new CreateQuestionDto(
             "  Câu hỏi?  ", "  A  ", "B", "C", "D", 'a', "  Ngữ pháp  ", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "  Giải thích chi tiết  "));

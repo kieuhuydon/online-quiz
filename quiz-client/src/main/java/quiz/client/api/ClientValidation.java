@@ -44,10 +44,15 @@ public final class ClientValidation {
         quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
         String c = text(input.content(), 1000);
         validateUnderscore(c, type);
-        return new CreateQuestionDto(c,
-            text(input.optionA(), 255), text(input.optionB(), 255),
-            text(input.optionC(), 255), text(input.optionD(), 255),
-            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), type, text(input.explanation(), 2000));
+        boolean textAnswer = type == quiz.common.enums.QuestionType.FILL_BLANK || type == quiz.common.enums.QuestionType.SHORT_ANSWER;
+        String answerKey = textAnswer ? text(input.answerKey() == null ? input.optionA() : input.answerKey(), 2000) : "";
+        if (type == quiz.common.enums.QuestionType.FILL_BLANK) validateSingleWordAnswer(answerKey);
+        String a = textAnswer ? "" : text(input.optionA(), 255);
+        String b = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE || type == quiz.common.enums.QuestionType.TRUE_FALSE ? text(input.optionB(), 255) : "";
+        String cOpt = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? text(input.optionC(), 255) : "";
+        String dOpt = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? text(input.optionD(), 255) : "";
+        char correct = textAnswer ? 'A' : correctOption(input.correctOption());
+        return new CreateQuestionDto(c, a, b, cOpt, dOpt, correct, text(input.topic(), 100), input.difficulty(), type, text(input.explanation(), 2000), answerKey);
     }
 
     public static UpdateQuestionDto updateQuestion(UpdateQuestionDto input) {
@@ -58,10 +63,15 @@ public final class ClientValidation {
         quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
         String c = text(input.content(), 1000);
         validateUnderscore(c, type);
-        return new UpdateQuestionDto(input.id(), c,
-            text(input.optionA(), 255), text(input.optionB(), 255),
-            text(input.optionC(), 255), text(input.optionD(), 255),
-            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), type, text(input.explanation(), 2000));
+        boolean textAnswer = type == quiz.common.enums.QuestionType.FILL_BLANK || type == quiz.common.enums.QuestionType.SHORT_ANSWER;
+        String answerKey = textAnswer ? text(input.answerKey() == null ? input.optionA() : input.answerKey(), 2000) : "";
+        if (type == quiz.common.enums.QuestionType.FILL_BLANK) validateSingleWordAnswer(answerKey);
+        String a = textAnswer ? "" : text(input.optionA(), 255);
+        String b = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE || type == quiz.common.enums.QuestionType.TRUE_FALSE ? text(input.optionB(), 255) : "";
+        String cOpt = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? text(input.optionC(), 255) : "";
+        String dOpt = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? text(input.optionD(), 255) : "";
+        char correct = textAnswer ? 'A' : correctOption(input.correctOption());
+        return new UpdateQuestionDto(input.id(), c, a, b, cOpt, dOpt, correct, text(input.topic(), 100), input.difficulty(), type, text(input.explanation(), 2000), answerKey);
     }
 
     /** Ordered field errors for the creation form; never includes entered values. */
@@ -154,9 +164,16 @@ public final class ClientValidation {
             throw invalid();
         }
         if (type == quiz.common.enums.QuestionType.FILL_BLANK) {
-            if (!content.contains("___")) {
+            if (content.split("___", -1).length - 1 != 1) {
                 throw invalid();
             }
+        }
+    }
+
+    private static void validateSingleWordAnswer(String answerKey) {
+        for (String acceptedAnswer : answerKey.split("\\|", -1)) {
+            String word = acceptedAnswer.strip();
+            if (word.isBlank() || word.chars().anyMatch(Character::isWhitespace)) throw invalid();
         }
     }
 

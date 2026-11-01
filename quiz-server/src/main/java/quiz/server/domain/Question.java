@@ -32,18 +32,36 @@ public record Question(
     public Question {
         validateStorageState(id, createdAt, updatedAt);
         content = normalizeRequiredText(content, "Question content", MAX_CONTENT_LENGTH);
-        optionA = normalizeRequiredText(optionA, "Option A", MAX_OPTION_LENGTH);
-        optionB = normalizeRequiredText(optionB, "Option B", MAX_OPTION_LENGTH);
-        optionC = normalizeRequiredText(optionC, "Option C", MAX_OPTION_LENGTH);
-        optionD = normalizeRequiredText(optionD, "Option D", MAX_OPTION_LENGTH);
+        if (questionType == null) questionType = QuestionType.MULTIPLE_CHOICE;
+        optionA = normalizeOption(optionA, "Option A", questionType == QuestionType.MULTIPLE_CHOICE || questionType == QuestionType.TRUE_FALSE);
+        optionB = normalizeOption(optionB, "Option B", questionType == QuestionType.MULTIPLE_CHOICE || questionType == QuestionType.TRUE_FALSE);
+        optionC = normalizeOption(optionC, "Option C", questionType == QuestionType.MULTIPLE_CHOICE);
+        optionD = normalizeOption(optionD, "Option D", questionType == QuestionType.MULTIPLE_CHOICE);
         correctOption = Character.toUpperCase(correctOption);
         if (correctOption < 'A' || correctOption > 'D') {
             throw new IllegalArgumentException("Correct option must be A, B, C, or D");
         }
         topic = normalizeRequiredText(topic, "Topic", MAX_TOPIC_LENGTH);
         if (difficulty == null) throw new IllegalArgumentException("Difficulty cannot be null");
-        if (questionType == null) questionType = QuestionType.MULTIPLE_CHOICE;
-        answerKey = answerKey == null ? "" : answerKey.strip();
+        answerKey = normalizeOptionalText(answerKey, "Answer key", MAX_EXPLANATION_LENGTH);
+        if (questionType == QuestionType.TRUE_FALSE && correctOption != 'A' && correctOption != 'B') {
+            throw new IllegalArgumentException("True/false questions must use option A or B as the correct answer");
+        }
+        if (questionType == QuestionType.FILL_BLANK || questionType == QuestionType.SHORT_ANSWER) {
+            if (answerKey.isBlank()) {
+                answerKey = optionA;
+            }
+            if (answerKey.isBlank()) {
+                throw new IllegalArgumentException("Text questions must have an answer key");
+            }
+            if (correctOption != 'A') {
+                throw new IllegalArgumentException("Text questions must use A as the answer-key marker");
+            }
+            optionA = "";
+            optionB = "";
+            optionC = "";
+            optionD = "";
+        }
         explanation = normalizeOptionalText(explanation, "Explanation", MAX_EXPLANATION_LENGTH);
         if (createdBy <= 0) throw new IllegalArgumentException("Creator ID must be positive");
     }
@@ -158,6 +176,12 @@ public record Question(
             throw new IllegalArgumentException(field + " cannot exceed " + maxLength + " characters");
         }
         return normalized;
+    }
+
+    private static String normalizeOption(String value, String field, boolean required) {
+        if (required) return normalizeRequiredText(value, field, MAX_OPTION_LENGTH);
+        if (value == null || value.isBlank() || "-".equals(value.strip()) || "—".equals(value.strip())) return "";
+        return normalizeRequiredText(value, field, MAX_OPTION_LENGTH);
     }
 
     private static String normalizeOptionalText(String value, String field, int maxLength) {
