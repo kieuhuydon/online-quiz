@@ -30,6 +30,7 @@ public enum MessageType {
     GET_QUESTION,
     LIST_QUESTIONS,
     DEACTIVATE_QUESTION,
+    BATCH_DEACTIVATE_QUESTIONS,
 
     // 5. Quiz Management (TEACHER, ADMIN)
     CREATE_QUIZ,

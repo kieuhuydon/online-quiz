@@ -29,29 +29,51 @@ class ClientValidationTest {
         assertEquals(" pass123 ", account.password()); assertNull(account.email());
     }
 
+    @Test void questionMissingExplanationRejected() {
+        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+            "Câu?", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, null)));
+        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+            "Câu?", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "   ")));
+    }
+
+    @Test void questionUnderscoreValidation() {
+        // Đúng 3 gạch dưới -> Hợp lệ
+        assertDoesNotThrow(() -> ClientValidation.question(new CreateQuestionDto(
+            "Câu ___ điền khuyết", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.FILL_BLANK, "Giải thích")));
+
+        // 1, 2, 4 gạch dưới -> Bị từ chối
+        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+            "Câu _ điền khuyết", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.FILL_BLANK, "Giải thích")));
+        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+            "Câu __ điền khuyết", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.FILL_BLANK, "Giải thích")));
+        assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
+            "Câu ____ điền khuyết", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.FILL_BLANK, "Giải thích")));
+    }
+
     @Test void questionValidationNormalizesAndLimits() {
         var q = ClientValidation.question(new CreateQuestionDto(
-            "  Câu hỏi?  ", "  A  ", "B", "C", "D", 'a', "  Ngữ pháp  ", Difficulty.EASY));
+            "  Câu hỏi?  ", "  A  ", "B", "C", "D", 'a', "  Ngữ pháp  ", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "  Giải thích chi tiết  "));
         assertEquals("Câu hỏi?", q.content());
         assertEquals("A", q.optionA());
         assertEquals('A', q.correctOption());
         assertEquals("Ngữ pháp", q.topic());
         assertEquals(Difficulty.EASY, q.difficulty());
+        assertEquals("Giải thích chi tiết", q.explanation());
     }
 
     @Test void questionInvalidCorrectOptionRejected() {
         assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
-            "Câu?", "A", "B", "C", "D", 'X', "T", Difficulty.EASY)));
+            "Câu?", "A", "B", "C", "D", 'X', "T", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích")));
     }
 
     @Test void questionMissingDifficultyRejected() {
         assertThrows(ApiException.class, () -> ClientValidation.question(new CreateQuestionDto(
-            "Câu?", "A", "B", "C", "D", 'A', "T", null)));
+            "Câu?", "A", "B", "C", "D", 'A', "T", null, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích")));
     }
 
     @Test void updateQuestionRequiresPositiveId() {
         assertThrows(ApiException.class, () -> ClientValidation.updateQuestion(new UpdateQuestionDto(
-            0, "Câu?", "A", "B", "C", "D", 'A', "T", Difficulty.EASY)));
+            0, "Câu?", "A", "B", "C", "D", 'A', "T", Difficulty.EASY, quiz.common.enums.QuestionType.MULTIPLE_CHOICE, "Giải thích")));
     }
 
     @Test void unicodeLimitsUseCodePointsAndPasswordBytes() {

@@ -42,10 +42,12 @@ public final class ClientValidation {
             throw invalid();
         }
         quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
-        return new CreateQuestionDto(text(input.content(), 1000),
+        String c = text(input.content(), 1000);
+        validateUnderscore(c, type);
+        return new CreateQuestionDto(c,
             text(input.optionA(), 255), text(input.optionB(), 255),
             text(input.optionC(), 255), text(input.optionD(), 255),
-            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), input.questionType(), optionalText(input.explanation(), 2000));
+            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), type, text(input.explanation(), 2000));
     }
 
     public static UpdateQuestionDto updateQuestion(UpdateQuestionDto input) {
@@ -54,11 +56,12 @@ public final class ClientValidation {
         }
         positiveId(input.id());
         quiz.common.enums.QuestionType type = input.questionType() == null ? quiz.common.enums.QuestionType.MULTIPLE_CHOICE : input.questionType();
-        return new UpdateQuestionDto(input.id(), text(input.content(), 1000),
+        String c = text(input.content(), 1000);
+        validateUnderscore(c, type);
+        return new UpdateQuestionDto(input.id(), c,
             text(input.optionA(), 255), text(input.optionB(), 255),
             text(input.optionC(), 255), text(input.optionD(), 255),
-            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), input.questionType(), optionalText(input.explanation(), 2000));
-
+            correctOption(input.correctOption()), text(input.topic(), 100), input.difficulty(), type, text(input.explanation(), 2000));
     }
 
     /** Ordered field errors for the creation form; never includes entered values. */
@@ -142,6 +145,19 @@ public final class ClientValidation {
             throw invalid();
         }
         return value;
+    }
+
+    public static void validateUnderscore(String content, quiz.common.enums.QuestionType type) {
+        if (content == null) return;
+        boolean hasInvalidUnderscore = java.util.regex.Pattern.compile("(?<!_)_(?!_)|(?<!_)__(?!_)|_{4,}").matcher(content).find();
+        if (hasInvalidUnderscore) {
+            throw invalid();
+        }
+        if (type == quiz.common.enums.QuestionType.FILL_BLANK) {
+            if (!content.contains("___")) {
+                throw invalid();
+            }
+        }
     }
 
     private static ApiException invalid() {

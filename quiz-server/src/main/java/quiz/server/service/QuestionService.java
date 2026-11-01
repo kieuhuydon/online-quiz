@@ -20,6 +20,7 @@ import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Manages the question bank: create, read, update, deactivate. Only TEACHER
@@ -116,6 +117,20 @@ public final class QuestionService {
         });
     }
 
+    /** Deactivates multiple questions (soft-delete). Skips IDs not found or already inactive. */
+    public int deactivateQuestions(List<Long> questionIds, long actorId) {
+        requireTeacherOrAdmin(actorId);
+        if (questionIds == null || questionIds.isEmpty()) {
+            return 0;
+        }
+        questionIds.forEach(ServiceValidation::positiveId);
+        return transactions.executeInTransaction(connection -> {
+            requireTeacherOrAdmin(connection, actorId);
+            int deactivated = questions.deactivate(connection, questionIds);
+            return deactivated;
+        });
+    }
+
     public ArrayList<QuestionDto> listQuestions() {
         List<Question> questionsList = questions.findAllActive();
         ArrayList<QuestionDto> dtos = new ArrayList<>(questionsList.size());
@@ -177,6 +192,19 @@ public final class QuestionService {
         String explanation = dto.explanation();
         return new UpdateQuestionDto(dto.id(), content, optionA, optionB, optionC, optionD,
             correctOption, topic, dto.difficulty(), questionType, explanation);
+    }
+
+    private static void validateUnderscore(String content, QuestionType type) {
+        if (content == null) return;
+        boolean hasInvalidUnderscore = java.util.regex.Pattern.compile("(?<!_)_(?!_)|(?<!_)__(?!_)|_{4,}").matcher(content).find();
+        if (hasInvalidUnderscore) {
+            throw new ValidationException("Chỉ chấp nhận đúng 3 ký tự '_' liên tiếp (___) để biểu thị vị trí điền khuyết");
+        }
+        if (type == QuestionType.FILL_BLANK) {
+            if (!content.contains("___")) {
+                throw new ValidationException("Câu hỏi điền vào chỗ trống phải chứa ít nhất một ký hiệu '___'");
+            }
+        }
     }
 
     private static char normalizeCorrectOption(char correctOption) {

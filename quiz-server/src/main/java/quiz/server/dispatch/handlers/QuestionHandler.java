@@ -15,6 +15,7 @@ import quiz.server.network.UserSession;
 import quiz.server.service.QuestionService;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -30,7 +31,7 @@ public final class QuestionHandler implements CommandHandler {
     public Set<MessageType> supportedTypes() {
         return Set.of(MessageType.CREATE_QUESTION, MessageType.UPDATE_QUESTION,
             MessageType.GET_QUESTION, MessageType.LIST_QUESTIONS,
-            MessageType.DEACTIVATE_QUESTION);
+            MessageType.DEACTIVATE_QUESTION, MessageType.BATCH_DEACTIVATE_QUESTIONS);
     }
 
     @Override
@@ -69,6 +70,12 @@ public final class QuestionHandler implements CommandHandler {
                 long questionId = HandlerPayload.requiredLong(request);
                 questions.deactivateQuestion(questionId, actorId);
                 yield Response.success(request.requestId(), null);
+            }
+            case BATCH_DEACTIVATE_QUESTIONS -> {
+                @SuppressWarnings("unchecked")
+                List<Long> ids = (List<Long>) HandlerPayload.required(request, List.class);
+                int deactivated = questions.deactivateQuestions(ids, actorId);
+                yield Response.success(request.requestId(), deactivated);
             }
             default -> throw new QuizException(quiz.common.protocol.ErrorCode.INVALID_REQUEST,
                 "Unsupported question command");

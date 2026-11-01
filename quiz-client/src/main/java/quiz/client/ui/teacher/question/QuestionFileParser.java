@@ -73,6 +73,17 @@ public final class QuestionFileParser {
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 
+    // Pattern nhận diện dạng câu hỏi tường minh (Loại câu hỏi / Dạng câu hỏi / Type)
+    private static final Pattern EXPLICIT_TYPE = Pattern.compile(
+        "^(?:dạng\\s*(?:câu\\s*hỏi)?|loại\\s*(?:câu\\s*hỏi)?|question\\s*type|type)\\s*[:=-]\\s*(.+)$",
+        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
+    // Pattern nhận diện đáp án câu hỏi điền khuyết / trả lời ngắn (Đáp án: xyz / Answer: xyz)
+    private static final Pattern TEXT_ANSWER_LINE = Pattern.compile(
+        "^(?:đáp\\s*án|answer|key|đáp\\s*án\\s*đúng|chọn|correct\\s*answer|đa)\\s*[:=.-]\\s*(.+)$",
+        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
     // Pattern nhận diện dòng chủ đề tường minh
     private static final Pattern EXPLICIT_TOPIC = Pattern.compile(
         "^(?:chủ\\s*đề|topic|bài\\s*học|chuyên\\s*đề|lesson|unit)\\s*[\\:\\=\\-]\\s*(.+)$",
@@ -87,7 +98,7 @@ public final class QuestionFileParser {
 
     // Pattern nhan dien dong giai thich dap an
     private static final Pattern EXPLICIT_EXPLANATION = Pattern.compile(
-        "^(?:gi\u1ea3i\\\\s*th\u00edch|l\u1eddi\\\\s*gi\u1ea3i|h\u01b0\u1edbng\\\\s*d\u1eabn|explanation|explain)\\\\s*[\\\\:\\\\=\\\\-]\\\\s*(.+)$",
+        "^(?:gi\u1ea3i\\s*th\u00edch|l\u1eddi\\s*gi\u1ea3i|h\u01b0\u1edbng\\s*d\u1eabn|explanation|explain)\\s*[\\:\\=\\-]\\s*(.+)$",
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 
@@ -339,7 +350,11 @@ public final class QuestionFileParser {
 
                     try {
                         quiz.common.enums.QuestionType csvType = detectQuestionType(content, a, b, c, d);
-                    results.add(ClientValidation.question(new CreateQuestionDto(content, a, b, c, d, correct, topic, diff, csvType, null)));
+                        String explanation = parts.length > 8 ? cleanCsvField(parts[8]) : null;
+                        if (explanation == null || explanation.isBlank()) {
+                            explanation = "Giải thích chi tiết cho câu hỏi.";
+                        }
+                        results.add(ClientValidation.question(new CreateQuestionDto(content, a, b, c, d, correct, topic, diff, csvType, explanation)));
                     } catch (Exception ignored) {}
                 }
             }
@@ -509,8 +524,8 @@ public final class QuestionFileParser {
                 else if (current.optB != null) current.optB += " " + line;
                 else current.optA += " " + line;
             } else if (current.content != null) {
-                // Nối tiếp nội dung câu hỏi
-                current.content += " " + line;
+                // Nối tiếp nội dung câu hỏi (giữ xuống dòng nếu là câu đối thoại bắt đầu bằng - hoặc câu riêng biệt)
+                current.content += "\n" + line;
             } else {
                 // Bắt đầu một câu hỏi không có tiền tố "Câu X"
                 current.content = line;
@@ -530,6 +545,25 @@ public final class QuestionFileParser {
      * nhưng trong văn bản gốc bị thiếu hoặc bị biến đổi ký tự (ví dụ: ......, ------, [...], (....), khoảng trắng thừa).
      */
     public static String normalizeBlanks(String content) {
+        if (content == null || content.isBlank()) {
+            return content;
+        }
+        if (content.contains("\n")) {
+            String[] lines = content.split("\r?\n");
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < lines.length; i++) {
+                String normalizedLine = normalizeSingleLineBlanks(lines[i]);
+                if (!normalizedLine.isBlank()) {
+                    if (sb.length() > 0) sb.append("\n");
+                    sb.append(normalizedLine);
+                }
+            }
+            return sb.toString();
+        }
+        return normalizeSingleLineBlanks(content);
+    }
+
+    private static String normalizeSingleLineBlanks(String content) {
         if (content == null || content.isBlank()) {
             return content;
         }
@@ -555,6 +589,11 @@ public final class QuestionFileParser {
         // Các dạng dấu chấm giữa dòng dạng tiếng Anh: ···, •••, …
         res = res.replaceAll("[·•]{2,}", "___");
 
+        // Hỗ trợ [blank], (blank), {blank} dạng văn bản
+        res = res.replaceAll("(?i)\\[blank\\]", "___");
+        res = res.replaceAll("(?i)\\(blank\\)", "___");
+        res = res.replaceAll("(?i)\\{blank\\}", "___");
+
         // Các dạng ngoặc trống hoặc ngoặc chứa chấm/gạch: ( ), [ ], ( ... ), [ ... ], ( ___ ), [ ___ ], (...)
         res = res.replaceAll("\\(\\s*(?:\\.*|_{1,}|-{1,}|\\s*)\\)", "___");
         res = res.replaceAll("\\[\\s*(?:\\.*|_{1,}|-{1,}|\\s*)\\]", "___");
@@ -574,22 +613,47 @@ public final class QuestionFileParser {
             return res.replaceAll("\\s{2,}", " ").trim();
         }
 
-        // 4. Nếu câu hỏi không có bất kỳ dấu blank nào:
-        // TH 4a: Câu kết thúc lửng mà không có dấu chấm câu, hoặc kết thúc bởi từ nối/giới từ/động từ
-        // Ví dụ: "If he had invited me, I would" hoặc "The book was written by"
-        if (!res.endsWith("?") && !res.contains("?")) {
-            if (res.endsWith(".")) {
-                // Kiểm tra xem câu có kết thúc kiểu viết tắt hoặc bị thiếu từ cuối trước dấu chấm không
-                // Ví dụ: "He decided to ."
-                if (res.matches(".*\\b(?:to|in|on|at|for|with|by|of|about|from|into|through|than|as|be|been|being)\\s*\\.$")) {
-                    res = res.substring(0, res.length() - 1).trim() + " ___ .";
+                // 3b. Phát hiện dấu ". chữ_thường" ở giữa câu → có thể thiếu chủ ngữ/động từ
+        // Ví dụ: "There are some bottles on the shelf. for the party." → thiếu ___ giữa 2 phần
+        // Loại trừ: viết tắt (e.g., i.e., vs.), URL, số thập phân
+        {
+            java.util.regex.Pattern dotLowerPat = java.util.regex.Pattern.compile(
+                "(\\w{4,})\\.\\s+([a-z])"
+            );
+            java.util.regex.Matcher dotLower = dotLowerPat.matcher(res);
+            if (dotLower.find()) {
+                // Từ trước dấu "." dài ≥ 4 ký tự → không phải viết tắt → chèn ___
+                int insertPos = dotLower.start() + dotLower.group(1).length() + 1; // sau dấu "."
+                String afterDot = res.substring(insertPos).trim();
+                res = res.substring(0, insertPos) + " ___ " + afterDot;
+                res = res.replaceAll("\\s*___+\\s*", " ___ ");
+                return res.replaceAll("\\s{2,}", " ").trim();
+            }
+        }
+
+        // 4. Phân tích đoạn cuối (sau dấu ? hoặc ! cuối cùng) để phát hiện câu chưa hoàn chỉnh
+        // Ví dụ: "Did you consider...? Yes, I have thought about ." → đoạn cuối "Yes, I have thought about ."
+        {
+            String tail = res;
+            int lastQ = Math.max(res.lastIndexOf('?'), res.lastIndexOf('!'));
+            if (lastQ >= 0 && lastQ < res.length() - 1) {
+                tail = res.substring(lastQ + 1).trim();
+            } else if (lastQ == res.length() - 1) {
+                tail = ""; // câu kết thúc bằng ? hoặc ! → không cần thêm ___
+            }
+            if (!tail.isEmpty()) {
+                if (tail.endsWith(".")) {
+                    // Câu kết thúc bằng "giới từ ." → thiếu bổ ngữ: "about ." → "about ___ ."
+                    if (tail.matches(".*\\b(?:to|in|on|at|for|with|by|of|about|from|into|through|than|as|be|been|being)\\s*\\.$")) {
+                        String beforeTail = lastQ >= 0 ? res.substring(0, lastQ + 1) + " " : "";
+                        res = beforeTail + tail.substring(0, tail.length() - 1).trim() + " ___ .";
+                    }
+                } else if (!tail.endsWith("?") && !tail.endsWith("!")) {
+                    if (tail.matches(".*\\b(?:is|are|was|were|to|at|in|on|of|for|with|about|by|will|would|can|could|should|must|than|enjoys|likes|loves|decided|wants|started|keeps|have|has|had)\\s*$")) {
+                        String beforeTail = lastQ >= 0 ? res.substring(0, lastQ + 1) + " " : "";
+                        res = beforeTail + tail + " ___ .";
+                    }
                 }
-            } else if (res.matches(".*\\b(?:is|are|was|were|to|at|in|on|of|for|with|about|by|will|would|can|could|should|must|than|enjoys|likes|loves|decided|wants|started|keeps|have|has|had)\\s*$")) {
-                // Câu bị ngắt lửng ở giới từ hoặc trợ động từ
-                res = res + " ___ .";
-            } else if (!res.endsWith("!")) {
-                // Nếu câu không có dấu kết thúc và không chứa "___", thêm " ___ " vào cuối
-                res = res + " ___ .";
             }
         }
 
@@ -631,10 +695,25 @@ public final class QuestionFileParser {
             diff = detectDifficulty(finalContent, a, bText, c, d);
         }
 
-        quiz.common.enums.QuestionType qType = detectQuestionType(finalContent, a, bText, c, d);
+        quiz.common.enums.QuestionType qType = b.explicitType != null ? b.explicitType : detectQuestionType(finalContent, a, bText, c, d);
+        if (qType == quiz.common.enums.QuestionType.TRUE_FALSE) {
+            a = "Đúng";
+            bText = "Sai";
+            c = "-";
+            d = "-";
+        } else if (qType == quiz.common.enums.QuestionType.SHORT_ANSWER || (qType == quiz.common.enums.QuestionType.FILL_BLANK && isDashOrEmpty(c) && isDashOrEmpty(d))) {
+            if (b.optA != null && !b.optA.isBlank()) {
+                a = b.optA.trim();
+            }
+            bText = "-";
+            c = "-";
+            d = "-";
+            correct = 'A';
+        }
+        String finalExplanation = (b.explanation != null && !b.explanation.isBlank()) ? b.explanation.trim() : "Giải thích chi tiết cho câu hỏi.";
         try {
             CreateQuestionDto validated = ClientValidation.question(
-                new CreateQuestionDto(finalContent, a, bText, c, d, correct, topic, diff, qType, b.explanation)
+                new CreateQuestionDto(finalContent, a, bText, c, d, correct, topic, diff, qType, finalExplanation)
             );
             list.add(validated);
         } catch (Exception ignored) {
@@ -646,7 +725,7 @@ public final class QuestionFileParser {
                 String safeC = c.length() > 250 ? c.substring(0, 250) : c;
                 String safeD = d.length() > 250 ? d.substring(0, 250) : d;
                 String safeTopic = topic.length() > 95 ? topic.substring(0, 95) : topic;
-                String safeExp = b.explanation != null && b.explanation.length() > 1950 ? b.explanation.substring(0, 1950) : b.explanation;
+                String safeExp = finalExplanation.length() > 1950 ? finalExplanation.substring(0, 1950) : finalExplanation;
                 list.add(ClientValidation.question(
                     new CreateQuestionDto(safeContent, safeA, safeB, safeC, safeD, correct, safeTopic, diff, qType, safeExp)
                 ));
@@ -700,14 +779,33 @@ public final class QuestionFileParser {
         return Difficulty.MEDIUM;
     }
 
-    public static quiz.common.enums.QuestionType detectQuestionType(String content, String a, String b, String c, String d) {
-        if (content != null && (content.contains("___") || content.toLowerCase(Locale.ROOT).contains("[blank]"))) {
+    public static quiz.common.enums.QuestionType parseQuestionType(String str) {
+        if (str == null) return null;
+        String s = str.trim().toLowerCase(Locale.ROOT);
+        if (s.contains("đúng") || s.contains("dung") || s.contains("sai") || s.contains("true") || s.contains("false") || s.contains("tf")) {
+            return quiz.common.enums.QuestionType.TRUE_FALSE;
+        }
+        if (s.contains("điền") || s.contains("dien") || s.contains("trống") || s.contains("trong") || s.contains("blank") || s.contains("khuyết") || s.contains("khuyet")) {
             return quiz.common.enums.QuestionType.FILL_BLANK;
         }
+        if (s.contains("trả lời") || s.contains("tra loi") || s.contains("ngắn") || s.contains("ngan") || s.contains("short")) {
+            return quiz.common.enums.QuestionType.SHORT_ANSWER;
+        }
+        if (s.contains("trắc nghiệm") || s.contains("trac nghiem") || s.contains("choice")) {
+            return quiz.common.enums.QuestionType.MULTIPLE_CHOICE;
+        }
+        return null;
+    }
+
+    public static quiz.common.enums.QuestionType detectQuestionType(String content, String a, String b, String c, String d) {
         if (isTrueFalse(a) && isTrueFalse(b)) {
             return quiz.common.enums.QuestionType.TRUE_FALSE;
         }
-        if (isDashOrEmpty(c) && isDashOrEmpty(d)) {
+        boolean hasChoicesCD = !isDashOrEmpty(c) && !isDashOrEmpty(d);
+        if (!hasChoicesCD) {
+            if (content != null && (content.contains("___") || content.toLowerCase(Locale.ROOT).contains("[blank]"))) {
+                return quiz.common.enums.QuestionType.FILL_BLANK;
+            }
             return quiz.common.enums.QuestionType.SHORT_ANSWER;
         }
         return quiz.common.enums.QuestionType.MULTIPLE_CHOICE;
@@ -739,6 +837,7 @@ public final class QuestionFileParser {
         char correctOption = 'A';
         String explicitTopic;
         Difficulty explicitDifficulty;
+        quiz.common.enums.QuestionType explicitType;
         String explanation;
 
         boolean isEmpty() {
