@@ -7,6 +7,7 @@ import quiz.common.enums.AttemptStatus;
 import quiz.common.enums.Difficulty;
 import quiz.common.enums.QuizStatus;
 import quiz.common.enums.SubmitReason;
+import quiz.common.enums.QuestionType;
 import quiz.server.domain.Attempt;
 import quiz.server.domain.ExamResult;
 import quiz.server.domain.Question;
@@ -168,5 +169,25 @@ class GradingServiceTest {
         assertEquals(0, result.correctCount());
         assertEquals(0, result.totalQuestions());
         assertFalse(result.passed());
+    }
+
+    @Test
+    @DisplayName("Grades text questions case-insensitively and reviews actual answer text")
+    void gradesTextAndTrueFalseAnswersAsText() {
+        Question fill = Question.restore(10, "She ___ here.", "", "", "", "", 'A', "English",
+            Difficulty.EASY, QuestionType.FILL_BLANK, true, 2, now, now, "works", "Present simple");
+        Question shortAnswer = Question.restore(11, "Name the color.", "", "", "", "", 'A', "English",
+            Difficulty.EASY, QuestionType.SHORT_ANSWER, true, 2, now, now, "blue|azure", "Both are accepted");
+        Question trueFalse = Question.restore(12, "The Earth is round.", "True", "False", "", "", 'A', "English",
+            Difficulty.EASY, QuestionType.TRUE_FALSE, true, 2, now, now, "", "It is approximately spherical");
+        Question mcq = question(13, 'B');
+
+        assertTrue(gradingService.matchesAnswer(fill, "WORKS"));
+        assertTrue(gradingService.matchesAnswer(shortAnswer, "AZURE"));
+        assertTrue(gradingService.matchesAnswer(trueFalse, "true"));
+        assertFalse(gradingService.matchesAnswer(trueFalse, "B"));
+        assertEquals("True", gradingService.correctAnswerText(trueFalse));
+        assertEquals("Opt B", gradingService.correctAnswerText(mcq));
+        assertEquals("Opt B", gradingService.submittedAnswerText(mcq, "B"));
     }
 }

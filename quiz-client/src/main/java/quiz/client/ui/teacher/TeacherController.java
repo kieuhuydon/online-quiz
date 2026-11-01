@@ -1260,8 +1260,7 @@ public final class TeacherController extends ScreenController {
                 if (row.getItem() != null) {
                     QuestionDto q = row.getItem().getQuestion();
                     ClipboardContent cc = new ClipboardContent();
-                    cc.putString(String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
-                        q.content(), q.optionA(), q.optionB(), q.optionC(), q.optionD(), q.correctOption()));
+                    cc.putString(q.content() + "\n" + formatQuestionOptionsSummary(q));
                     Clipboard.getSystemClipboard().setContent(cc);
                 }
             });
@@ -1344,7 +1343,7 @@ public final class TeacherController extends ScreenController {
             QuestionType qt = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
             return switch (qt) {
                 case MULTIPLE_CHOICE -> new SimpleStringProperty(q.correctOption() + " (" + getOptionText(q, q.correctOption()) + ")");
-                case TRUE_FALSE -> new SimpleStringProperty(q.correctOption() == 'A' ? "A (Đúng)" : "B (Sai)");
+                case TRUE_FALSE -> new SimpleStringProperty(q.correctOption() == 'A' ? q.optionA() : q.optionB());
                 case FILL_BLANK, SHORT_ANSWER -> new SimpleStringProperty(getCorrectOptionText(q));
             };
         });
@@ -2134,6 +2133,9 @@ public final class TeacherController extends ScreenController {
 
     public static String getCorrectOptionText(QuestionDto q) {
     if (q == null) return "";
+    QuestionType type = q.questionType() != null ? q.questionType() : QuestionType.MULTIPLE_CHOICE;
+    if ((type == QuestionType.FILL_BLANK || type == QuestionType.SHORT_ANSWER)
+        && !isEmptyOrDash(q.answerKey())) return safeString(q.answerKey());
     String text = getOptionText(q, q.correctOption());
     if (!isEmptyOrDash(text)) return text;
     if (!isEmptyOrDash(q.optionA())) return safeString(q.optionA());
@@ -2164,7 +2166,7 @@ public static boolean isEmptyOrDash(String s) {
         case TRUE_FALSE -> {
             String optA = safeString(q.optionA());
             String optB = safeString(q.optionB());
-            yield "✓ Đáp án: " + (q.correctOption() == 'A' ? "A (Đúng)" : "B (Sai)")
+            yield "✓ Đáp án: " + (q.correctOption() == 'A' ? optA : optB)
                 + "\nA: " + (!optA.isEmpty() ? optA : "Đúng") + " | B: " + (!optB.isEmpty() ? optB : "Sai");
         }
         case FILL_BLANK -> "✓ Đáp án: " + getCorrectOptionText(q);
@@ -2198,6 +2200,9 @@ public static String formatQuestionPreview(QuestionDto question) {
         case SHORT_ANSWER -> {
             sb.append("→ Đáp án đúng: ").append(getCorrectOptionText(question));
         }
+    }
+    if (question.explanation() != null && !question.explanation().isBlank()) {
+        sb.append("\n\nGiải thích: ").append(question.explanation());
     }
     return sb.toString();
 }

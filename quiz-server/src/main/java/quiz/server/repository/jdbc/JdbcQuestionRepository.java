@@ -108,7 +108,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
     public void ensureSchema() {
         String addColumn = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS question_type VARCHAR(20) NOT NULL DEFAULT 'MULTIPLE_CHOICE'";
         String addExplanation = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS explanation TEXT";
-        String addAnswerKey = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS answer_key TEXT";
+        String addAnswerKey = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS answer_key TEXT NOT NULL DEFAULT ''";
         try (Connection c = dataSource.getConnection();
              java.sql.Statement s = c.createStatement()) {
             s.execute(addColumn);
@@ -328,7 +328,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             statement.setString(3, question.optionB());
             statement.setString(4, question.optionC());
             statement.setString(5, question.optionD());
-            statement.setString(6, String.valueOf(question.correctOption()));
+            statement.setString(6, usesAnswerKey(question) ? null : String.valueOf(question.correctOption()));
             statement.setString(7, question.topic());
             statement.setString(8, question.difficulty().name());
             int idx = 9;
@@ -358,7 +358,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             statement.setString(3, question.optionB());
             statement.setString(4, question.optionC());
             statement.setString(5, question.optionD());
-            statement.setString(6, String.valueOf(question.correctOption()));
+            statement.setString(6, usesAnswerKey(question) ? null : String.valueOf(question.correctOption()));
             statement.setString(7, question.topic());
             statement.setString(8, question.difficulty().name());
             int idx = 9;
@@ -427,7 +427,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             }
             return Question.restore(rows.getLong("id"), content,
                 optionA, optionB, optionC, optionD,
-                rows.getString("correct_option").charAt(0),
+                storedCorrectOption(rows),
                 rows.getString("topic"), Difficulty.valueOf(rows.getString("difficulty")),
                 questionType,
                 rows.getBoolean("active"), rows.getLong("created_by"),
@@ -442,6 +442,16 @@ public final class JdbcQuestionRepository implements QuestionRepository {
 
     private static String safeString(ResultSet rows, String column) {
         try { return rows.getString(column); } catch (SQLException ignored) { return ""; }
+    }
+
+    private static char storedCorrectOption(ResultSet rows) throws SQLException {
+        String value = rows.getString("correct_option");
+        return value == null || value.isBlank() ? 'A' : value.charAt(0);
+    }
+
+    private static boolean usesAnswerKey(Question question) {
+        return question.questionType() == QuestionType.FILL_BLANK
+            || question.questionType() == QuestionType.SHORT_ANSWER;
     }
 
     private static QuestionType inferQuestionType(String content, String optA, String optB, String optC, String optD) {

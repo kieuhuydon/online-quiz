@@ -11,6 +11,7 @@ import quiz.common.enums.Difficulty;
 import quiz.common.enums.QuizStatus;
 import quiz.common.enums.Role;
 import quiz.common.enums.SubmitReason;
+import quiz.common.enums.QuestionType;
 import quiz.server.db.TransactionManager;
 import quiz.server.domain.AnswerRecord;
 import quiz.server.domain.Attempt;
@@ -178,6 +179,26 @@ class AttemptServiceTest {
         assertEquals(attemptId, state.attemptId());
         assertEquals(1800L, state.remainingSeconds());
         assertEquals(1, state.questions().size());
+    }
+
+    @Test
+    void attemptStateIncludesChoiceTextForMultipleChoiceAndTrueFalse() {
+        Quiz quiz = openQuiz("123456");
+        Attempt existing = new Attempt(attemptId, quizId, studentId, AttemptStatus.IN_PROGRESS,
+            now.minusSeconds(300), now.plusSeconds(1500), null, null);
+        Question tf = Question.restore(102L, "The Earth is flat.", "True", "False", "", "", 'B',
+            "Grammar", Difficulty.EASY, QuestionType.TRUE_FALSE, true, 2L, now, now, "", "Explanation");
+        when(quizRepo.findById(quizId)).thenReturn(Optional.of(quiz));
+        when(attemptRepo.findByStudentAndQuiz(studentId, quizId)).thenReturn(Optional.of(existing));
+        when(questionRepo.findQuestionsByQuizId(quizId)).thenReturn(List.of(sampleQuestion(101L, 'A'), tf));
+        when(attemptRepo.getTextAnswers(any(), eq(attemptId))).thenReturn(Map.of());
+
+        AttemptStateDto state = service.startAttempt(quizId, "123456", studentId);
+
+        assertEquals(List.of("A1", "True"), state.questions().stream().map(q -> q.optionA()).toList());
+        assertEquals(List.of("B1", "False"), state.questions().stream().map(q -> q.optionB()).toList());
+        assertEquals(List.of("C1", ""), state.questions().stream().map(q -> q.optionC()).toList());
+        assertEquals(List.of("D1", ""), state.questions().stream().map(q -> q.optionD()).toList());
     }
 
     @Test

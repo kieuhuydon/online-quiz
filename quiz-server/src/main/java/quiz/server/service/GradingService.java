@@ -24,22 +24,52 @@ public final class GradingService {
     }
 
     public boolean matchesAnswer(Question q, String selected) {
-        String expected = q.answerKey().isBlank() ? String.valueOf(q.correctOption()) : q.answerKey();
-        String normalized = selected.strip().replaceAll("\\s+", " ");
+        String normalized = selected == null ? "" : selected.strip().replaceAll("\\s+", " ");
+        if (q.questionType() == quiz.common.enums.QuestionType.MULTIPLE_CHOICE) {
+            return normalized.equalsIgnoreCase(String.valueOf(q.correctOption()));
+        }
         if (q.questionType() == quiz.common.enums.QuestionType.TRUE_FALSE) {
-            normalized = switch (normalized.toUpperCase(Locale.ROOT)) {
-                case "TRUE" -> "A";
-                case "FALSE" -> "B";
-                default -> normalized;
+            String expected = q.correctOption() == 'A' ? q.optionA() : q.optionB();
+            return normalized.equalsIgnoreCase("TRUE" ) && q.correctOption() == 'A'
+                || normalized.equalsIgnoreCase("FALSE") && q.correctOption() == 'B'
+                || normalized.equalsIgnoreCase("A") && q.correctOption() == 'A'
+                || normalized.equalsIgnoreCase("B") && q.correctOption() == 'B'
+                || normalized.equalsIgnoreCase(expected);
+        }
+        String expected = q.answerKey().isBlank() ? q.optionA() : q.answerKey();
+        if (q.questionType() == quiz.common.enums.QuestionType.FILL_BLANK) {
+            for (String acceptedWord : expected.split("\\s*\\|\\s*", -1)) {
+                if (normalized.equalsIgnoreCase(acceptedWord.strip())) return true;
+            }
+            return false;
+        }
+        for (String alternative : expected.split("\\s*\\|\\s*", -1)) {
+            if (normalized.equalsIgnoreCase(alternative.strip())) return true;
+        }
+        return false;
+    }
+
+    public String correctAnswerText(Question q) {
+        return switch (q.questionType()) {
+            case MULTIPLE_CHOICE -> switch (q.correctOption()) {
+                case 'A' -> q.optionA(); case 'B' -> q.optionB(); case 'C' -> q.optionC(); default -> q.optionD();
+            };
+            case TRUE_FALSE -> q.correctOption() == 'A' ? q.optionA() : q.optionB();
+            case FILL_BLANK, SHORT_ANSWER -> q.answerKey().isBlank() ? q.optionA() : q.answerKey();
+        };
+    }
+
+    public String submittedAnswerText(Question q, String answer) {
+        if (answer == null || answer.isBlank()) return "";
+        if (q.questionType() == quiz.common.enums.QuestionType.MULTIPLE_CHOICE && answer.matches("(?i)[A-D]")) {
+            return switch (answer.toUpperCase()) {
+                case "A" -> q.optionA(); case "B" -> q.optionB(); case "C" -> q.optionC(); default -> q.optionD();
             };
         }
-        if (q.questionType() == quiz.common.enums.QuestionType.FILL_BLANK) {
-            String[] expectedWords = expected.split("\\s*\\|\\s*", -1);
-            String[] answerWords = normalized.split("\\s*\\|\\s*", -1);
-            if (expectedWords.length != answerWords.length) return false;
-            for (int i = 0; i < expectedWords.length; i++) if (!expectedWords[i].equalsIgnoreCase(answerWords[i].strip())) return false;
-            return true;
+        if (q.questionType() == quiz.common.enums.QuestionType.TRUE_FALSE) {
+            if (answer.equalsIgnoreCase("TRUE") || answer.equalsIgnoreCase("A")) return q.optionA();
+            if (answer.equalsIgnoreCase("FALSE") || answer.equalsIgnoreCase("B")) return q.optionB();
         }
-        return normalized.equalsIgnoreCase(expected.strip());
+        return answer;
     }
 }
