@@ -26,7 +26,7 @@ public final class AccountHandler implements CommandHandler {
 
     @Override
     public Set<MessageType> supportedTypes() {
-        return Set.of(MessageType.CREATE_ACCOUNT, MessageType.LIST_ACCOUNTS, MessageType.SET_ACCOUNT_ACTIVE);
+        return Set.of(MessageType.CREATE_ACCOUNT, MessageType.LIST_ACCOUNTS, MessageType.SET_ACCOUNT_ACTIVE, MessageType.DELETE_ACCOUNT);
     }
 
     @Override
@@ -52,6 +52,11 @@ public final class AccountHandler implements CommandHandler {
             case SET_ACCOUNT_ACTIVE -> {
                 SetAccountActiveDto dto = HandlerPayload.required(request, SetAccountActiveDto.class);
                 accounts.setAccountActive(dto.userId(), dto.active(), adminId);
+                yield Response.success(request.requestId(), null);
+            }
+            case DELETE_ACCOUNT -> {
+                long targetId = HandlerPayload.requiredLong(request);
+                accounts.deleteAccount(targetId, adminId);
                 yield Response.success(request.requestId(), null);
             }
             default -> throw new QuizException(ErrorCode.INVALID_REQUEST, "Unsupported account command");

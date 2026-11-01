@@ -22,12 +22,20 @@
         <HBox fx:id="accountActions" spacing="12" alignment="CENTER_LEFT" visible="false" managed="false">
             <Label fx:id="selectedAccount" wrapText="true" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
             <Button fx:id="toggleAccount" text="Khóa tài khoản" onAction="#toggle" styleClass="danger-button"/>
+            <Button fx:id="deleteAccount" text="Xóa tài khoản" onAction="#deleteAccountAction" styleClass="danger-button"/>
         </HBox>
         <VBox fx:id="confirmation" spacing="10" styleClass="note" visible="false" managed="false">
             <Label fx:id="confirmationText" wrapText="true"/>
             <HBox spacing="10">
                 <Button fx:id="cancelLock" text="Hủy" onAction="#cancelLock" styleClass="secondary-button"/>
                 <Button fx:id="confirmLock" text="Xác nhận khóa" onAction="#confirmLock" styleClass="danger-button"/>
+            </HBox>
+        </VBox>
+        <VBox fx:id="deleteConfirmation" spacing="10" styleClass="note" visible="false" managed="false">
+            <Label fx:id="deleteConfirmationText" wrapText="true"/>
+            <HBox spacing="10">
+                <Button fx:id="cancelDelete" text="Hủy" onAction="#cancelDelete" styleClass="secondary-button"/>
+                <Button fx:id="confirmDelete" text="Xác nhận xóa" onAction="#confirmDelete" styleClass="danger-button"/>
             </HBox>
         </VBox>
     </VBox>

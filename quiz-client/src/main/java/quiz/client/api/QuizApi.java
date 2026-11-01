@@ -213,6 +213,19 @@ public final class QuizApi implements AutoCloseable {
         }
     }
 
+    public CompletableFuture<Void> deleteAccount(long userId) {
+        try {
+            ClientValidation.positiveId(userId);
+            return protectedCall(MessageType.DELETE_ACCOUNT, userId,
+                payload -> {
+                    requireNull(payload);
+                    return null;
+                });
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
     public CompletableFuture<QuestionDto> createQuestion(CreateQuestionDto dto) {
         try {
             return protectedCall(MessageType.CREATE_QUESTION, ClientValidation.question(dto),

@@ -45,6 +45,12 @@ public final class AccountController extends ScreenController {
     @FXML private javafx.scene.layout.HBox accountActions;
     @FXML private Label confirmationText;
     @FXML private ProgressIndicator accountProgress;
+    @FXML private Button deleteAccount;
+    @FXML private VBox deleteConfirmation;
+    @FXML private Label deleteConfirmationText;
+    @FXML private Button cancelDelete;
+    @FXML private Button confirmDelete;
+    private AccountDto deleteTarget;
     private long loadVersion;
     private boolean loading;
     private boolean writing;
@@ -85,7 +91,10 @@ public final class AccountController extends ScreenController {
         addColumn("Ngày tạo", 165, account -> CREATED_AT_FORMAT.format(account.createdAt()));
         accountTable.setPlaceholder(new Label("Chưa tải danh sách tài khoản."));
         accountTable.getSelectionModel().selectedItemProperty()
-            .addListener((observable, previous, selected) -> cancelLock());
+            .addListener((observable, previous, selected) -> {
+                cancelLock();
+                cancelDelete();
+            });
     }
 
     private void addColumn(String title, double width, Function<AccountDto, String> text) {
@@ -193,6 +202,7 @@ public final class AccountController extends ScreenController {
         if (writing || loading) return;
         accountTable.getSelectionModel().clearSelection();
         cancelLock();
+        cancelDelete();
         updateControls();
     }
 
@@ -274,6 +284,80 @@ public final class AccountController extends ScreenController {
     }
 
     @FXML
+    private void deleteAccountAction() {
+        List<AccountDto> selectedList = accountTable.getSelectionModel().getSelectedItems();
+        if (!isActive() || writing || loading || !listFresh || selectedList.isEmpty()) {
+            return;
+        }
+        List<AccountDto> nonAdmin = selectedList.stream().filter(a -> a.role() != Role.ADMIN).toList();
+        if (nonAdmin.isEmpty()) return;
+
+        cancelLock();
+
+        if (nonAdmin.size() == 1) {
+            deleteTarget = nonAdmin.get(0);
+            deleteConfirmationText.setText("Bạn có chắc chắn muốn xóa tài khoản “" + deleteTarget.username() + "” (" + deleteTarget.fullName() + ")? Toàn bộ dữ liệu liên quan sẽ bị xóa vĩnh viễn.");
+        } else {
+            deleteTarget = null;
+            deleteConfirmationText.setText("Bạn có chắc chắn muốn xóa " + nonAdmin.size() + " tài khoản đã chọn? Toàn bộ dữ liệu liên quan sẽ bị xóa vĩnh viễn.");
+        }
+        deleteConfirmation.setVisible(true);
+        deleteConfirmation.setManaged(true);
+        confirmDelete.requestFocus();
+        updateControls();
+    }
+
+    @FXML
+    private void cancelDelete() {
+        deleteTarget = null;
+        if (deleteConfirmation != null) {
+            deleteConfirmation.setVisible(false);
+            deleteConfirmation.setManaged(false);
+        }
+        updateControls();
+    }
+
+    @FXML
+    private void confirmDelete() {
+        if (!isActive() || writing || loading || !listFresh) {
+            return;
+        }
+        List<AccountDto> selectedList = accountTable.getSelectionModel().getSelectedItems();
+        List<AccountDto> nonAdmin = selectedList.stream().filter(a -> a.role() != Role.ADMIN).toList();
+        AccountDto target = deleteTarget;
+        cancelDelete();
+
+        if (nonAdmin.isEmpty()) return;
+
+        if (nonAdmin.size() <= 1 && target != null) {
+            beginWrite("Đang xóa tài khoản “" + target.username() + "”…");
+            fx.observe(navigator.trackAccountWrite(api.deleteAccount(target.id())), this::isActive, ignored -> {
+                writing = false;
+                show(accountNotice, "Đã xóa tài khoản “" + target.username() + "” thành công.", false);
+                reload();
+            }, failure -> {
+                show(accountNotice, AccountMessages.message(failure), true);
+                writing = false;
+                reload();
+            }, this::finishWrite);
+        } else {
+            beginWrite("Đang xóa " + nonAdmin.size() + " tài khoản đã chọn…");
+            var futures = nonAdmin.stream()
+                .map(a -> api.deleteAccount(a.id()))
+                .toList();
+            fx.observe(java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0])), this::isActive, ignored -> {
+                writing = false;
+                show(accountNotice, "Đã xóa " + nonAdmin.size() + " tài khoản thành công.", false);
+                reload();
+            }, failure -> {
+                show(accountNotice, AccountMessages.message(failure), true);
+                writing = false;
+                reload();
+            }, this::finishWrite);
+        }
+    }
+
+    @FXML
     private void cancelLock() {
         lockTarget = null;
         confirmation.setVisible(false);
@@ -299,6 +383,7 @@ public final class AccountController extends ScreenController {
     private void beginWrite(String message) {
         writing = true;
         cancelLock();
+        cancelDelete();
         show(accountNotice, message, false);
     }
 
@@ -344,6 +429,13 @@ public final class AccountController extends ScreenController {
         }
         toggleAccount.setDisable(busy || !listFresh || lockTarget != null || !hasSel || allAdmin);
         confirmLock.setDisable(busy);
+        if (deleteAccount != null) {
+            deleteAccount.setText(selectedList.size() > 1 ? "Xóa tài khoản đã chọn" : "Xóa tài khoản");
+            deleteAccount.setDisable(busy || !listFresh || !hasSel || allAdmin || (deleteConfirmation != null && deleteConfirmation.isVisible()));
+        }
+        if (confirmDelete != null) {
+            confirmDelete.setDisable(busy);
+        }
         accountProgress.setVisible(busy);
         accountProgress.setManaged(busy);
     }
@@ -362,5 +454,6 @@ public final class AccountController extends ScreenController {
     protected void onDispose() {
         ++loadVersion;
         lockTarget = null;
+        deleteTarget = null;
     }
 }

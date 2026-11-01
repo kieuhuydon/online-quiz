@@ -13,6 +13,7 @@ public enum MessageType {
     CREATE_ACCOUNT,
     LIST_ACCOUNTS,
     SET_ACCOUNT_ACTIVE,
+    DELETE_ACCOUNT,
 
     // 3. Class Management: writes ADMIN; teacher reads only assigned classes.
     CREATE_CLASS,
