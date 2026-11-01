@@ -213,9 +213,9 @@ class QuestionFileParserTest {
     void parseCsvFileHandlesHeadersQuotesAndDefaults() throws Exception {
         String csv = """
             # Comment line
-            Content,OptionA,OptionB,OptionC,OptionD,Correct,Topic,Difficulty
-            "If I had time, I ___ go with you.",would,will,did,am,A,,HARD
-            "She enjoys ___ books in her free time.",reading,to read,read,reads,a,Gerund,INVALID_DIFF
+            Content,OptionA,OptionB,OptionC,OptionD,Correct,Topic,Difficulty,Explanation
+            "If I had time, I ___ go with you.",would,will,did,am,A,,HARD,"Chọn would vì chủ ngữ I."
+            "She enjoys ___ books in her free time.",reading,to read,read,reads,a,Gerund,INVALID_DIFF,"Gerund đi với V-ing."
             """;
         File csvFile = tempDir.resolve("questions.csv").toFile();
         Files.writeString(csvFile.toPath(), csv);
