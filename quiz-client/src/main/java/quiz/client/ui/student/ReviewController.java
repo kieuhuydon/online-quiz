@@ -69,10 +69,8 @@ public final class ReviewController extends ScreenController {
         answerBox.setStyle("-fx-padding: 12; -fx-background-color: " + tint + "; -fx-background-radius: 8;");
         answerBox.getChildren().add(text("Câu trả lời của bạn: " + display(item.submittedAnswer()),
             "-fx-text-fill: " + accent + "; -fx-font-weight: bold;"));
-        if (!item.correct()) {
-            answerBox.getChildren().add(text("Đáp án đúng: " + display(item.correctAnswer()),
-                "-fx-text-fill: #15803d; -fx-font-weight: bold;"));
-        }
+        answerBox.getChildren().add(text("Đáp án đúng: " + display(item.correctAnswer()),
+            "-fx-text-fill: #15803d; -fx-font-weight: bold;"));
 
         VBox explanationBox = new VBox(5);
         explanationBox.setStyle("-fx-padding: 12; -fx-background-color: #f8fafc; -fx-background-radius: 8;");

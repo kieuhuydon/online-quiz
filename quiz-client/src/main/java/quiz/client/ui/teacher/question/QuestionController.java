@@ -164,7 +164,11 @@ public final class QuestionController extends ScreenController {
         addColumn("Đáp án B", 120, QuestionDto::optionB);
         addColumn("Đáp án C", 120, QuestionDto::optionC);
         addColumn("Đáp án D", 120, QuestionDto::optionD);
-        addColumn("Đáp án đúng", 70, q -> String.valueOf(q.correctOption()));
+        addColumn("Đáp án đúng", 180, q -> switch (q.questionType()) {
+            case MULTIPLE_CHOICE -> q.correctOption() + " (" + TeacherController.getOptionText(q, q.correctOption()) + ")";
+            case TRUE_FALSE -> q.correctOption() == 'A' ? q.optionA() : q.optionB();
+            case FILL_BLANK, SHORT_ANSWER -> TeacherController.getCorrectOptionText(q);
+        });
         addColumn("Chủ đề", 150, QuestionDto::topic);
         addColumn("Độ khó", 80, q -> q.difficulty().name());
         addColumn("Trạng thái", 90, q -> q.active() ? "Hoạt động" : "Đã xóa");
@@ -429,7 +433,15 @@ public final class QuestionController extends ScreenController {
         dateLabel.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
         footer.getChildren().add(dateLabel);
 
-        card.getChildren().addAll(header, contentNode, optionsNode, footer);
+        card.getChildren().addAll(header, contentNode, optionsNode);
+        if (q.explanation() != null && !q.explanation().isBlank()) {
+            Label explanation = new Label("Giải thích: " + q.explanation());
+            explanation.setWrapText(true);
+            explanation.setMaxWidth(Double.MAX_VALUE);
+            explanation.setStyle("-fx-padding: 10 12; -fx-background-color: #f8fafc; -fx-background-radius: 8; -fx-text-fill: #475569;");
+            card.getChildren().add(explanation);
+        }
+        card.getChildren().add(footer);
         return card;
     }
 
@@ -714,8 +726,8 @@ public final class QuestionController extends ScreenController {
     public void copyQuestion(QuestionDto q) {
         if (q == null) return;
         javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
-        String formatted = String.format("Câu hỏi: %s\nA. %s\nB. %s\nC. %s\nD. %s\nĐáp án đúng: %s",
-            q.content(), q.optionA(), q.optionB(), q.optionC(), q.optionD(), q.correctOption());
+        String formatted = q.content() + "\n" + TeacherController.formatQuestionOptionsSummary(q)
+            + (q.explanation() == null || q.explanation().isBlank() ? "" : "\nGiải thích: " + q.explanation());
         content.putString(formatted);
         javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
         show(questionNotice, "Đã sao chép nội dung câu hỏi #" + q.id() + " vào clipboard!", false);
@@ -944,7 +956,8 @@ public final class QuestionController extends ScreenController {
 
     private void fillForm(QuestionDto q) {
         questionContent.setText(q.content());
-        questionOptionA.setText(q.optionA());
+        boolean textAnswer = q.questionType() == QuestionType.FILL_BLANK || q.questionType() == QuestionType.SHORT_ANSWER;
+        questionOptionA.setText(textAnswer ? q.answerKey() : q.optionA());
         questionOptionB.setText(q.optionB());
         questionOptionC.setText(q.optionC());
         questionOptionD.setText(q.optionD());

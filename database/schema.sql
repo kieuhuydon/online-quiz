@@ -47,15 +47,21 @@ CREATE TABLE questions (
     option_b       TEXT NOT NULL,
     option_c       TEXT NOT NULL,
     option_d       TEXT NOT NULL,
-    correct_option CHAR(1) NOT NULL CHECK (correct_option IN ('A', 'B', 'C', 'D')),
+    correct_option CHAR(1),
     topic          VARCHAR(100) NOT NULL,
     difficulty     VARCHAR(10)  NOT NULL CHECK (difficulty IN ('EASY', 'MEDIUM', 'HARD')),
     question_type  VARCHAR(20)  NOT NULL DEFAULT 'MULTIPLE_CHOICE' CHECK (question_type IN ('MULTIPLE_CHOICE', 'TRUE_FALSE', 'FILL_BLANK', 'SHORT_ANSWER')),
     explanation    TEXT,
+    answer_key     TEXT NOT NULL DEFAULT '',
     active         BOOLEAN NOT NULL DEFAULT TRUE,          -- Soft-delete (BR-05)
     created_by     BIGINT NOT NULL REFERENCES users(id),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT questions_correct_option_by_type CHECK (
+        (question_type = 'MULTIPLE_CHOICE' AND correct_option IS NOT NULL AND correct_option IN ('A', 'B', 'C', 'D')) OR
+        (question_type = 'TRUE_FALSE' AND correct_option IS NOT NULL AND correct_option IN ('A', 'B')) OR
+        (question_type IN ('FILL_BLANK', 'SHORT_ANSWER') AND correct_option IS NULL)
+    )
 );
 
 -- 5. Quizzes (Bài kiểm tra)

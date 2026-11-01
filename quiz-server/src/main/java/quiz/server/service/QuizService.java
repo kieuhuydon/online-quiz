@@ -203,7 +203,7 @@ public final class QuizService {
         for (Question q : questionList) {
             questionDtos.add(new QuestionDto(
                 q.id(), q.content(), q.optionA(), q.optionB(), q.optionC(), q.optionD(),
-                q.correctOption(), q.topic(), q.difficulty(), q.questionType(), q.active(), q.createdBy(), q.createdAt()
+                q.correctOption(), q.topic(), q.difficulty(), q.questionType(), q.explanation(), q.active(), q.createdBy(), q.createdAt(), q.answerKey()
             ));
         }
         List<Long> assignedClasses = quizzes.findAssignedClassIds(quizId);

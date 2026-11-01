@@ -18,12 +18,20 @@ public record UpdateQuestionDto(
     String topic,
     Difficulty difficulty,
     QuestionType questionType,
-    String explanation
+    String explanation,
+    String answerKey
 ) implements Serializable {
     public UpdateQuestionDto {
         if (questionType == null) {
             questionType = QuestionType.MULTIPLE_CHOICE;
         }
+    }
+
+    public UpdateQuestionDto(long id, String content, String optionA, String optionB, String optionC,
+                             String optionD, char correctOption, String topic, Difficulty difficulty,
+                             QuestionType questionType, String explanation) {
+        this(id, content, optionA, optionB, optionC, optionD, correctOption, topic, difficulty,
+            questionType, explanation, null);
     }
 
     public UpdateQuestionDto(long id, String content, String optionA, String optionB,

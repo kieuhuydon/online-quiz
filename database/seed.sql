@@ -148,7 +148,49 @@ BEGIN
 ('Memo: "The supplier met the revised delivery date, although the original deadline was missed." Which statement is supported?', 'Both deadlines were missed', 'The original deadline was met', 'No delivery date was agreed', 'The revised deadline was met', 'D', 'Reading', 'HARD', TRUE, v_teacher2),
 ('Email: "Approval is conditional on receiving the signed contract." What must happen before approval is finalized?', 'The project must be completed', 'The signed contract must be received', 'The invoice must be cancelled', 'A new supplier must be selected', 'B', 'Reading', 'HARD', TRUE, v_teacher2);
 
-    -- 4. Five ready-to-take quizzes, three drafts, two closed quizzes with history.
+-- English grammar demo questions across all supported question types
+INSERT INTO questions (content, option_a, option_b, option_c, option_d,
+    correct_option, topic, difficulty, question_type, active, created_by, answer_key, explanation)
+VALUES
+('She ___ (work) at this company every day.', '', '', '', '', NULL, 'Verb Tenses', 'MEDIUM', 'FILL_BLANK', TRUE, v_teacher1, 'works', 'Use the present simple with the third-person singular subject she.'),
+('If I ___ (be) you, I would apologize.', '', '', '', '', NULL, 'Conditionals', 'MEDIUM', 'FILL_BLANK', TRUE, v_teacher1, 'were', 'The second conditional uses the past form were in the if-clause.'),
+('We saw ___ owl in the tree.', '', '', '', '', NULL, 'Articles', 'EASY', 'FILL_BLANK', TRUE, v_teacher1, 'an', 'Use an before a singular countable noun that begins with a vowel sound.'),
+('They were ___ dinner when the phone rang.', '', '', '', '', NULL, 'Verb Tenses', 'EASY', 'FILL_BLANK', TRUE, v_teacher1, 'having', 'The past continuous is formed with was or were plus the -ing form of the verb.'),
+('What tense is used in "They have finished the report"?', '', '', '', '', NULL, 'Verb Tenses', 'EASY', 'SHORT_ANSWER', TRUE, v_teacher1, 'present perfect', 'The structure have plus the past participle forms the present perfect.'),
+('Complete the sentence: If it rains, we ___ at home.', '', '', '', '', NULL, 'Conditionals', 'EASY', 'SHORT_ANSWER', TRUE, v_teacher1, 'will stay|will remain', 'The first conditional uses will plus the base verb in the main clause.'),
+('Which article is used before a singular countable noun beginning with a vowel sound?', '', '', '', '', NULL, 'Articles', 'EASY', 'SHORT_ANSWER', TRUE, v_teacher1, 'an', 'The choice between a and an depends on the following sound.'),
+('What is the subject in "The students passed the exam"?', '', '', '', '', NULL, 'Sentence Structure', 'EASY', 'SHORT_ANSWER', TRUE, v_teacher1, 'the students|students', 'The students perform the action, so they are the subject.'),
+('True or false: The present perfect can describe an action that started in the past and continues now.', 'True', 'False', '', '', 'A', 'Verb Tenses', 'MEDIUM', 'TRUE_FALSE', TRUE, v_teacher1, '', 'The present perfect often connects a past starting point with the present.'),
+('True or false: "If I will see her, I will tell her" is the standard first conditional form.', 'True', 'False', '', '', 'B', 'Conditionals', 'MEDIUM', 'TRUE_FALSE', TRUE, v_teacher1, '', 'Use the present simple, not will, in the if-clause of the first conditional.'),
+('True or false: We use "an" before words that begin with a vowel sound.', 'True', 'False', '', '', 'A', 'Articles', 'EASY', 'TRUE_FALSE', TRUE, v_teacher1, '', 'The article an is chosen by sound, as in an hour and an apple.'),
+('True or false: The sentence "She does not likes coffee" is grammatically correct.', 'True', 'False', '', '', 'B', 'Grammar', 'EASY', 'TRUE_FALSE', TRUE, v_teacher1, '', 'After does not, use the base form like.'),
+('By the time we arrived, the film ___.', 'started', 'had started', 'has started', 'starts', 'B', 'Verb Tenses', 'MEDIUM', 'MULTIPLE_CHOICE', TRUE, v_teacher2, '', 'Use the past perfect for an event completed before another past event.'),
+('If I ___ more time, I would learn Japanese.', 'have', 'had', 'will have', 'would have', 'B', 'Conditionals', 'MEDIUM', 'MULTIPLE_CHOICE', TRUE, v_teacher2, '', 'The second conditional uses the past simple in the if-clause.'),
+('She adopted ___ honest dog from the shelter.', 'a', 'an', 'the', 'no article', 'B', 'Articles', 'EASY', 'MULTIPLE_CHOICE', TRUE, v_teacher2, '', 'Honest begins with a vowel sound because the h is silent.'),
+('Neither of the answers ___ correct.', 'are', 'were', 'is', 'have been', 'C', 'Subject-Verb Agreement', 'MEDIUM', 'MULTIPLE_CHOICE', TRUE, v_teacher2, '', 'Neither is treated as singular in this sentence.');
+
+-- Give the original multiple-choice bank explanations as well as the typed demo items.
+UPDATE questions q
+SET explanation = CASE q.topic
+    WHEN 'Grammar' THEN 'The correct form is "' ||
+        CASE q.correct_option WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
+             WHEN 'C' THEN q.option_c ELSE q.option_d END ||
+        '" because it matches the tense, clause pattern, or agreement required by the sentence.'
+    WHEN 'Vocabulary' THEN '"' ||
+        CASE q.correct_option WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
+             WHEN 'C' THEN q.option_c ELSE q.option_d END ||
+        '" has the meaning required by the sentence or definition.'
+    WHEN 'Reading' THEN 'The passage directly supports "' ||
+        CASE q.correct_option WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
+             WHEN 'C' THEN q.option_c ELSE q.option_d END ||
+        '"; the other choices add unsupported details or contradict the passage.'
+    ELSE 'The correct answer is "' ||
+        CASE q.correct_option WHEN 'A' THEN q.option_a WHEN 'B' THEN q.option_b
+             WHEN 'C' THEN q.option_c ELSE q.option_d END || '".'
+END
+WHERE q.explanation IS NULL OR btrim(q.explanation) = '';
+
+    -- 4. Five built-in ready-to-take quizzes, three drafts, and two closed quizzes with history.
     -- Practice PINs: B1 123456, B2 234567, TOEIC 345678; mock PINs: B1 678901, TOEIC 789012.
     INSERT INTO quizzes (title, description, category, duration_minutes, pass_score,
         status, pin, anticheat_policy, max_violations, created_by, created_at, opened_at, closed_at)
@@ -250,4 +292,66 @@ BEGIN
     END LOOP;
 END;
 $$;
+-- Two ready-to-take grammar quizzes, each containing all four question types
+DO $$
+DECLARE
+    quiz_a BIGINT;
+    quiz_b BIGINT;
+    v_teacher1 BIGINT;
+    v_class_b1 BIGINT;
+BEGIN
+    SELECT id INTO v_teacher1 FROM users WHERE username = 'teacher1';
+    SELECT id INTO v_class_b1 FROM classes WHERE name = 'ENG-B1-01';
+
+    INSERT INTO quizzes (title, description, category, duration_minutes, pass_score,
+                         status, pin, anticheat_policy, max_violations, created_by,
+                         created_at, opened_at, closed_at)
+    VALUES ('Grammar Essentials A',
+            'A grammar practice exam covering verb tenses, conditionals, articles, and sentence structure.',
+            'English Grammar', 25, 60,
+            'OPEN', '135790', 'WARN_THEN_AUTO_SUBMIT', 3, v_teacher1,
+            now(), now() - interval '5 minute', NULL)
+    RETURNING id INTO quiz_a;
+
+    INSERT INTO quizzes (title, description, category, duration_minutes, pass_score,
+                         status, pin, anticheat_policy, max_violations, created_by,
+                         created_at, opened_at, closed_at)
+    VALUES ('Grammar Essentials B',
+            'A second grammar practice exam with questions on tenses, conditionals, articles, and usage.',
+            'English Grammar', 25, 60,
+            'OPEN', '246810', 'WARN_THEN_AUTO_SUBMIT', 3, v_teacher1,
+            now(), now() - interval '5 minute', NULL)
+    RETURNING id INTO quiz_b;
+
+    INSERT INTO quiz_questions (quiz_id, question_id, position)
+    SELECT quiz_a, q.id, sample.position
+    FROM (VALUES
+        ('She ___ (work) at this company every day.', 1),
+        ('What tense is used in "They have finished the report"?', 2),
+        ('True or false: The present perfect can describe an action that started in the past and continues now.', 3),
+        ('By the time we arrived, the film ___.', 4),
+        ('If I ___ (be) you, I would apologize.', 5),
+        ('Complete the sentence: If it rains, we ___ at home.', 6),
+        ('True or false: "If I will see her, I will tell her" is the standard first conditional form.', 7),
+        ('If I ___ more time, I would learn Japanese.', 8)
+    ) AS sample(content, position)
+    JOIN questions q ON q.content = sample.content;
+
+    INSERT INTO quiz_questions (quiz_id, question_id, position)
+    SELECT quiz_b, q.id, sample.position
+    FROM (VALUES
+        ('We saw ___ owl in the tree.', 1),
+        ('Which article is used before a singular countable noun beginning with a vowel sound?', 2),
+        ('True or false: We use "an" before words that begin with a vowel sound.', 3),
+        ('She adopted ___ honest dog from the shelter.', 4),
+        ('They were ___ dinner when the phone rang.', 5),
+        ('What is the subject in "The students passed the exam"?', 6),
+        ('True or false: The sentence "She does not likes coffee" is grammatically correct.', 7),
+        ('Neither of the answers ___ correct.', 8)
+    ) AS sample(content, position)
+    JOIN questions q ON q.content = sample.content;
+
+    INSERT INTO quiz_assignments (quiz_id, class_id, assigned_by)
+    VALUES (quiz_a, v_class_b1, v_teacher1), (quiz_b, v_class_b1, v_teacher1);
+END $$;
 COMMIT;

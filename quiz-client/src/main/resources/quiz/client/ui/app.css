@@ -849,9 +849,9 @@
 }
 
 .question-index-answered {
-    -fx-background-color: #d1fae5;
-    -fx-text-fill: #065f46;
-    -fx-border-color: #6ee7b7;
+    -fx-background-color: #dbeafe;
+    -fx-text-fill: #1d4ed8;
+    -fx-border-color: #93c5fd;
     -fx-border-radius: 8;
 }
 

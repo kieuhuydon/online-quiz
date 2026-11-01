@@ -2,6 +2,7 @@ package quiz.client.ui.student;
 
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
+import javafx.animation.PauseTransition;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -69,6 +70,8 @@ public final class ExamController extends ScreenController {
     private static final int PAGE_SIZE = 10;
     private int currentPage = 0;
     private final Map<Integer, VBox> questionCards = new HashMap<>();
+    private boolean programmaticScroll;
+    private final PauseTransition programmaticScrollReset = new PauseTransition(Duration.millis(250));
 
     private final Map<Long, String> answers = new HashMap<>();
     private Timeline countdown;
@@ -138,6 +141,12 @@ public final class ExamController extends ScreenController {
     @FXML
     private void initialize() {
         title.setText(attempt.quizTitle());
+        questionsScrollPane.vvalueProperty().addListener((obs, oldValue, newValue) -> {
+            if (programmaticScroll) return;
+            Platform.runLater(() -> {
+                if (!programmaticScroll) syncCurrentQuestionFromViewport();
+            });
+        });
         render();
         refreshReview();
     }
@@ -495,6 +504,7 @@ public final class ExamController extends ScreenController {
         VBox card = new VBox(10);
         card.setId("question-card-" + qIndex);
         card.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 1.5px; -fx-border-radius: 8px; -fx-background-radius: 8px; -fx-padding: 14px 18px;");
+        card.setOnMousePressed(event -> setCurrentQuestion(qIndex));
 
         Label lblPos = new Label("Câu " + (qIndex + 1) + " / " + total);
         lblPos.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #4338ca;");
@@ -517,48 +527,43 @@ public final class ExamController extends ScreenController {
         if (q.questionType() == QuestionType.MULTIPLE_CHOICE || q.questionType() == QuestionType.TRUE_FALSE) {
             ToggleGroup tg = new ToggleGroup();
             if (q.questionType() == QuestionType.TRUE_FALSE) {
-                RadioButton rTrue = new RadioButton("Đúng");
+                String trueLabel = q.optionA() == null || q.optionA().isBlank() ? "True" : q.optionA();
+                String falseLabel = q.optionB() == null || q.optionB().isBlank() ? "False" : q.optionB();
+                RadioButton rTrue = new RadioButton(trueLabel);
                 rTrue.setUserData("TRUE");
                 rTrue.setToggleGroup(tg);
                 rTrue.setWrapText(true);
                 rTrue.setMaxWidth(Double.MAX_VALUE);
+                styleAnswerChoice(rTrue);
 
-                RadioButton rFalse = new RadioButton("Sai");
+                RadioButton rFalse = new RadioButton(falseLabel);
                 rFalse.setUserData("FALSE");
                 rFalse.setToggleGroup(tg);
                 rFalse.setWrapText(true);
                 rFalse.setMaxWidth(Double.MAX_VALUE);
+                styleAnswerChoice(rFalse);
 
-                if ("TRUE".equalsIgnoreCase(saved)) tg.selectToggle(rTrue);
-                else if ("FALSE".equalsIgnoreCase(saved)) tg.selectToggle(rFalse);
+                if ("TRUE".equalsIgnoreCase(saved) || "A".equalsIgnoreCase(saved)) tg.selectToggle(rTrue);
+                else if ("FALSE".equalsIgnoreCase(saved) || "B".equalsIgnoreCase(saved)) tg.selectToggle(rFalse);
 
                 answerBox.getChildren().addAll(rTrue, rFalse);
             } else {
                 List<RadioButton> radios = new ArrayList<>();
-                if (q.optionA() != null && !q.optionA().isBlank()) {
-                    RadioButton r = new RadioButton("A. " + q.optionA());
-                    r.setUserData("A");
-                    radios.add(r);
-                }
-                if (q.optionB() != null && !q.optionB().isBlank()) {
-                    RadioButton r = new RadioButton("B. " + q.optionB());
-                    r.setUserData("B");
-                    radios.add(r);
-                }
-                if (q.optionC() != null && !q.optionC().isBlank()) {
-                    RadioButton r = new RadioButton("C. " + q.optionC());
-                    r.setUserData("C");
-                    radios.add(r);
-                }
-                if (q.optionD() != null && !q.optionD().isBlank()) {
-                    RadioButton r = new RadioButton("D. " + q.optionD());
-                    r.setUserData("D");
+                String[] values = {q.optionA(), q.optionB(), q.optionC(), q.optionD()};
+                String[] labels = {"A", "B", "C", "D"};
+                for (int i = 0; i < values.length; i++) {
+                    String option = values[i] == null || values[i].isBlank()
+                        ? "[Phương án chưa có nội dung]" : values[i];
+                    RadioButton r = new RadioButton(labels[i] + ". " + option);
+                    r.setUserData(labels[i]);
+                    styleAnswerChoice(r);
                     radios.add(r);
                 }
                 for (RadioButton r : radios) {
                     r.setToggleGroup(tg);
                     r.setWrapText(true);
                     r.setMaxWidth(Double.MAX_VALUE);
+                    styleAnswerChoice(r);
                     if (r.getUserData().equals(saved)) {
                         tg.selectToggle(r);
                     }
@@ -572,11 +577,11 @@ public final class ExamController extends ScreenController {
             });
         } else {
             String[] values = saved == null ? new String[0] : saved.split("\\|", -1);
-            int count = q.questionType() == QuestionType.FILL_BLANK ? Math.max(1, q.blankCount()) : 1;
+            int count = 1;
             List<TextField> fields = new ArrayList<>();
             for (int k = 0; k < count; k++) {
                 TextField field = new TextField(k < values.length ? values[k].strip() : "");
-                field.setPromptText(q.questionType() == QuestionType.FILL_BLANK ? "Từ cho ô trống " + (k + 1) : "Nhập câu trả lời ngắn");
+                field.setPromptText(q.questionType() == QuestionType.FILL_BLANK ? "Nhập một từ" : "Nhập câu trả lời ngắn");
                 field.setStyle("-fx-font-size: 13.5px; -fx-padding: 7 10;");
                 fields.add(field);
                 answerBox.getChildren().add(field);
@@ -591,8 +596,19 @@ public final class ExamController extends ScreenController {
         }
     }
 
+    private static void styleAnswerChoice(RadioButton choice) {
+        choice.setStyle("-fx-text-fill: #1e293b; -fx-font-size: 14px; -fx-padding: 8 10; -fx-background-color: #f8fafc; -fx-background-radius: 8;");
+    }
+
     private void saveAnswer(long questionId, String answer) {
         answers.put(questionId, answer);
+        for (int i = 0; i < attempt.questions().size(); i++) {
+            if (attempt.questions().get(i).id() == questionId) {
+                index = i;
+                break;
+            }
+        }
+        refreshReview();
         if (saveStatus != null) saveStatus.setText("Đang lưu câu trả lời...");
         fx.observe(api.saveAnswer(attempt.attemptId(), questionId, answer), this::isActive,
             ignored -> { if (saveStatus != null) saveStatus.setText(""); refreshReview(); },
@@ -608,6 +624,7 @@ public final class ExamController extends ScreenController {
     private void previous() {
         if (currentPage > 0) {
             currentPage--;
+            index = currentPage * PAGE_SIZE;
             render();
             scrollToTopQuestions();
         }
@@ -618,6 +635,7 @@ public final class ExamController extends ScreenController {
         int totalPages = Math.max(1, (int) Math.ceil((double) attempt.questions().size() / PAGE_SIZE));
         if (currentPage < totalPages - 1) {
             currentPage++;
+            index = currentPage * PAGE_SIZE;
             render();
             scrollToTopQuestions();
         }
@@ -626,7 +644,7 @@ public final class ExamController extends ScreenController {
     private void scrollToTopQuestions() {
         javafx.application.Platform.runLater(() -> {
             if (questionsScrollPane != null) {
-                questionsScrollPane.setVvalue(0.0);
+                setProgrammaticScrollValue(questionsScrollPane.getVmin());
             }
         });
     }
@@ -645,9 +663,6 @@ public final class ExamController extends ScreenController {
     private void refreshReview() {
         if (reviewGrid == null) return;
         reviewGrid.getChildren().clear();
-        int startIdx = currentPage * PAGE_SIZE;
-        int endIdx = Math.min(startIdx + PAGE_SIZE, attempt.questions().size());
-
         for (int i = 0; i < attempt.questions().size(); i++) {
             StudentQuestionDto q = attempt.questions().get(i);
             Button b = new Button(String.valueOf(i + 1));
@@ -656,17 +671,11 @@ public final class ExamController extends ScreenController {
             b.setMaxSize(48, 42);
             b.getStyleClass().add("question-index-button");
 
-            boolean isCurrentPage = (i >= startIdx && i < endIdx);
+            boolean isCurrent = i == index;
             boolean isAnswered = answers.containsKey(q.id()) && !answers.get(q.id()).isBlank();
 
-            if (isAnswered) {
-                b.getStyleClass().add("question-index-answered");
-            } else {
-                b.getStyleClass().add("question-index-unanswered");
-            }
-            if (isCurrentPage) {
-                b.getStyleClass().add("question-index-current");
-            }
+            b.getStyleClass().add(isCurrent ? "question-index-current"
+                : isAnswered ? "question-index-answered" : "question-index-unanswered");
 
             int targetIndex = i;
             b.setOnAction(e -> jumpToQuestion(targetIndex));
@@ -683,18 +692,66 @@ public final class ExamController extends ScreenController {
         } else {
             refreshReview();
         }
+        scrollToQuestion(targetIndex);
+    }
 
-        javafx.application.Platform.runLater(() -> {
+    private void scrollToQuestion(int targetIndex) {
+        Platform.runLater(() -> {
             VBox card = questionCards.get(targetIndex);
-            if (card != null && questionsScrollPane != null) {
-                double cardY = card.getBoundsInParent().getMinY();
-                double containerHeight = questionsContainer.getBoundsInLocal().getHeight();
-                if (containerHeight > 0) {
-                    questionsScrollPane.setVvalue(Math.max(0.0, Math.min(1.0, cardY / containerHeight)));
-                }
-                card.setStyle("-fx-background-color: #f0fdf4; -fx-border-color: #4f46e5; -fx-border-width: 2px; -fx-border-radius: 8px; -fx-background-radius: 8px; -fx-padding: 14px 18px;");
+            if (card == null || questionsScrollPane == null || questionsContainer == null) return;
+            questionsScrollPane.applyCss();
+            questionsScrollPane.layout();
+            questionsContainer.applyCss();
+            questionsContainer.layout();
+            double contentHeight = questionsContainer.getLayoutBounds().getHeight();
+            double viewportHeight = questionsScrollPane.getViewportBounds().getHeight();
+            double scrollableHeight = contentHeight - viewportHeight;
+            if (scrollableHeight <= 0) {
+                setProgrammaticScrollValue(questionsScrollPane.getVmin());
+                return;
             }
+            double cardTop = card.getBoundsInParent().getMinY();
+            double fraction = Math.max(0.0, Math.min(1.0, cardTop / scrollableHeight));
+            double targetValue = questionsScrollPane.getVmin()
+                + fraction * (questionsScrollPane.getVmax() - questionsScrollPane.getVmin());
+            setProgrammaticScrollValue(targetValue);
+            setCurrentQuestion(targetIndex);
         });
+    }
+
+    private void setProgrammaticScrollValue(double value) {
+        programmaticScroll = true;
+        programmaticScrollReset.stop();
+        programmaticScrollReset.setOnFinished(event -> programmaticScroll = false);
+        questionsScrollPane.setVvalue(value);
+        programmaticScrollReset.playFromStart();
+    }
+
+    private void setCurrentQuestion(int targetIndex) {
+        if (targetIndex < 0 || targetIndex >= attempt.questions().size()) return;
+        if (index != targetIndex) {
+            index = targetIndex;
+            refreshReview();
+        }
+    }
+
+    private void syncCurrentQuestionFromViewport() {
+        if (questionsScrollPane == null || questionsContainer == null || questionCards.isEmpty()) return;
+        javafx.geometry.Bounds viewport = questionsScrollPane.localToScene(questionsScrollPane.getViewportBounds());
+        double targetY = viewport.getMinY() + 60;
+        int visibleIndex = -1;
+        double closestDistance = Double.MAX_VALUE;
+        for (Map.Entry<Integer, VBox> entry : questionCards.entrySet()) {
+            VBox card = entry.getValue();
+            javafx.geometry.Bounds bounds = card.localToScene(card.getBoundsInLocal());
+            if (bounds.getMaxY() <= viewport.getMinY() || bounds.getMinY() >= viewport.getMaxY()) continue;
+            double distance = Math.abs(bounds.getMinY() + bounds.getHeight() / 2 - targetY);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                visibleIndex = entry.getKey();
+            }
+        }
+        if (visibleIndex >= 0) setCurrentQuestion(visibleIndex);
     }
 
     @FXML
