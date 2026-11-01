@@ -1012,6 +1012,9 @@ public final class QuestionController extends ScreenController {
         if (!isActive() || writing || loading) {
             return;
         }
+        if (!showImportGuide()) {
+            return;
+        }
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Chọn tài liệu câu hỏi (Word .docx, PDF, Text .txt, CSV)");
         fileChooser.getExtensionFilters().addAll(
@@ -1054,6 +1057,57 @@ public final class QuestionController extends ScreenController {
         }
 
         importBatch(valid, 0, 0);
+    }
+
+    /** Hiển thị hướng dẫn cấu trúc file import trước khi người dùng chọn tệp. Trả true nếu muốn tiếp tục chọn tệp. */
+    private boolean showImportGuide() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Hướng dẫn nhập câu hỏi từ file");
+        dialog.setHeaderText("Xem cấu trúc và quy tắc trước khi chọn tệp.");
+        VBox box = new VBox(10);
+        box.setPrefWidth(720);
+        TextArea guide = new TextArea();
+        guide.setWrapText(true);
+        guide.setEditable(false);
+        guide.setPrefHeight(430);
+        guide.setText("""
+            ================================================================
+            HƯỚNG DẪN NHẬP CÂU HỎI TỪ FILE
+            ================================================================
+
+            1. Định dạng khuyên dùng: CSV (header-driven, kiểm soát từng cột, báo lỗi theo dòng).
+               DOCX / PDF / TXT chỉ hỗ trợ "best-effort" (dự đoán cấu trúc, có thể bỏ sót đáp án
+               hoặc giải thích), nên ưu tiên CSV khi có thể.
+
+            2. Cấu trúc CSV chuẩn (mã hóa UTF-8, không có ký tự BOM):
+               Type,Content,OptionA,OptionB,OptionC,OptionD,Correct,Topic,Difficulty,Explanation
+
+            3. Ví dụ dòng hợp lệ:
+               MULTIPLE_CHOICE,"She ___ to school.",go,goes,went,gone,B,Ngữ pháp,EASY,"Chủ ngữ số ít dùng goes."
+               TRUE_FALSE,"Hà Nội là thủ đô của Việt Nam.",Đúng,Sai,-,-,A,Địa lý,EASY,"Hà Nội là thủ đô."
+               FILL_BLANK,"I have lived here ___ 2010.",since,-,-,-,A,Thì hoàn thành,MEDIUM,"since + mốc thời gian."
+               SHORT_ANSWER,"Past tense of 'go'?",went,-,-,-,A,Động từ bất quy tắc,EASY,"went."
+
+            4. Quy tắc quan trọng:
+               - Không tự điền đáp án mặc định "A". Thiếu/đáp án sai sẽ báo lỗi dòng đó.
+               - Không tự bịa giải thích. Thiếu giải thích sẽ báo lỗi dòng đó.
+               - MULTIPLE_CHOICE phải đủ 4 đáp án A, B, C, D.
+               - TRUE_FALSE: Correct nhận True/False/Đúng/Sai/A/B (lưu thành A/B).
+               - FILL_BLANK: nội dung phải có "___", OptionA là đáp án, B/C/D = "-".
+               - SHORT_ANSWER: OptionA là đáp án, B/C/D = "-".
+               - Nếu có lỗi, bạn sẽ thấy preview theo dòng trước khi quyết định nhập.
+
+            5. Sau khi chọn file, hệ thống sẽ phân tích và hiện danh sách lỗi (nếu có).
+               Bạn có thể chọn nhập chỉ các câu hợp lệ hoặc hủy bỏ.
+
+            ================================================================
+            """);
+        box.getChildren().add(guide);
+        ButtonType chooseFile = new ButtonType("Chọn file");
+        dialog.getDialogPane().setContent(box);
+        dialog.getDialogPane().getButtonTypes().addAll(chooseFile, ButtonType.CANCEL);
+        dialog.setResultConverter(b -> b == chooseFile ? ButtonType.OK : b);
+        return dialog.showAndWait().filter(b -> b == ButtonType.OK).isPresent();
     }
 
     @FXML
