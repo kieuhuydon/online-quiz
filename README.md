@@ -5,21 +5,21 @@
 | Information   | Description                                                        |
 | ------------- | ------------------------------------------------------------------ |
 | Project Name  | **Online Quiz System for Training Centers (Java Client/Server)**   |
-| Group         | **Group 01**                                                       |
+| Group         | **Group 13**                                                       |
 | Course        | **Java Software Development**                                      |
 | Academic Year | **2026–2027**                                                      |
-| Instructor    | *Faculty of Computer Science & Engineering*                        |
+| Instructor    | **Ngô Văn Quyền**                                                  |
 | Topic         | **Topic 3 – Java Client/Server Application**                       |
 
 ### Team Members
 
 | Student ID | Name | Main Responsibility |
 | ---------- | ---- | ------------------- |
-| *(Student ID 1)* | **Nguyễn Văn Việt** | **Architecture, Authentication, User Management, Database Foundation, Admin UI** |
-| *(Student ID 2)* | **Trần Đình Võ** | **Question Bank Management, File Parsing/Import, Teacher Question UI** |
-| *(Student ID 3)* | **Lê Văn Bắc** | **Quiz & Exam Management, Class & Member Management, Assignment UI** |
-| *(Student ID 4)* | **Hoàng Văn Đôn** | **Student Exam Engine, Realtime Timer, Auto-Grading, Student UI** |
-| *(Student ID 5)* | **Phạm Hải Nam** | **Anti-Cheat Engine, Process Blacklist Scanner, Live Teacher Monitoring Dashboard** |
+| **2301040043** | **Kiều Huy Đôn** | **Student Exam Engine, Realtime Timer, Auto-Grading, Student UI** |
+| **2301040196** | **Nguyễn Trọng Bảo Việt** | **Architecture, Authentication, User Management, Database Foundation, Admin UI** |
+| **2301040129** | **Đặng Phương Nam** | **Anti-Cheat Engine, Process Blacklist Scanner, Live Teacher Monitoring Dashboard** |
+| **2301040017** | **Đào Xuân Bắc** | **Quiz & Exam Management, Class & Member Management, Assignment UI** |
+| **2301040201** | **Nguyễn Trịnh Võ** | **Question Bank Management, File Parsing/Import, Teacher Question UI** |
 
 ---
 
@@ -344,6 +344,8 @@ The project follows a layered Client-Server architecture over standard TCP socke
 ```text
 project/
 ├── .mvn/                                # Maven wrapper executable files
+├── run-server.bat                       # Fast-start script for QuizServer (auto-build & launch)
+├── run-client.bat                       # Fast-start script for JavaFX Client (auto-build & launch)
 ├── database/                            # Database DDL, migrations, and seed scripts
 │   ├── migrations/                      # Schema migration scripts
 │   │   ├── 001_exam_monitoring.sql      # Live monitoring & penalty tables
@@ -464,7 +466,7 @@ psql -U quiz_test -d quizdb_test -f database/schema.sql
 Verify or edit `quiz-server/src/main/resources/server.properties`:
 
 ```properties
-server.port=5000
+server.port=5555
 server.worker.pool.size=16
 db.url=jdbc:postgresql://localhost:5432/quizdb
 db.user=quiz
@@ -488,32 +490,74 @@ Compile and package all modules using the Maven wrapper:
 
 # 10. Run
 
-## Run Server
+The project provides two methods to run: **Fast Execution via Windows Batch Scripts (Recommended)** and **Manual Execution via Maven Wrapper**.
 
-Start the quiz server daemon:
+---
 
+### Method 1: Fast Execution via Windows Batch Scripts (Recommended)
+
+Two convenient batch scripts (`run-server.bat` and `run-client.bat`) are located in the project root. They completely automate dependency compilation, configuration checks, and application startup with a single click.
+
+#### 1. Start the Server (`run-server.bat`)
+- **Action**: Double-click `run-server.bat` in File Explorer, or run in terminal:
+  ```cmd
+  .\run-server.bat
+  ```
+- **Automated Workflow**:
+  1. Changes the working directory to the project root.
+  2. Compiles `quiz-server` and dependent modules (`quiz-common`) using `.\mvnw.cmd install -Dmaven.test.skip=true -pl quiz-server -am`.
+  3. Boots `QuizServer` listening on port `5555` via `.\mvnw.cmd exec:java -pl quiz-server`.
+  4. **Diagnostic Error Handling**: If startup fails (e.g. PostgreSQL is offline, database credentials in `server.properties` are incorrect, or port 5555 is occupied), the script prints clear Vietnamese diagnostic instructions and pauses to preserve the error message.
+
+*Expected Server Console Output:*
+```text
+=============================================
+  Online Quiz - Khoi dong Server (Port 5555)
+=============================================
+Dang bien dich quiz-server...
+...
+Dang khoi dong Server...
+[main] INFO  quiz.server.network.QuizServer - Quiz server listening on port 5555
+```
+
+#### 2. Start the Client (`run-client.bat`)
+- **Action**: Double-click `run-client.bat` in File Explorer, or run in terminal:
+  ```cmd
+  .\run-client.bat
+  ```
+- **Automated Workflow**:
+  1. Compiles `quiz-client` and shared dependencies.
+  2. Launches the JavaFX desktop application via `.\mvnw.cmd javafx:run -pl quiz-client`.
+  3. If connection fails, prompts the user to ensure the server is already active on port 5555.
+- **Multi-Client Testing**: To simulate multiple concurrent students or teachers, simply double-click `run-client.bat` multiple times. Each instance opens an independent desktop window communicating with the central server.
+
+---
+
+### Method 2: Manual Execution via Maven Wrapper / Java CLI
+
+If developing on Linux/macOS or customizing JVM flags, use standard Maven Wrapper commands:
+
+#### 1. Start Server
 ```bash
 # On Windows
 .\mvnw.cmd exec:java -pl quiz-server
 
-# Or run directly from JAR
+# On Linux/macOS
+./mvnw exec:java -pl quiz-server
+
+# Or run from compiled JAR
 java -jar quiz-server/target/quiz-server-1.0.0-SNAPSHOT.jar
 ```
 
-*Console output confirms when the server is ready:*
-```text
-[main] INFO  quiz.server.network.QuizServer - QuizServer started on port 5000
-```
-
-## Run Client
-
-Launch the JavaFX desktop application (open a new terminal):
-
+#### 2. Start Client (in a separate terminal)
 ```bash
 # On Windows
 .\mvnw.cmd javafx:run -pl quiz-client
 
-# Or run directly from JAR
+# On Linux/macOS
+./mvnw javafx:run -pl quiz-client
+
+# Or run from compiled JAR
 java -jar quiz-client/target/quiz-client-1.0.0-SNAPSHOT.jar
 ```
 
@@ -718,7 +762,7 @@ During the development lifecycle, several critical code review and refactoring i
 Final academic project report document location:
 
 ```text
-Report/Group01_OnlineQuiz_Report.docx
+Report/Group13_OnlineQuiz_Report.docx
 ```
 
 *The report complies with all academic honesty standards and has been verified with Compilatio prior to submission.*
