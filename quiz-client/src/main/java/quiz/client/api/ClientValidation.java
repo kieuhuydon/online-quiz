@@ -45,8 +45,9 @@ public final class ClientValidation {
         String c = text(input.content(), 1000);
         validateUnderscore(c, type);
         boolean textAnswer = type == quiz.common.enums.QuestionType.FILL_BLANK || type == quiz.common.enums.QuestionType.SHORT_ANSWER;
-        String answerKey = textAnswer ? text(input.answerKey() == null ? input.optionA() : input.answerKey(), 2000) : "";
-        if (type == quiz.common.enums.QuestionType.FILL_BLANK) validateSingleWordAnswer(answerKey);
+        String answerKey = textAnswer
+            ? text(input.answerKey() == null || input.answerKey().isBlank() ? input.optionA() : input.answerKey(), 2000)
+            : "";
         String a = textAnswer ? "" : text(input.optionA(), 255);
         String b = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE || type == quiz.common.enums.QuestionType.TRUE_FALSE ? text(input.optionB(), 255) : "";
         String cOpt = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? text(input.optionC(), 255) : "";
@@ -64,8 +65,9 @@ public final class ClientValidation {
         String c = text(input.content(), 1000);
         validateUnderscore(c, type);
         boolean textAnswer = type == quiz.common.enums.QuestionType.FILL_BLANK || type == quiz.common.enums.QuestionType.SHORT_ANSWER;
-        String answerKey = textAnswer ? text(input.answerKey() == null ? input.optionA() : input.answerKey(), 2000) : "";
-        if (type == quiz.common.enums.QuestionType.FILL_BLANK) validateSingleWordAnswer(answerKey);
+        String answerKey = textAnswer
+            ? text(input.answerKey() == null || input.answerKey().isBlank() ? input.optionA() : input.answerKey(), 2000)
+            : "";
         String a = textAnswer ? "" : text(input.optionA(), 255);
         String b = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE || type == quiz.common.enums.QuestionType.TRUE_FALSE ? text(input.optionB(), 255) : "";
         String cOpt = type == quiz.common.enums.QuestionType.MULTIPLE_CHOICE ? text(input.optionC(), 255) : "";
@@ -158,22 +160,13 @@ public final class ClientValidation {
     }
 
     public static void validateUnderscore(String content, quiz.common.enums.QuestionType type) {
-        if (content == null) return;
+        if (content == null || type != quiz.common.enums.QuestionType.FILL_BLANK) return;
         boolean hasInvalidUnderscore = java.util.regex.Pattern.compile("(?<!_)_(?!_)|(?<!_)__(?!_)|_{4,}").matcher(content).find();
         if (hasInvalidUnderscore) {
             throw invalid();
         }
-        if (type == quiz.common.enums.QuestionType.FILL_BLANK) {
-            if (content.split("___", -1).length - 1 != 1) {
-                throw invalid();
-            }
-        }
-    }
-
-    private static void validateSingleWordAnswer(String answerKey) {
-        for (String acceptedAnswer : answerKey.split("\\|", -1)) {
-            String word = acceptedAnswer.strip();
-            if (word.isBlank() || word.chars().anyMatch(Character::isWhitespace)) throw invalid();
+        if (content.split("___", -1).length - 1 != 1) {
+            throw invalid();
         }
     }
 

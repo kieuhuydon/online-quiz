@@ -581,7 +581,7 @@ public final class ExamController extends ScreenController {
             List<TextField> fields = new ArrayList<>();
             for (int k = 0; k < count; k++) {
                 TextField field = new TextField(k < values.length ? values[k].strip() : "");
-                field.setPromptText(q.questionType() == QuestionType.FILL_BLANK ? "Nhập một từ" : "Nhập câu trả lời ngắn");
+                field.setPromptText(q.questionType() == QuestionType.FILL_BLANK ? "Nhập đáp án cần điền" : "Nhập câu trả lời ngắn");
                 field.setStyle("-fx-font-size: 13.5px; -fx-padding: 7 10;");
                 fields.add(field);
                 answerBox.getChildren().add(field);

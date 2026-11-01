@@ -151,7 +151,7 @@ public final class QuestionController extends ScreenController {
         if (questionType != null) {
             questionType.getItems().setAll(
                 "Trac nghiem (4 lua chon)", "Dung / Sai",
-                "Dien vao cho trong (1 o)", "Dien vao cho trong (2 o)", "Tra loi ngan"
+                "Dien vao cho trong", "Tra loi ngan"
             );
             questionType.setValue("Trac nghiem (4 lua chon)");
             questionType.valueProperty().addListener((obs, o, n) -> onQuestionTypeChanged(n));
@@ -1215,7 +1215,7 @@ public final class QuestionController extends ScreenController {
             String hint = isTrueFalse
                 ? "💡 Dạng Đúng / Sai: Chọn đáp án đúng bên dưới."
                 : isFillBlank
-                ? "💡 Dạng Điền vào chỗ trống: Sử dụng đúng 3 ký tự '_' (___) cho mỗi chỗ trống trong câu hỏi. Nhập các từ cần điền tương ứng (ngăn cách bằng dấu '|' nếu có nhiều chỗ trống)."
+                ? "💡 Dạng Điền vào chỗ trống: Sử dụng đúng 3 ký tự '_' (___) tại một vị trí trong câu hỏi. Đáp án có thể gồm nhiều từ."
                 : isShortAnswer
                 ? "💡 Dạng Trả lời ngắn: Nhập nội dung câu hỏi và nhập câu trả lời mẫu / chuẩn xác vào ô bên dưới."
                 : "💡 Dạng Trắc nghiệm (4 lựa chọn): Điền đầy đủ 4 phương án A, B, C, D và chọn phương án đúng.";
@@ -1265,7 +1265,7 @@ public final class QuestionController extends ScreenController {
                     hideTrueFalseSelector();
         } else if (isFillBlank) {
             hideTrueFalseSelector();
-            // Điền vào chỗ trống: Chỉ hiện 1 ô nhập từ cần điền (dùng dấu | nếu có nhiều ô trống)
+            // Điền vào chỗ trống: Chỉ hiện một ô nhập đáp án cho một vị trí trống.
             questionOptionA.setEditable(true);
             if ("Đúng".equals(questionOptionA.getText()) || "Dung".equals(questionOptionA.getText())) {
                 questionOptionA.clear();
@@ -1322,7 +1322,7 @@ public final class QuestionController extends ScreenController {
         if (labelOptionA != null) {
             labelOptionA.setText(
                 isTrueFalse ? "Phương án A (Đúng) *" :
-                isFillBlank ? "Từ cần điền chính xác (ngăn cách bằng '|' nếu nhiều chỗ trống) *" :
+                isFillBlank ? "Đáp án cần điền *" :
                 isShortAnswer ? "Câu trả lời đúng / mẫu *" :
                 "Đáp án A *"
             );
@@ -1330,7 +1330,7 @@ public final class QuestionController extends ScreenController {
         if (questionOptionA != null) {
             questionOptionA.setPromptText(
                 isTrueFalse ? "Đúng" :
-                isFillBlank ? "Ví dụ: went hoặc was | were..." :
+                isFillBlank ? "Nhập đáp án, có thể gồm nhiều từ" :
                 isShortAnswer ? "Nhập câu trả lời ngắn chuẩn xác..." :
                 "Nội dung đáp án A"
             );

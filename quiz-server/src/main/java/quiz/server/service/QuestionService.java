@@ -172,7 +172,6 @@ public final class QuestionService {
         String explanation = dto.explanation();
         String answerKey = questionType == QuestionType.FILL_BLANK || questionType == QuestionType.SHORT_ANSWER
             ? ServiceValidation.requiredText(dto.answerKey() == null || dto.answerKey().isBlank() ? optionA : dto.answerKey(), "Answer key", 2000) : "";
-        if (questionType == QuestionType.FILL_BLANK) validateSingleWordAnswer(answerKey);
         if (questionType == QuestionType.MULTIPLE_CHOICE) {
             optionA = ServiceValidation.requiredText(optionA, "Option A", 255); optionB = ServiceValidation.requiredText(optionB, "Option B", 255);
             optionC = ServiceValidation.requiredText(optionC, "Option C", 255); optionD = ServiceValidation.requiredText(optionD, "Option D", 255);
@@ -204,7 +203,6 @@ public final class QuestionService {
         String explanation = dto.explanation();
         String answerKey = questionType == QuestionType.FILL_BLANK || questionType == QuestionType.SHORT_ANSWER
             ? ServiceValidation.requiredText(dto.answerKey() == null || dto.answerKey().isBlank() ? optionA : dto.answerKey(), "Answer key", 2000) : "";
-        if (questionType == QuestionType.FILL_BLANK) validateSingleWordAnswer(answerKey);
         if (questionType == QuestionType.MULTIPLE_CHOICE) {
             optionA = ServiceValidation.requiredText(optionA, "Option A", 255); optionB = ServiceValidation.requiredText(optionB, "Option B", 255);
             optionC = ServiceValidation.requiredText(optionC, "Option C", 255); optionD = ServiceValidation.requiredText(optionD, "Option D", 255);
@@ -217,24 +215,13 @@ public final class QuestionService {
     }
 
     private static void validateUnderscore(String content, QuestionType type) {
-        if (content == null) return;
+        if (content == null || type != QuestionType.FILL_BLANK) return;
         boolean hasInvalidUnderscore = java.util.regex.Pattern.compile("(?<!_)_(?!_)|(?<!_)__(?!_)|_{4,}").matcher(content).find();
         if (hasInvalidUnderscore) {
             throw new ValidationException("Chỉ chấp nhận đúng 3 ký tự '_' liên tiếp (___) để biểu thị vị trí điền khuyết");
         }
-        if (type == QuestionType.FILL_BLANK) {
-            if (content.split("___", -1).length - 1 != 1) {
-                throw new ValidationException("Câu hỏi điền khuyết phải có đúng một vị trí '___'");
-            }
-        }
-    }
-
-    private static void validateSingleWordAnswer(String answerKey) {
-        for (String acceptedAnswer : answerKey.split("\\|", -1)) {
-            String word = acceptedAnswer.strip();
-            if (word.isBlank() || word.chars().anyMatch(Character::isWhitespace)) {
-                throw new ValidationException("Đáp án điền khuyết phải là một từ; dùng dấu | để khai báo biến thể một từ khác");
-            }
+        if (content.split("___", -1).length - 1 != 1) {
+            throw new ValidationException("Câu hỏi điền khuyết phải có đúng một vị trí '___'");
         }
     }
 

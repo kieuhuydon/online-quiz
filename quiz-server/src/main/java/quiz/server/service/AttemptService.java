@@ -73,9 +73,6 @@ public final class AttemptService {
                 .orElseThrow(()->new ValidationException("Câu hỏi không thuộc bài kiểm tra"));
             if(answer!=null && question.questionType()==QuestionType.MULTIPLE_CHOICE && !answer.strip().matches("[A-Da-d]"))
                 throw new ValidationException("Đáp án trắc nghiệm không hợp lệ");
-            if(answer!=null && question.questionType()==QuestionType.FILL_BLANK
-                && answer.strip().chars().anyMatch(Character::isWhitespace))
-                throw new ValidationException("Đáp án điền khuyết chỉ được gồm một từ");
             attempts.saveAnswer(c,new AnswerRecord(attemptId,questionId,answer == null ? null : answer.strip(),clock.instant())); return null;
         });
     }
