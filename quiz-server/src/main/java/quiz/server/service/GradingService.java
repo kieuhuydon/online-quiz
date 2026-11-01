@@ -4,6 +4,7 @@ import quiz.common.enums.SubmitReason;
 import quiz.server.domain.*;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /** Grades exclusively on the server, storing score on schema's 0–10 scale. */
@@ -25,6 +26,13 @@ public final class GradingService {
     public boolean matchesAnswer(Question q, String selected) {
         String expected = q.answerKey().isBlank() ? String.valueOf(q.correctOption()) : q.answerKey();
         String normalized = selected.strip().replaceAll("\\s+", " ");
+        if (q.questionType() == quiz.common.enums.QuestionType.TRUE_FALSE) {
+            normalized = switch (normalized.toUpperCase(Locale.ROOT)) {
+                case "TRUE" -> "A";
+                case "FALSE" -> "B";
+                default -> normalized;
+            };
+        }
         if (q.questionType() == quiz.common.enums.QuestionType.FILL_BLANK) {
             String[] expectedWords = expected.split("\\s*\\|\\s*", -1);
             String[] answerWords = normalized.split("\\s*\\|\\s*", -1);

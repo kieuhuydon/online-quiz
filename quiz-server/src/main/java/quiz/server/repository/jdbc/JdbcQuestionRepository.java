@@ -50,41 +50,41 @@ public final class JdbcQuestionRepository implements QuestionRepository {
 
         if (hasQuestionTypeColumn) {
             findIdSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at "
+                + "topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at "
                 + "FROM questions WHERE id = ?";
             findAllSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at "
+                + "topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at "
                 + "FROM questions ORDER BY id ASC";
             findActiveSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at "
+                + "topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at "
                 + "FROM questions WHERE active = TRUE ORDER BY id ASC";
             findByFilterSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at "
+                + "topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at "
                 + "FROM questions WHERE active = TRUE "
                 + "AND (? IS NULL OR topic = ?) AND (? IS NULL OR difficulty = ?) ORDER BY id ASC";
             insertSql = hasExplanationColumn
-                ? "INSERT INTO questions (content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, explanation, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, explanation, active, created_by, created_at, updated_at"
-                : "INSERT INTO questions (content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, active, created_by, created_at, updated_at";
+                ? "INSERT INTO questions (content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, explanation, answer_key, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, explanation, answer_key, active, created_by, created_at, updated_at"
+                : "INSERT INTO questions (content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, answer_key, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, answer_key, active, created_by, created_at, updated_at";
             updateSql = hasExplanationColumn
-                ? "UPDATE questions SET content = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?, correct_option = ?, topic = ?, difficulty = ?, question_type = ?, explanation = ?, updated_at = now() WHERE id = ? AND active = TRUE RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, explanation, active, created_by, created_at, updated_at"
-                : "UPDATE questions SET content = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?, correct_option = ?, topic = ?, difficulty = ?, question_type = ?, updated_at = now() WHERE id = ? AND active = TRUE RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, active, created_by, created_at, updated_at";
+                ? "UPDATE questions SET content = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?, correct_option = ?, topic = ?, difficulty = ?, question_type = ?, explanation = ?, answer_key = ?, updated_at = now() WHERE id = ? AND active = TRUE RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, explanation, answer_key, active, created_by, created_at, updated_at"
+                : "UPDATE questions SET content = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?, correct_option = ?, topic = ?, difficulty = ?, question_type = ?, answer_key = ?, updated_at = now() WHERE id = ? AND active = TRUE RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type, answer_key, active, created_by, created_at, updated_at";
             findByQuizIdSql = "SELECT q.id, q.content, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option, "
-                + "q.topic, q.difficulty, q.question_type" + (hasExplanationColumn ? ", q.explanation" : "") + ", q.active, q.created_by, q.created_at, q.updated_at "
+                + "q.topic, q.difficulty, q.question_type" + (hasExplanationColumn ? ", q.explanation" : "") + ", q.answer_key, q.active, q.created_by, q.created_at, q.updated_at "
                 + "FROM quiz_questions qq "
                 + "JOIN questions q ON qq.question_id = q.id "
                 + "WHERE qq.quiz_id = ? ORDER BY qq.position ASC";
         } else {
             findIdSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at "
+                + "topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at "
                 + "FROM questions WHERE id = ?";
             findAllSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at "
+                + "topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at "
                 + "FROM questions ORDER BY id ASC";
             findActiveSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at "
+                + "topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at "
                 + "FROM questions WHERE active = TRUE ORDER BY id ASC";
             findByFilterSql = "SELECT id, content, option_a, option_b, option_c, option_d, correct_option, "
-                + "topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at "
+                + "topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at "
                 + "FROM questions WHERE active = TRUE "
                 + "AND (? IS NULL OR topic = ?) AND (? IS NULL OR difficulty = ?) ORDER BY id ASC";
             insertSql = "INSERT INTO questions (content, option_a, option_b, option_c, option_d, "
@@ -98,7 +98,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
                 + "RETURNING id, content, option_a, option_b, option_c, option_d, correct_option, "
                 + "topic, difficulty, active, created_by, created_at, updated_at";
             findByQuizIdSql = "SELECT q.id, q.content, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option, "
-                + "q.topic, q.difficulty" + (hasExplanationColumn ? ", q.explanation" : "") + ", q.active, q.created_by, q.created_at, q.updated_at "
+                + "q.topic, q.difficulty" + (hasExplanationColumn ? ", q.explanation" : "") + ", q.answer_key, q.active, q.created_by, q.created_at, q.updated_at "
                 + "FROM quiz_questions qq "
                 + "JOIN questions q ON qq.question_id = q.id "
                 + "WHERE qq.quiz_id = ? ORDER BY qq.position ASC";
@@ -108,10 +108,12 @@ public final class JdbcQuestionRepository implements QuestionRepository {
     public void ensureSchema() {
         String addColumn = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS question_type VARCHAR(20) NOT NULL DEFAULT 'MULTIPLE_CHOICE'";
         String addExplanation = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS explanation TEXT";
+        String addAnswerKey = "ALTER TABLE questions ADD COLUMN IF NOT EXISTS answer_key TEXT";
         try (Connection c = dataSource.getConnection();
              java.sql.Statement s = c.createStatement()) {
             s.execute(addColumn);
             s.execute(addExplanation);
+            s.execute(addAnswerKey);
         } catch (SQLException ignored) {
             // Có thể xảy ra nếu user kết nối không phải superuser/owner; repository sẽ tự động dùng fallback mode.
         }
@@ -204,8 +206,8 @@ public final class JdbcQuestionRepository implements QuestionRepository {
         return withConnection(connection -> {
             String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
             String colPart = hasQuestionTypeColumn
-                ? "id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at "
-                : "id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", active, created_by, created_at, updated_at ";
+                ? "id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty, question_type" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at "
+                : "id, content, option_a, option_b, option_c, option_d, correct_option, topic, difficulty" + (hasExplanationColumn ? ", explanation" : "") + ", answer_key, active, created_by, created_at, updated_at ";
             String sql = "SELECT " + colPart + "FROM questions WHERE id IN (" + placeholders + ") ORDER BY id ASC";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 for (int i = 0; i < ids.size(); i++) {
@@ -336,6 +338,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             if (hasExplanationColumn) {
                 statement.setString(idx++, question.explanation());
             }
+            statement.setString(idx++, question.answerKey());
             statement.setLong(idx++, question.createdBy());
             try (ResultSet rows = statement.executeQuery()) {
                 if (!rows.next()) {
@@ -365,6 +368,7 @@ public final class JdbcQuestionRepository implements QuestionRepository {
             if (hasExplanationColumn) {
                 statement.setString(idx++, question.explanation());
             }
+            statement.setString(idx++, question.answerKey());
             statement.setLong(idx++, question.id());
             try (ResultSet rows = statement.executeQuery()) {
                 return rows.next();

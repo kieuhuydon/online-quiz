@@ -47,7 +47,7 @@ public final class QuestionService {
         Question input = Question.createNew(validated.content(), validated.optionA(),
             validated.optionB(), validated.optionC(), validated.optionD(),
             validated.correctOption(), validated.topic(), validated.difficulty(),
-            validated.questionType(), validated.explanation(), actorId);
+            validated.questionType(), actorId, validated.answerKey(), validated.explanation());
         return transactions.executeInTransaction(connection -> {
             requireTeacherOrAdmin(connection, actorId);
             return questions.save(connection, input);
@@ -87,8 +87,8 @@ public final class QuestionService {
             Question updated = new Question(existing.id(), validated.content(), validated.optionA(),
                 validated.optionB(), validated.optionC(), validated.optionD(),
                 validated.correctOption(), validated.topic(), validated.difficulty(),
-                validated.questionType(), validated.explanation(),
-                existing.active(), existing.createdBy(), existing.createdAt(), existing.updatedAt());
+                validated.questionType(), existing.active(), existing.createdBy(),
+                existing.createdAt(), existing.updatedAt(), validated.answerKey(), validated.explanation());
             boolean ok = questions.update(connection, updated);
             if (!ok) {
                 throw new NotFoundException("Question not found");
@@ -169,8 +169,9 @@ public final class QuestionService {
         }
         QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
         String explanation = dto.explanation();
+        String answerKey = resolveAnswerKey(dto.optionA(), dto.answerKey(), correctOption, questionType);
         return new CreateQuestionDto(content, optionA, optionB, optionC, optionD,
-            correctOption, topic, dto.difficulty(), questionType, explanation);
+            correctOption, topic, dto.difficulty(), questionType, explanation, answerKey);
     }
 
     private UpdateQuestionDto validateUpdate(UpdateQuestionDto dto) {
@@ -190,8 +191,9 @@ public final class QuestionService {
         }
         QuestionType questionType = dto.questionType() != null ? dto.questionType() : QuestionType.MULTIPLE_CHOICE;
         String explanation = dto.explanation();
+        String answerKey = resolveAnswerKey(dto.optionA(), dto.answerKey(), correctOption, questionType);
         return new UpdateQuestionDto(dto.id(), content, optionA, optionB, optionC, optionD,
-            correctOption, topic, dto.difficulty(), questionType, explanation);
+            correctOption, topic, dto.difficulty(), questionType, explanation, answerKey);
     }
 
     private static void validateUnderscore(String content, QuestionType type) {
@@ -205,6 +207,24 @@ public final class QuestionService {
                 throw new ValidationException("Câu hỏi điền vào chỗ trống phải chứa ít nhất một ký hiệu '___'");
             }
         }
+    }
+
+    /**
+     * Resolves the stored answer key. Fill-in-the-blank / short-answer questions are graded
+     * against option A (the expected answer text); true/false and multiple choice are graded
+     * against the correct option letter (A/B/C/D). An explicitly supplied answerKey always wins.
+     */
+    private static String resolveAnswerKey(String optionA, String answerKey, char correctOption,
+                                           QuestionType type) {
+        String key = answerKey == null ? "" : answerKey.strip();
+        if (!key.isBlank()) {
+            return key;
+        }
+        if (type == QuestionType.FILL_BLANK || type == QuestionType.SHORT_ANSWER) {
+            return optionA == null ? "" : optionA.strip();
+        }
+        char c = Character.toUpperCase(correctOption);
+        return (c >= 'A' && c <= 'D') ? String.valueOf(c) : "A";
     }
 
     private static char normalizeCorrectOption(char correctOption) {
