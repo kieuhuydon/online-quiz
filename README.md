@@ -608,6 +608,11 @@ Dang khoi dong Server...
 ```
 
 #### 2. Start the Client (`run-client.bat`)
+- **Before the first run**: Clone the example client configuration and edit it for your server. From the project root, run:
+  ```cmd
+  copy quiz-client\src\main\resources\client.properties.example quiz-client\src\main\resources\client.properties
+  ```
+  Open `quiz-client\src\main\resources\client.properties` and set `server.host` and `server.port` as needed (the defaults are `localhost` and `5555`). This file is ignored by Git, so each person cloning the project must create their own copy.
 - **Action**: Double-click `run-client.bat` in File Explorer, or run in terminal:
   ```cmd
   .\run-client.bat
