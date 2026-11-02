@@ -21,6 +21,4 @@ quiz-server/src/main/resources/server.properties
 !*.example
 !*.template
 
-docs/*
-!docs/WORK_PLAN.md
-!docs/TEACHER_MONITORING.md
+

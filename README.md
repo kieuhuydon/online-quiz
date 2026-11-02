@@ -444,20 +444,66 @@ cd project
 
 ### Step 2: Initialize Database & Seed Data
 
-Choose one of the two methods below:
+Choose one of the two methods below to initialize the database:
 
-#### Method A: 1-Click Automated Setup (Recommended on Windows)
-Simply double-click **`setup-db.bat`** in the project root, or execute in terminal:
-```cmd
-.\setup-db.bat
-```
-*Automated Workflow*:
-1. Automatically searches and detects `psql.exe` in `PATH` or standard PostgreSQL installation folders (`C:\Program Files\PostgreSQL\*\bin\psql.exe`).
-2. Reads connection parameters from `server-local.properties` or `server.properties.example`.
-3. Checks and automatically provisions the `quizdb` database if not present.
-4. Executes `database/schema.sql` (creating all 11 tables, constraints, and indexes).
-5. Populates complete seed data from `database/seed.sql` with `SET quiz.allow_demo_seed = 'on'`.
-6. Prints formatted demo account credentials and next startup steps.
+#### Method A: 1-Click Automated Setup via `setup-db.bat` (Recommended on Windows)
+
+The project includes an intelligent, zero-configuration batch script **`setup-db.bat`** (backed by `database/setup-db.ps1`) located directly at the project root. It completely automates PostgreSQL detection, database creation, schema migration, and demo seed data population with a single click.
+
+* **How to run**:
+  - **Option 1**: Double-click **`setup-db.bat`** in Windows File Explorer.
+  - **Option 2**: Run via Command Prompt or PowerShell:
+    ```cmd
+    .\setup-db.bat
+    ```
+
+* **Automated 5-Stage Workflow**:
+  1. **PostgreSQL CLI Auto-Discovery**: Automatically searches for `psql.exe` in the system `PATH` as well as Windows installation directories (`C:\Program Files\PostgreSQL\*\bin\psql.exe` for PostgreSQL 14, 15, 16, 17, 18).
+  2. **Intelligent Configuration Parsing**: Reads host, port, username, password, and database name from `server-local.properties`, `server.properties`, or auto-initializes from `server.properties.example` with fallback to `DB_*` environment variables.
+  3. **Database Health Check & Auto-Creation**: Connects to the local PostgreSQL instance on port `5432`; if the target database `quizdb` does not exist, it runs `CREATE DATABASE quizdb` automatically.
+  4. **Schema Initialization**: Executes `database/schema.sql` within an ACID transaction to create all 11 core tables, foreign keys, unique constraints, and optimized indexes.
+  5. **Demo Seed Data Population**: Executes `database/seed.sql` with `SET quiz.allow_demo_seed = 'on'`, populating Administrator, Teachers, 50 Students, demo classes (`ENG-B1-01`, `ENG-B2-01`, `TOEIC-650`), active questions, and assigned quizzes.
+
+* **Expected Output**:
+  ```text
+  =======================================================================
+     ONLINE QUIZ - TU DONG THIET LAP CO SO DU LIEU VA DU LIEU MAU
+  =======================================================================
+
+  [1/5] Tim thay PostgreSQL CLI tai: C:\Program Files\PostgreSQL\18\bin\psql.exe
+  [2/5] Su dung cau hinh tai: D:\...\server-local.properties
+  [3/5] Kiem tra co so du lieu 'quizdb' tren localhost:5432...
+    -> Database 'quizdb' da san sang.
+  [4/5] Khoi tao cau truc bang (Schema) cho 'quizdb'...
+    -> Da tao day du 11 bang, rang buoc va chi muc (Indexes) thanh cong.
+  [5/5] Nap du lieu mau (Accounts, Classes, Questions, Quizzes)...
+    -> Da nap toan bo du lieu mau thanh cong.
+
+  =======================================================================
+               THIET LAP DATABASE HOAN TAT XUAT SAC!                    
+  =======================================================================
+  Database: quizdb (localhost:5432)
+  User:     quiz
+
+  CAC TAI KHOAN SAN SANG SU DUNG (Mat khau chung: password123):
+    - Quan tri vien (Admin):    admin
+    - Giao vien (Teacher):      teacher1, teacher2
+    - Hoc vien (Student):       student01, student02, ... student50
+
+  CAC BUOC TIEP THEO DE CHAY DU AN:
+    1. Chay file 'run-server.bat' de khoi dong Backend Server.
+    2. Chay file 'run-client.bat' de mo ung dung Client tren man hinh.
+  =======================================================================
+  ```
+
+* **Optional Parameters**:
+  ```cmd
+  # Custom properties file
+  .\setup-db.bat -Config "custom-server.properties"
+
+  # Custom psql executable path
+  .\setup-db.bat -PsqlPath "C:\Program Files\PostgreSQL\18\bin\psql.exe"
+  ```
 
 #### Method B: Manual Configuration via PostgreSQL CLI
 For Linux/macOS or manual administration:
@@ -489,7 +535,7 @@ psql -U quiz -d quizdb -c "SET quiz.allow_demo_seed = 'on'" -f database/seed.sql
 psql -U quiz_test -d quizdb_test -f database/schema.sql
 ```
 
-### Step 4: Configure Database Connection
+### Step 3: Configure Database Connection
 
 Verify or edit `quiz-server/src/main/resources/server.properties`:
 
@@ -526,12 +572,18 @@ The project provides two methods to run: **Fast Execution via Windows Batch Scri
 
 Three convenient batch scripts (`setup-db.bat`, `run-server.bat`, and `run-client.bat`) are located in the project root. They completely automate database setup, dependency compilation, configuration checks, and application startup with single clicks.
 
-#### 0. Setup Database (`setup-db.bat` - First time or when resetting)
+#### 0. Setup Database (`setup-db.bat` - Required on first launch or when resetting data)
 - **Action**: Double-click `setup-db.bat` in File Explorer, or run in terminal:
   ```cmd
   .\setup-db.bat
   ```
-- **Automated Workflow**: Probes PostgreSQL installation, creates database `quizdb`, applies all 11 tables, and loads all demo accounts.
+- **Automated Workflow**:
+  1. Auto-detects local `psql.exe` on Windows.
+  2. Reads database credentials and tests connectivity on `localhost:5432`.
+  3. Creates `quizdb` database if missing.
+  4. Rebuilds all 11 schema tables, foreign keys, and indexes from `database/schema.sql`.
+  5. Seeds demo users (`admin`, `teacher1`, `student01`..`student50`), classes, questions, and quizzes from `database/seed.sql`.
+  6. Prints ready-to-login accounts with password `password123`.
 
 #### 1. Start the Server (`run-server.bat`)
 - **Action**: Double-click `run-server.bat` in File Explorer, or run in terminal:
