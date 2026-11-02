@@ -283,4 +283,50 @@ class QuestionFileParserTest {
         assertEquals(expected, QuestionFileParser.normalizeBlanks(input));
     }
 
+    @Test
+    void parseCsvWithNonMultipleChoiceTypes() throws Exception {
+        String csv = """
+            Type,Content,OptionA,OptionB,OptionC,OptionD,Correct,Topic,Difficulty,Explanation
+            FillInBlank,My brother usually _____ (watch) TV after dinner.,,,,,watches,Present Simple,Easy,Usually indicates Present Simple.
+            ShortAnswer,What do you usually do at the weekend? Write one or two sentences.,,,,,I usually read books.,Present Simple,Medium,Sample answer.
+            TrueFalse,She has lived in London for five years is in the Present Perfect tense.,,,,,True,Present Perfect,Medium,Has + V3 is Present Perfect.
+            """;
+        java.io.File temp = java.io.File.createTempFile("test_non_mcq", ".csv");
+        temp.deleteOnExit();
+        java.nio.file.Files.writeString(temp.toPath(), csv, java.nio.charset.StandardCharsets.UTF_8);
+
+        QuestionFileParser.ParseResult res = QuestionFileParser.parseWithResult(temp);
+        assertTrue(res.errors().isEmpty(), "Expected 0 errors, got: " + res.errors());
+        assertEquals(3, res.valid().size());
+
+        CreateQuestionDto q1 = res.valid().get(0);
+        assertEquals(quiz.common.enums.QuestionType.FILL_BLANK, q1.questionType());
+        assertEquals("watches", q1.answerKey());
+
+        CreateQuestionDto q2 = res.valid().get(1);
+        assertEquals(quiz.common.enums.QuestionType.SHORT_ANSWER, q2.questionType());
+        assertEquals("I usually read books.", q2.answerKey());
+
+        CreateQuestionDto q3 = res.valid().get(2);
+        assertEquals(quiz.common.enums.QuestionType.TRUE_FALSE, q3.questionType());
+        assertEquals('A', q3.correctOption());
+    }
+
+    @Test
+    void parseUserDownloadsCsvIfPresent() throws Exception {
+        java.io.File file = new java.io.File("c:\\Users\\Vo\\Downloads\\General_English_Practice_Questions.csv");
+        if (!file.exists()) {
+            return;
+        }
+        QuestionFileParser.ParseResult res = QuestionFileParser.parseWithResult(file);
+        if (!res.errors().isEmpty()) {
+            System.out.println("Remaining errors in user CSV:");
+            for (QuestionFileParser.ParseError err : res.errors()) {
+                System.out.println("Line " + err.lineNumber() + " [" + err.field() + "]: " + err.message());
+            }
+        }
+        assertEquals(0, res.errors().size(), "Expected 0 errors on user file, got " + res.errors().size());
+        assertEquals(40, res.valid().size(), "Expected 40 valid questions, got " + res.valid().size());
+    }
+
 }
