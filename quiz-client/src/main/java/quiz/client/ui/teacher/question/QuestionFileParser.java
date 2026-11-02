@@ -529,6 +529,7 @@ public final class QuestionFileParser {
         String d = hasHeader ? get.apply("optiond") : pos.apply(4);
 
         // Chuẩn hóa đáp án đúng; KHÔNG fallback về "A" nếu thiếu/sai.
+        // Chuẩn hóa đáp án đúng và các options theo từng loại câu hỏi
         char correct;
         if (correctRaw == null || correctRaw.isBlank()) {
             throw new CsvParseFail(lineNumber, "correct", "Thiếu đáp án đúng.");
@@ -536,19 +537,38 @@ public final class QuestionFileParser {
         String cu = correctRaw.trim().toUpperCase(Locale.ROOT);
         if (type == QuestionType.TRUE_FALSE) {
             switch (cu) {
-                case "TRUE", "A", "ĐÚNG" -> correct = 'A';
+                case "TRUE", "A", "DUNG", "ĐÚNG" -> correct = 'A';
                 case "FALSE", "B", "SAI" -> correct = 'B';
                 default -> throw new CsvParseFail(lineNumber, "correct", "Đáp án đúng phải là True/False/Đúng/Sai/A/B.");
             }
+            if (a == null || a.isBlank()) a = "Đúng";
+            if (b == null || b.isBlank()) b = "Sai";
+            c = "-";
+            d = "-";
+        } else if (type == QuestionType.FILL_BLANK || type == QuestionType.SHORT_ANSWER) {
+            // Đối với điền khuyết / trả lời ngắn:
+            // Cột Correct có thể chứa trực tiếp chuỗi đáp án (ví dụ "watches", "were", "Start.")
+            // hoặc chứa 'A' (khi đáp án nằm ở cột OptionA).
+            if (cu.equals("A") || cu.equals("B") || cu.equals("C") || cu.equals("D")) {
+                // Đáp án tham chiếu đến Option tương ứng
+                if (a == null || a.isBlank()) {
+                    throw new CsvParseFail(lineNumber, "options", "Thiếu đáp án mẫu cho câu hỏi.");
+                }
+            } else {
+                // Correct chứa trực tiếp nội dung đáp án (text answer)
+                // Lưu vào OptionA làm đáp án mẫu
+                a = correctRaw.trim();
+            }
+            correct = 'A';
+            b = "-";
+            c = "-";
+            d = "-";
         } else {
+            // MULTIPLE_CHOICE: Đáp án phải là A, B, C hoặc D và phải đủ 4 lựa chọn.
             if (cu.length() != 1 || cu.charAt(0) < 'A' || cu.charAt(0) > 'D') {
                 throw new CsvParseFail(lineNumber, "correct", "Đáp án đúng phải là A, B, C hoặc D.");
             }
             correct = cu.charAt(0);
-        }
-
-        // MULTIPLE_CHOICE bắt buộc đủ 4 đáp án.
-        if (type == QuestionType.MULTIPLE_CHOICE) {
             if (a == null || a.isBlank() || b == null || b.isBlank()
                 || c == null || c.isBlank() || d == null || d.isBlank()) {
                 throw new CsvParseFail(lineNumber, "options", "Trắc nghiệm phải đủ 4 đáp án A, B, C, D.");
