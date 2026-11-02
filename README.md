@@ -54,10 +54,14 @@ Building a secure, dedicated, desktop-grade Client/Server assessment system in J
 - **Client Tier**: JavaFX 21 desktop client running on Java 21, modular FXML layouts, responsive CSS styling, and asynchronous API calls.
 - **Server Tier**: Multi-client TCP Server with dedicated client readers, worker thread pool execution, session coordinator, and command dispatchers.
 - **Database**: PostgreSQL 15+ relational database, fully parameterized queries via JDBC, and transaction management.
+- **Question Engine**: Support for 3 distinct question types:
+  - `MULTIPLE_CHOICE`: Standard 4-choice questions (A, B, C, D).
+  - `TRUE_FALSE`: Binary True/False evaluation.
+  - `FILL_BLANK`: Fill-in-the-blank questions (denoted by `___`) supporting multi-word answers and multi-gap syntax separated by `|` (e.g. `answer 1 | answer 2`).
 - **Roles**:
   - *Admin*: User account management (create, lock/unlock, delete, batch operations), class creation, and student/teacher enrollment.
   - *Teacher*: Question bank management, quiz creation (manual/randomized), class assignment, live exam monitoring, and penalty enforcement.
-  - *Student*: Class view, assigned quiz listing, PIN-protected exam entry, timed multiple-choice exam interface with pagination, instant auto-grading, and review with explanations.
+  - *Student*: Class view, assigned quiz listing, PIN-protected exam entry, multi-type exam interface with pagination & smooth navigation, instant auto-grading, and review with explanations.
 - **Security & Anti-Cheat**: Filtered object serialization, BCrypt hashing, session token validation, clipboard interception, focus lost tracking, background process blacklist scanning.
 
 ### Out of Scope
@@ -83,16 +87,20 @@ Building a secure, dedicated, desktop-grade Client/Server assessment system in J
 - Teacher view: instructors view only classes they are assigned to, inspecting enrolled student rosters.
 
 ### 3. Question Bank Management (Teacher & Admin)
-- Multi-field question authoring: question prompt, 4 choices (A, B, C, D), correct choice indicator, topic/category, difficulty (`EASY`, `MEDIUM`, `HARD`), and detailed explanation.
-- Soft-delete capability (`active = false`) ensuring historical exams remain reproducible.
-- File-based batch importing supporting structured text formats.
-- Filtering by topic, difficulty, and search keywords.
+- **Multi-Type Question Authoring**: Supports 3 distinct formats:
+  - *Multiple Choice*: 4 options (A, B, C, D) with a designated correct choice.
+  - *True / False*: Intuitive binary confirmation.
+  - *Fill-in-the-Blank*: Questions utilizing `___` placeholders. Supports flexible multi-word phrases and multi-gap questions separated by `|` (e.g. `answer 1 | answer 2`).
+- **Inline Validation & Input Persistence**: Validation errors are presented directly on an inline warning banner at the top of the creation modal without auto-closing, preventing accidental loss of user input.
+- **Real-Time Active Synchronization**: Soft-deleting a question immediately excludes it from the question bank and from the quiz builder picker, while newly created questions appear instantly in the assignment pool.
+- **Smart File Import Wizard**: Batch import questions from DOCX, PDF, TXT, and CSV files, featuring a format syntax preview modal, line-by-line validation, and isolated import of valid entries.
+- **Filtering & Search**: Instant filtering by keyword, topic, and difficulty (`EASY`, `MEDIUM`, `HARD`).
 
 ### 4. Quiz Management & Assignment (Teacher & Admin)
 - Lifecycle management: `DRAFT` ➔ `OPEN` ➔ `CLOSED`.
-- Quiz construction:
-  - *Manual mode*: browse the question bank and curate custom question sets.
-  - *Automatic mode*: specify topic, difficulty quotas, and question quantity to randomly generate tests.
+- **Synchronized Question Curating**:
+  - *Manual mode*: Curate specific active questions directly from the question bank with live active-state filtering.
+  - *Automatic mode*: Define target question quantities and difficulty distributions (Easy/Medium/Hard) to randomly assemble quizzes.
 - Exam parameter configuration: duration in minutes, pass score threshold (percentage), anti-cheat violation tolerance (`max_violations`), and anti-cheat policies (`WARN_THEN_AUTO_SUBMIT` vs `LOG_ONLY`).
 - Secure PIN generation upon quiz opening.
 - Class assignment: assign quizzes to one or multiple classes.
@@ -101,8 +109,9 @@ Building a secure, dedicated, desktop-grade Client/Server assessment system in J
 - Browse assigned quizzes with real-time status indicators.
 - PIN gatekeeper: prompt for quiz PIN before starting an attempt.
 - Exact server-synchronized countdown timer with local ticking and auto-submit upon expiration.
-- Paginated exam interface (10 questions per page) with quick question navigation palette.
-- Real-time choice persistence: each answer selection is immediately persisted on the server.
+- **Adaptive Question Components**: Specialized interactive widgets for Multiple Choice (A-D option buttons), True/False (Yes/No toggle pills), and Fill-in-the-Blank (text inputs with clear delimiter instructions for multi-gap questions).
+- **Responsive Exam Navigation Palette**: Right-side question grid provides 1-click smooth scrolling directly to any selected question and displays real-time answered badges without disruptive auto-jumping.
+- Real-time answer persistence: each response is immediately validated and persisted on the server via `SAVE_ANSWER`.
 - One attempt per student per quiz constraint (`UNIQUE(quiz_id, student_id)`).
 - Instant server-side grading upon submission with full result review and question explanations.
 
@@ -119,6 +128,10 @@ Building a secure, dedicated, desktop-grade Client/Server assessment system in J
   - Real-time session monitoring polling every 3 seconds.
   - Live candidate statuses: `IN_PROGRESS`, `WARNING`, `CHEATING`, `SUBMITTED`, `TERMINATED`.
   - Immediate penalty actions: deduct score, deduct exam time, or terminate attempt with mandatory reason logging.
+
+### 7. Automated Database & Deployment Scripting
+- **1-Click Database Provisioning (setup-db.bat)**: Fully automated Windows script that auto-detects psql.exe, verifies and creates the PostgreSQL database quizdb, executes the complete 11-table schema, and seeds demo accounts/data in under 2 seconds.
+- **Credential Sanitization**: Exclusion of environment-specific credential files (server.properties, client.properties) from version control via .gitignore, backed by detailed .example configuration templates.
 
 ---
 
@@ -344,9 +357,13 @@ The project follows a layered Client-Server architecture over standard TCP socke
 ```text
 project/
 ├── .mvn/                                # Maven wrapper executable files
+├── setup-db.bat                         # 1-click database & seed data automated setup script
 ├── run-server.bat                       # Fast-start script for QuizServer (auto-build & launch)
 ├── run-client.bat                       # Fast-start script for JavaFX Client (auto-build & launch)
 ├── database/                            # Database DDL, migrations, and seed scripts
+│   ├── setup-db.ps1                     # PowerShell automation script for database setup
+│   ├── reset-and-seed.bat               # Fast reset & re-seed development database
+│   ├── reset-and-seed.ps1
 │   ├── migrations/                      # Schema migration scripts
 │   │   ├── 001_exam_monitoring.sql      # Live monitoring & penalty tables
 │   │   ├── 001_single_class_per_student.sql
@@ -425,10 +442,25 @@ git clone https://github.com/kieuhuydon/online-quiz.git
 cd project
 ```
 
-### Step 2: Set Up PostgreSQL Database
+### Step 2: Initialize Database & Seed Data
 
-Open PowerShell or terminal and execute:
+Choose one of the two methods below:
 
+#### Method A: 1-Click Automated Setup (Recommended on Windows)
+Simply double-click **`setup-db.bat`** in the project root, or execute in terminal:
+```cmd
+.\setup-db.bat
+```
+*Automated Workflow*:
+1. Automatically searches and detects `psql.exe` in `PATH` or standard PostgreSQL installation folders (`C:\Program Files\PostgreSQL\*\bin\psql.exe`).
+2. Reads connection parameters from `server-local.properties` or `server.properties.example`.
+3. Checks and automatically provisions the `quizdb` database if not present.
+4. Executes `database/schema.sql` (creating all 11 tables, constraints, and indexes).
+5. Populates complete seed data from `database/seed.sql` with `SET quiz.allow_demo_seed = 'on'`.
+6. Prints formatted demo account credentials and next startup steps.
+
+#### Method B: Manual Configuration via PostgreSQL CLI
+For Linux/macOS or manual administration:
 ```sql
 -- Connect to PostgreSQL via psql
 psql -U postgres
@@ -445,17 +477,13 @@ CREATE USER quiz_test WITH PASSWORD 'quiz_password';
 GRANT ALL PRIVILEGES ON DATABASE quizdb TO quiz;
 GRANT ALL PRIVILEGES ON DATABASE quizdb_test TO quiz_test;
 ```
-
-### Step 3: Initialize Database Schema & Seed Data
-
-Run the database DDL scripts:
-
+Then execute schema and seed scripts:
 ```bash
 # Initialize development schema
 psql -U quiz -d quizdb -f database/schema.sql
 
 # Seed initial accounts, classes, and question data
-psql -U quiz -d quizdb -f database/seed.sql
+psql -U quiz -d quizdb -c "SET quiz.allow_demo_seed = 'on'" -f database/seed.sql
 
 # Initialize test schema
 psql -U quiz_test -d quizdb_test -f database/schema.sql
@@ -496,7 +524,14 @@ The project provides two methods to run: **Fast Execution via Windows Batch Scri
 
 ### Method 1: Fast Execution via Windows Batch Scripts (Recommended)
 
-Two convenient batch scripts (`run-server.bat` and `run-client.bat`) are located in the project root. They completely automate dependency compilation, configuration checks, and application startup with a single click.
+Three convenient batch scripts (`setup-db.bat`, `run-server.bat`, and `run-client.bat`) are located in the project root. They completely automate database setup, dependency compilation, configuration checks, and application startup with single clicks.
+
+#### 0. Setup Database (`setup-db.bat` - First time or when resetting)
+- **Action**: Double-click `setup-db.bat` in File Explorer, or run in terminal:
+  ```cmd
+  .\setup-db.bat
+  ```
+- **Automated Workflow**: Probes PostgreSQL installation, creates database `quizdb`, applies all 11 tables, and loads all demo accounts.
 
 #### 1. Start the Server (`run-server.bat`)
 - **Action**: Double-click `run-server.bat` in File Explorer, or run in terminal:
@@ -725,6 +760,18 @@ During the development lifecycle, several critical code review and refactoring i
 4. **Memory Leak Prevention in Screen Navigation**:
    - *Problem*: Switching screens repeatedly risked accumulating dangling event listeners and socket push observers.
    - *Optimization*: Enforced the `ScreenController` lifecycle contract with explicit `onMount()` and `onDispose()` cleanup routines.
+5. **Multi-Type Question Authoring & Flexible Blank Grading**:
+   - *Problem*: Early versions supported only 4-option multiple-choice questions with a single-word limitation on fill-in-the-blank tests.
+   - *Optimization*: Extended data models and `GradingService` to support Multiple Choice, True/False, and Fill-in-the-Blank with multi-word answers and multi-gap syntax (`answer 1 | answer 2`), with case-insensitive whitespace-trimmed evaluation.
+6. **Form Validation UX & Error Retention**:
+   - *Problem*: Validation errors during question creation automatically dismissed the modal dialog, forcing teachers to re-enter all fields.
+   - *Optimization*: Converted error handling to sticky top-level inline banners that keep the modal open and preserve all user inputs upon failure.
+7. **Question Bank Synchronization in Quiz Creation**:
+   - *Problem*: Soft-deleted questions continued to appear in quiz builder pickers, while freshly added questions were omitted.
+   - *Optimization*: Synchronized active filters (`active = true`) across all quiz curating query flows to guarantee accurate and instant question bank availability.
+8. **Student Exam Palette Navigation & Responsive Scrolling**:
+   - *Problem*: In-exam question palette buttons did not scroll the viewport to target questions, and background updates occasionally jumped the active question focus.
+   - *Optimization*: Wired 1-click smooth scrolling (`ensureVisible`) on question palette buttons, limited sidebar updates strictly to visual answered status badges, and provided explicit delimiter syntax guidelines (`|`) for students.
 
 ---
 
@@ -739,7 +786,8 @@ During the development lifecycle, several critical code review and refactoring i
 # 17. Future Work
 
 - **TLS / SSL Socket Encryption**: Upgrade raw TCP sockets to `SSLSocket` with mutual certificate authentication for encrypted transit.
-- **Multiple Question Formats**: Extend question models to support fill-in-the-blank, multiple-response (checkbox), and audio listening comprehension.
+- **Server-Side Aggregated Analytics & Pagination**: Migrate class performance statistics (average, max, pass rate) from client-side streams to optimized PostgreSQL queries for large-scale enterprise deployments.
+- **Audio & Media Question Support**: Extend question authoring to embed audio listening comprehension clips and image attachments.
 - **Web Proctoring Portal**: Build a lightweight companion web dashboard for proctors using WebSockets.
 - **Automated Reconnect Recovery**: Implement transparent session reconnection allowing students to resume their attempt seamlessly after transient network disconnects.
 
