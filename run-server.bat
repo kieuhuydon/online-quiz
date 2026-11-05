@@ -4,6 +4,12 @@ echo   Online Quiz - Khoi dong Server (Port 5555)
 echo =============================================
 cd /d "%~dp0"
 
+if not exist "quiz-server\src\main\resources\server.properties" (
+    if exist "quiz-server\src\main\resources\server.properties.example" (
+        copy "quiz-server\src\main\resources\server.properties.example" "quiz-server\src\main\resources\server.properties" > nul
+    )
+)
+
 echo Dang bien dich quiz-server...
 call .\mvnw.cmd install -Dmaven.test.skip=true -pl quiz-server -am
 if errorlevel 1 goto build_error

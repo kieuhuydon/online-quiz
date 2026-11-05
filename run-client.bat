@@ -4,6 +4,12 @@ echo   Online Quiz - Khoi dong Client (JavaFX)
 echo =============================================
 cd /d "%~dp0"
 
+if not exist "quiz-client\src\main\resources\client.properties" (
+    if exist "quiz-client\src\main\resources\client.properties.example" (
+        copy "quiz-client\src\main\resources\client.properties.example" "quiz-client\src\main\resources\client.properties" > nul
+    )
+)
+
 echo Dang bien dich quiz-client...
 call .\mvnw.cmd install -Dmaven.test.skip=true -pl quiz-client -am
 if errorlevel 1 goto build_error
